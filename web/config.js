@@ -9,5 +9,5 @@ window.TIMELORD_CONFIG = {
   /** gid of the Summary tab. */
   summary_gid: "556822909",
   /** gid of the Settings tab. */
-  settings_gid: "1066830384"
+  settings_gid: "2016827834"
 };
