@@ -291,7 +291,7 @@
   function renderTemplates() {
     var bopts = optionHtml(buckets(), "House");
     var html =
-      '<p class="hint">List the work for each bucket. Hours live on Hours &amp; colors — not on each task. Check <strong>Current</strong> for the task that fills that bucket’s time slot until you pick a different one.</p>' +
+      '<p class="hint">Recurring and rotating chores. Cadence fills that bucket’s slot on matching days (weekly:Sat, eod, daily). If several match the same day, they rotate. More specific cadences beat daily. A due-dated task still wins that day. Current is only the fallback when nothing is scheduled.</p>' +
       addBar(
         "template",
         field("Bucket", '<select name="bucket">' + bopts + "</select>") +

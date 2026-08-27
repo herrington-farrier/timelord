@@ -351,7 +351,8 @@ function collectCandidates_(ctx, dateKey) {
     }
     var titles = (lists[bucket.name] || []).slice();
     var scheduled = scheduledTitlesForBucket_(ctx.tasks, bucket.name, dateKey, today);
-    var chosen = scheduled[0] || getChosen_(bucket.name);
+    var cadence = rotatingCadenceTitles_(ctx.templates, bucket.name, dateKey);
+    var chosen = scheduled[0] || cadence[0] || getChosen_(bucket.name);
     if (!chosen) {
       if (bucket.name === 'Fitness') {
         var sess = fitnessSessionForDay_(ctx.fitness, dateKey);
@@ -365,19 +366,20 @@ function collectCandidates_(ctx, dateKey) {
         }
       }
     }
-    var extra = scheduled.slice();
-    if (chosen && extra.indexOf(chosen) === -1 && scheduled.length) {
-      extra.unshift(chosen);
-    }
-    var merged = extra.slice();
+    var extra = scheduled.concat(cadence);
+    var merged = [];
     var t;
-    for (t = 0; t < titles.length; t++) {
-      if (merged.indexOf(titles[t]) === -1) {
-        merged.push(titles[t]);
+    function pushMerged(title) {
+      if (title && merged.indexOf(title) === -1) {
+        merged.push(title);
       }
     }
-    if (chosen && merged.indexOf(chosen) === -1) {
-      merged.unshift(chosen);
+    pushMerged(chosen);
+    for (t = 0; t < extra.length; t++) {
+      pushMerged(extra[t]);
+    }
+    for (t = 0; t < titles.length; t++) {
+      pushMerged(titles[t]);
     }
     by[bucket.name] = [
       {
@@ -387,7 +389,7 @@ function collectCandidates_(ctx, dateKey) {
         source: 'bucket',
         options: merged.join('; '),
         chosen: chosen || '',
-        scheduled: scheduled.length > 0
+        scheduled: scheduled.length > 0 || cadence.length > 0
       }
     ];
   }
@@ -412,8 +414,63 @@ function scheduledTitlesForBucket_(tasks, bucket, dateKey, today) {
   return due.length ? due : overdue;
 }
 
+function rotatingCadenceTitles_(templates, bucket, dateKey) {
+  var hits = [];
+  var i;
+  var best = 99;
+  for (i = 0; i < templates.length; i++) {
+    var tpl = templates[i];
+    if (!tpl.active || !tpl.thisWeek || tpl.bucket !== bucket) {
+      continue;
+    }
+    if (!cadenceHitsDate_(tpl.cadence, dateKey)) {
+      continue;
+    }
+    var rank = cadenceRank_(tpl.cadence);
+    if (rank < best) {
+      best = rank;
+    }
+    hits.push({ title: tpl.title, rank: rank });
+  }
+  var titles = [];
+  for (i = 0; i < hits.length; i++) {
+    if (hits[i].rank !== best) {
+      continue;
+    }
+    if (titles.indexOf(hits[i].title) === -1) {
+      titles.push(hits[i].title);
+    }
+  }
+  if (titles.length <= 1) {
+    return titles;
+  }
+  var p = parseYmd_(dateKey);
+  var epoch = ymdToDate_(2026, 1, 1);
+  var dt = ymdToDate_(p.y, p.mo, p.d);
+  var diff = Math.round((dt.getTime() - epoch.getTime()) / 86400000);
+  var pick = ((diff % titles.length) + titles.length) % titles.length;
+  return titles.slice(pick).concat(titles.slice(0, pick));
+}
+
+function cadenceRank_(cadence) {
+  var c = String(cadence || 'daily').trim().toLowerCase();
+  if (c.indexOf('weekly:') === 0 || c === 'eod' || c.indexOf('every_') === 0) {
+    return 0;
+  }
+  if (c === 'weekdays' || c === 'weekends') {
+    return 1;
+  }
+  if (c === 'daily') {
+    return 2;
+  }
+  return 1;
+}
+
 function bucketHasScheduledTask_(bucket, dateKey) {
-  return scheduledTitlesForBucket_(readTasks_(), bucket, dateKey, todayKey_()).length > 0;
+  if (scheduledTitlesForBucket_(readTasks_(), bucket, dateKey, todayKey_()).length) {
+    return true;
+  }
+  return rotatingCadenceTitles_(readTemplates_(), bucket, dateKey).length > 0;
 }
 
 function slotForBucket_(buckets, name) {
