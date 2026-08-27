@@ -140,18 +140,40 @@ function handleAction_(p) {
     return pickChosen_(p.id, p.chosen);
   }
   if (action === 'setWeeklyHours') {
-    var view = setWeeklyHours(p.bucket, p.hours);
-    return { ok: true, settings: view };
+    return okSettings_(setWeeklyHours(p.bucket, p.hours));
   }
   if (action === 'bumpWeeklyHours') {
-    var view2 = bumpWeeklyHours(p.bucket, p.delta);
-    return { ok: true, settings: view2 };
+    return okSettings_(bumpWeeklyHours(p.bucket, p.delta));
   }
   if (action === 'setDailyHours') {
-    return { ok: true, settings: setDailyHours(p.bucket, p.hours) };
+    return okSettings_(setDailyHours(p.bucket, p.hours));
   }
   if (action === 'bumpDailyHours') {
-    return { ok: true, settings: bumpDailyHours(p.bucket, p.delta) };
+    return okSettings_(bumpDailyHours(p.bucket, p.delta));
+  }
+  if (action === 'setDayHours') {
+    return okSettings_(setDayHours(p.hours));
+  }
+  if (action === 'setDaysPerWeek') {
+    return okSettings_(setDaysPerWeek(p.days));
+  }
+  if (action === 'setBufferMinutes') {
+    return okSettings_(setBufferMinutes(p.minutes));
+  }
+  if (action === 'saveDaySettings') {
+    return okSettings_(saveDaySettings(p.hours, p.days, p.minutes));
+  }
+  if (action === 'saveBucket') {
+    return okSettings_(saveBucket(p.bucket, p.color, p.slot, p.min, p.hours));
+  }
+  if (action === 'setBucketColor') {
+    return okSettings_(setBucketColor(p.bucket, p.color));
+  }
+  if (action === 'setBucketMin') {
+    return okSettings_(setBucketMin(p.bucket, p.min));
+  }
+  if (action === 'setBucketSlot') {
+    return okSettings_(setBucketSlot(p.bucket, p.slot));
   }
   if (action === 'rebuild') {
     return { ok: true, payload: rebuildToday() };
@@ -162,7 +184,101 @@ function handleAction_(p) {
   if (action === 'syncBusy') {
     return { ok: true, count: syncBusyQuiet_() };
   }
+  if (action === 'catalog') {
+    return { ok: true, catalog: getEditorCatalog_() };
+  }
+  if (action === 'addTask') {
+    return okCatalog_(addTask(p.name, p.hours, p.due, p.bucket, paramBool_(p.thisWeek, true)));
+  }
+  if (action === 'updateTask') {
+    return okCatalog_(
+      updateTask(p.row, p.name, p.hours, p.due, p.bucket, paramBool_(p.thisWeek, true), paramBool_(p.active, true))
+    );
+  }
+  if (action === 'deleteTask') {
+    return okCatalog_(deleteTask(p.row));
+  }
+  if (action === 'addTemplate') {
+    return okCatalog_(
+      addTemplate(p.bucket, p.title, p.hours, p.cadence, p.slot, p.options, paramBool_(p.thisWeek, true))
+    );
+  }
+  if (action === 'updateTemplate') {
+    return okCatalog_(
+      updateTemplate(
+        p.row,
+        p.bucket,
+        p.title,
+        p.hours,
+        p.cadence,
+        p.slot,
+        p.options,
+        paramBool_(p.active, true),
+        paramBool_(p.thisWeek, true)
+      )
+    );
+  }
+  if (action === 'deleteTemplate') {
+    return okCatalog_(deleteTemplate(p.row));
+  }
+  if (action === 'addPersonal') {
+    return okCatalog_(addPersonal(p.title, p.hours, p.slot, p.days, paramBool_(p.active, true)));
+  }
+  if (action === 'updatePersonal') {
+    return okCatalog_(updatePersonal(p.row, p.title, p.hours, p.slot, p.days, paramBool_(p.active, true)));
+  }
+  if (action === 'deletePersonal') {
+    return okCatalog_(deletePersonal(p.row));
+  }
+  if (action === 'saveWork') {
+    return okCatalog_(saveWork(p.weekStart, p.theme, p.dailyHours, p.h1, p.h2, p.h3));
+  }
+  if (action === 'addProject') {
+    return okCatalog_(addProject(p.name, p.hours, paramBool_(p.active, true)));
+  }
+  if (action === 'updateProject') {
+    return okCatalog_(updateProject(p.row, p.name, paramBool_(p.active, true), p.hours));
+  }
+  if (action === 'deleteProject') {
+    return okCatalog_(deleteProject(p.row));
+  }
+  if (action === 'addFitness') {
+    return okCatalog_(addFitnessRow(p.weekday, p.session, p.hours));
+  }
+  if (action === 'updateFitness') {
+    return okCatalog_(saveFitnessRow(p.row, p.weekday, p.session, p.hours));
+  }
+  if (action === 'deleteFitness') {
+    return okCatalog_(deleteFitnessRow(p.row));
+  }
   throw new Error('Unknown action: ' + action);
+}
+
+function paramBool_(v, fallback) {
+  if (v == null || v === '') {
+    return fallback !== false;
+  }
+  return toBool_(v);
+}
+
+function okSettings_(view) {
+  return { ok: true, settings: view };
+}
+
+function okCatalog_(listOrWork) {
+  return { ok: true, catalog: getEditorCatalog_(), data: listOrWork };
+}
+
+function getEditorCatalog_() {
+  return {
+    settings: getSettingsView(),
+    tasks: listTasks(),
+    templates: listTemplates(),
+    personal: listPersonal(),
+    work: getWork(),
+    projects: listProjects(),
+    fitness: listFitness()
+  };
 }
 
 function setPlanStatus_(id, status) {
@@ -258,16 +374,24 @@ function getWork() {
 }
 
 function addTask(name, hours, due, bucket, thisWeek) {
+  var title = String(name || '').trim();
+  if (!title) {
+    throw new Error('Task name is required.');
+  }
   var sh = sheet_(SHEET.TASKS);
   var row = nextEmptyRow_(sh, 1);
-  sh.getRange(row, 1, 1, 6).setValues([[name, toHours_(hours), due, bucket, !!thisWeek, true]]);
+  sh.getRange(row, 1, 1, 6).setValues([[title, toHours_(hours), due, bucket, toBool_(thisWeek), true]]);
   return listTasks();
 }
 
 function updateTask(row, name, hours, due, bucket, thisWeek, active) {
+  var title = String(name || '').trim();
+  if (!title) {
+    throw new Error('Task name is required.');
+  }
   sheet_(SHEET.TASKS)
     .getRange(Number(row), 1, 1, 6)
-    .setValues([[name, toHours_(hours), due, bucket, !!thisWeek, !!active]]);
+    .setValues([[title, toHours_(hours), due, bucket, toBool_(thisWeek), toBool_(active)]]);
   return listTasks();
 }
 
@@ -277,18 +401,28 @@ function deleteTask(row) {
 }
 
 function addTemplate(bucket, title, hours, cadence, slot, options, thisWeek) {
+  var t = String(title || '').trim();
+  var b = String(bucket || '').trim();
+  if (!t || !b) {
+    throw new Error('Template bucket and title are required.');
+  }
   var sh = sheet_(SHEET.TEMPLATES);
   var row = nextEmptyRow_(sh, 2);
   sh.getRange(row, 1, 1, 8).setValues([
-    [bucket, title, toHours_(hours), cadence, slot, options || '', true, thisWeek !== false]
+    [b, t, toHours_(hours), cadence || 'daily', slot, options || '', true, paramBool_(thisWeek, true)]
   ]);
   return listTemplates();
 }
 
 function updateTemplate(row, bucket, title, hours, cadence, slot, options, active, thisWeek) {
+  var t = String(title || '').trim();
+  var b = String(bucket || '').trim();
+  if (!t || !b) {
+    throw new Error('Template bucket and title are required.');
+  }
   sheet_(SHEET.TEMPLATES)
     .getRange(Number(row), 1, 1, 8)
-    .setValues([[bucket, title, toHours_(hours), cadence, slot, options || '', !!active, !!thisWeek]]);
+    .setValues([[b, t, toHours_(hours), cadence || 'daily', slot, options || '', toBool_(active), toBool_(thisWeek)]]);
   return listTemplates();
 }
 
@@ -298,17 +432,25 @@ function deleteTemplate(row) {
 }
 
 function addPersonal(title, hours, slot, days, active) {
+  var t = String(title || '').trim();
+  if (!t) {
+    throw new Error('Personal title is required.');
+  }
   var sh = sheet_(SHEET.PERSONAL);
   var row = nextEmptyRow_(sh, 1);
-  sh.getRange(row, 1, 1, 5).setValues([[title, toHours_(hours), slot, days || 'daily', active !== false]]);
+  sh.getRange(row, 1, 1, 5).setValues([[t, toHours_(hours), slot, days || 'daily', paramBool_(active, true)]]);
   refreshBudgetNumbers_();
   return listPersonal();
 }
 
 function updatePersonal(row, title, hours, slot, days, active) {
+  var t = String(title || '').trim();
+  if (!t) {
+    throw new Error('Personal title is required.');
+  }
   sheet_(SHEET.PERSONAL)
     .getRange(Number(row), 1, 1, 5)
-    .setValues([[title, toHours_(hours), slot, days || 'daily', !!active]]);
+    .setValues([[t, toHours_(hours), slot, days || 'daily', toBool_(active)]]);
   refreshBudgetNumbers_();
   return listPersonal();
 }
@@ -333,14 +475,22 @@ function saveWork(weekStart, theme, dailyHours, h1, h2, h3) {
 }
 
 function addProject(name, hours, active) {
+  var n = String(name || '').trim();
+  if (!n) {
+    throw new Error('Project name is required.');
+  }
   var sh = sheet_(SHEET.PROJECTS);
   var row = nextEmptyRow_(sh, 1);
-  sh.getRange(row, 1, 1, 3).setValues([[name, active !== false, toHours_(hours) || 1]]);
+  sh.getRange(row, 1, 1, 3).setValues([[n, paramBool_(active, true), toHours_(hours) || 1]]);
   return listProjects();
 }
 
 function updateProject(row, name, active, hours) {
-  sheet_(SHEET.PROJECTS).getRange(Number(row), 1, 1, 3).setValues([[name, !!active, toHours_(hours)]]);
+  var n = String(name || '').trim();
+  if (!n) {
+    throw new Error('Project name is required.');
+  }
+  sheet_(SHEET.PROJECTS).getRange(Number(row), 1, 1, 3).setValues([[n, toBool_(active), toHours_(hours)]]);
   return listProjects();
 }
 
@@ -357,9 +507,13 @@ function saveFitnessRow(row, weekday, session, hours) {
 }
 
 function addFitnessRow(weekday, session, hours) {
+  var s = String(session || '').trim();
+  if (!s) {
+    throw new Error('Session name is required.');
+  }
   var sh = sheet_(SHEET.FITNESS);
   var row = nextEmptyRow_(sh, 1);
-  sh.getRange(row, 1, 1, 3).setValues([[weekday, session, toHours_(hours)]]);
+  sh.getRange(row, 1, 1, 3).setValues([[weekday, s, toHours_(hours)]]);
   return listFitness();
 }
 

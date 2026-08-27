@@ -319,6 +319,113 @@ function bumpDailyHours(bucketName, delta) {
   throw new Error('Unknown bucket: ' + bucketName);
 }
 
+function findBucket_(name) {
+  var want = String(name || '').trim();
+  var buckets = readBuckets_();
+  var i;
+  for (i = 0; i < buckets.length; i++) {
+    if (buckets[i].name === want) {
+      return buckets[i];
+    }
+  }
+  throw new Error('Unknown bucket: ' + want);
+}
+
+function setDayHours(hours) {
+  var n = roundHours_(Math.max(1, Number(hours)));
+  if (isNaN(n)) {
+    throw new Error('Day hours must be a number.');
+  }
+  setSetting_(SETTINGS_KEYS.DAY_HOURS, n);
+  refreshBudgetNumbers_();
+  return getSettingsView();
+}
+
+function setDaysPerWeek(days) {
+  var n = Math.max(1, Math.min(7, Math.round(Number(days))));
+  if (isNaN(n)) {
+    throw new Error('Days per week must be a number.');
+  }
+  setSetting_(SETTINGS_KEYS.DAYS_PER_WEEK, n);
+  refreshBudgetNumbers_();
+  return getSettingsView();
+}
+
+function setBufferMinutes(mins) {
+  var n = Math.max(0, Math.round(Number(mins)));
+  if (isNaN(n)) {
+    throw new Error('Buffer minutes must be a number.');
+  }
+  setSetting_(SETTINGS_KEYS.BUFFER_MINUTES, n);
+  refreshBudgetNumbers_();
+  return getSettingsView();
+}
+
+function setBucketColor(name, color) {
+  var b = findBucket_(name);
+  var hex = hexColor_(color);
+  var sh = sheet_(SHEET.SETTINGS);
+  sh.getRange(b.row, 3).setValue(hex);
+  try {
+    sh.getRange(b.row, 1, 1, 9).setBackground('#' + hex).setFontColor('#111827');
+  } catch (ignore) {}
+  return getSettingsView();
+}
+
+function setBucketMin(name, minHours) {
+  var b = findBucket_(name);
+  var min = roundHours_(Math.max(0, Number(minHours)));
+  if (isNaN(min)) {
+    throw new Error('Minimum must be a number.');
+  }
+  sheet_(SHEET.SETTINGS).getRange(b.row, 7).setValue(min);
+  if (b.weekly < min) {
+    return setWeeklyHours(name, min);
+  }
+  refreshBudgetNumbers_();
+  return getSettingsView();
+}
+
+function setBucketSlot(name, slot) {
+  var b = findBucket_(name);
+  var s = String(slot || 'midday').trim().toLowerCase();
+  if (s !== 'morning' && s !== 'midday' && s !== 'evening') {
+    s = 'midday';
+  }
+  sheet_(SHEET.SETTINGS).getRange(b.row, 4).setValue(s);
+  return getSettingsView();
+}
+
+function saveDaySettings(hours, days, minutes) {
+  if (hours != null && hours !== '') {
+    setDayHours(hours);
+  }
+  if (days != null && days !== '') {
+    setDaysPerWeek(days);
+  }
+  if (minutes != null && minutes !== '') {
+    setBufferMinutes(minutes);
+  }
+  return getSettingsView();
+}
+
+function saveBucket(name, color, slot, minHours, dailyHours) {
+  if (color) {
+    setBucketColor(name, color);
+  }
+  if (slot) {
+    setBucketSlot(name, slot);
+  }
+  if (minHours != null && minHours !== '') {
+    setBucketMin(name, minHours);
+  }
+  if (dailyHours != null && dailyHours !== '') {
+    return setDailyHours(name, dailyHours);
+  }
+  refreshBudgetNumbers_();
+  return getSettingsView();
+}
+
 function getSettingsView() {
   var nums = refreshBudgetNumbers_();
   return {
