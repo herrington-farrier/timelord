@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 16px; font-size: 14px; color: #1e293b; }
+      label { font-size: 12px; color: #475569; display: block; margin: 10px 0 4px; }
+      input { font: inherit; width: 100%; padding: 7px 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+      button { margin-top: 14px; padding: 8px 14px; border-radius: 6px; border: 0; background: #1e293b; color: #fff; cursor: pointer; }
+      .err { color: #b91c1c; min-height: 1.2em; }
+      .ok { color: #15803d; }
+    </style>
+  </head>
+  <body>
+    <label>Week start</label><input id="weekStart" type="date" />
+    <label>Theme</label><input id="theme" type="text" />
+    <label>Daily hours</label><input id="hours" type="number" step="0.25" />
+    <label>Highlight 1</label><input id="h1" type="text" />
+    <label>Highlight 2</label><input id="h2" type="text" />
+    <label>Highlight 3</label><input id="h3" type="text" />
+    <div class="err" id="msg"></div>
+    <button id="save">Save</button>
+    <script>
+      function fail(e) { document.getElementById('msg').textContent = e && e.message ? e.message : String(e); }
+      function fill(w) {
+        document.getElementById('weekStart').value = w.weekStart || '';
+        document.getElementById('theme').value = w.theme || '';
+        document.getElementById('hours').value = w.dailyHours || 3;
+        document.getElementById('h1').value = (w.highlights && w.highlights[0]) || '';
+        document.getElementById('h2').value = (w.highlights && w.highlights[1]) || '';
+        document.getElementById('h3').value = (w.highlights && w.highlights[2]) || '';
+      }
+      document.getElementById('save').onclick = function () {
+        google.script.run.withSuccessHandler(function () {
+          document.getElementById('msg').className = 'ok';
+          document.getElementById('msg').textContent = 'Saved.';
+        }).withFailureHandler(fail).saveWork(
+          document.getElementById('weekStart').value,
+          document.getElementById('theme').value,
+          document.getElementById('hours').value,
+          document.getElementById('h1').value,
+          document.getElementById('h2').value,
+          document.getElementById('h3').value
+        );
+      };
+      google.script.run.withSuccessHandler(fill).withFailureHandler(fail).getWork();
+    </script>
+  </body>
+</html>
