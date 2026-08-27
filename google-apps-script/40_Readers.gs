@@ -211,5 +211,42 @@ function readPlanRows_() {
 }
 
 function planMatchKey_(row) {
-  return [row.date, row.bucket, row.source, row.title].join('|');
+  if (row.bucket === 'Buffer' || row.source === 'buffer') {
+    return [row.date, 'Buffer', row.title].join('|');
+  }
+  if (row.source === 'personal' || row.source === 'busy') {
+    return [row.date, row.bucket, row.source, row.title].join('|');
+  }
+  return [row.date, row.bucket].join('|');
+}
+
+function chosenPropKey_(bucket) {
+  return 'chosen.' + String(bucket || '').trim();
+}
+
+function getChosen_(bucket) {
+  return String(PropertiesService.getScriptProperties().getProperty(chosenPropKey_(bucket)) || '').trim();
+}
+
+function setChosen_(bucket, title) {
+  var props = PropertiesService.getScriptProperties();
+  var key = chosenPropKey_(bucket);
+  var val = String(title || '').trim();
+  if (!val) {
+    props.deleteProperty(key);
+    return;
+  }
+  props.setProperty(key, val);
+}
+
+function getChosenMap_() {
+  var out = {};
+  var all = PropertiesService.getScriptProperties().getProperties() || {};
+  var k;
+  for (k in all) {
+    if (Object.prototype.hasOwnProperty.call(all, k) && k.indexOf('chosen.') === 0) {
+      out[k.slice(7)] = all[k];
+    }
+  }
+  return out;
 }

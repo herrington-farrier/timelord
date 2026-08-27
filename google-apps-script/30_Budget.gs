@@ -103,18 +103,16 @@ function refreshBudgetNumbers_() {
   var buckets = readBuckets_();
   var weekStart = weekStartKey_(todayKey_());
   var weekEnd = weekEndKey_(weekStart);
-  var demand = markedDemandForWeek_(weekStart, weekEnd);
   var used = usedHoursForWeek_(weekStart, weekEnd);
   var allocated = 0;
   var i;
   var sh = sheet_(SHEET.SETTINGS);
   for (i = 0; i < buckets.length; i++) {
     allocated += buckets[i].weekly;
-    var marked = demand[buckets[i].name] || 0;
     var u = used[buckets[i].name] || 0;
     var remaining = roundHours_(buckets[i].weekly - u);
     sh.getRange(buckets[i].row, 5).setValue(roundHours_(buckets[i].weekly / daysPerWeek));
-    sh.getRange(buckets[i].row, 8, 1, 2).setValues([[roundHours_(marked), remaining]]);
+    sh.getRange(buckets[i].row, 8, 1, 2).setValues([[roundHours_(u), remaining]]);
   }
   allocated = roundHours_(allocated);
   var unallocated = roundHours_(assignable - allocated);
@@ -439,6 +437,7 @@ function getSettingsView() {
     allocated: nums.allocated,
     unallocated: nums.unallocated,
     lastPacked: String(readSettingsMap_()[SETTINGS_KEYS.LAST_PACKED] || ''),
+    chosen: getChosenMap_(),
     spreadsheetId: String(readSettingsMap_()[SETTINGS_KEYS.SPREADSHEET_ID] || ''),
     planGid: String(readSettingsMap_()[SETTINGS_KEYS.PLAN_GID] || ''),
     summaryGid: String(readSettingsMap_()[SETTINGS_KEYS.SUMMARY_GID] || ''),

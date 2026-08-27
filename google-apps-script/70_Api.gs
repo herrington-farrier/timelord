@@ -139,6 +139,9 @@ function handleAction_(p) {
   if (action === 'pick') {
     return pickChosen_(p.id, p.chosen);
   }
+  if (action === 'setCurrent') {
+    return setCurrentTask_(p.bucket, p.chosen);
+  }
   if (action === 'setWeeklyHours') {
     return okSettings_(setWeeklyHours(p.bucket, p.hours));
   }
@@ -323,18 +326,40 @@ function pickChosen_(id, chosen) {
   if (!row) {
     throw new Error('Plan row not found.');
   }
+  return setCurrentTask_(row.bucket, chosen);
+}
+
+function setCurrentTask_(bucket, chosen) {
+  var name = String(bucket || '').trim();
+  if (!name) {
+    throw new Error('Bucket is required.');
+  }
   var val = String(chosen || '').trim();
-  sheet_(SHEET.PLAN).getRange(row.row, 10).setValue(val);
-  var title = row.title;
-  if (row.source === 'work') {
-    title = val ? 'Highlight · ' + val : row.title;
-    sheet_(SHEET.PLAN).getRange(row.row, 4).setValue(title);
+  setChosen_(name, val);
+  var title = val || name;
+  var plan = readPlanRows_();
+  var today = todayKey_();
+  var i;
+  var n = 0;
+  for (i = 0; i < plan.length; i++) {
+    var r = plan[i];
+    if (r.bucket !== name) {
+      continue;
+    }
+    if (r.source === 'personal' || r.source === 'busy' || r.source === 'buffer') {
+      continue;
+    }
+    if (r.date < today) {
+      continue;
+    }
+    if (r.status !== 'pending') {
+      continue;
+    }
+    sheet_(SHEET.PLAN).getRange(r.row, 4).setValue(title);
+    sheet_(SHEET.PLAN).getRange(r.row, 10).setValue(val);
+    n++;
   }
-  if (row.source === 'project') {
-    title = val ? 'Project · ' + val : row.title;
-    sheet_(SHEET.PLAN).getRange(row.row, 4).setValue(title);
-  }
-  return { ok: true, id: id, chosen: val, title: title };
+  return { ok: true, bucket: name, chosen: val, title: title, updated: n };
 }
 
 function findPlanById_(id) {

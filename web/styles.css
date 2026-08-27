@@ -114,7 +114,23 @@ html, body {
   border-radius: 6px; border: 1px solid var(--border);
   background: rgba(255,255,255,0.04); color: var(--text); padding: 4px 8px; cursor: pointer;
 }
-.item-acts button.skip { color: #f9a8d4; }
+.task-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.task-picks .check,
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.task-picks .check { min-height: 0; }
 .buffer {
   display: flex; align-items: center; gap: 10px;
   color: var(--muted); font-size: 0.78rem;
@@ -217,11 +233,14 @@ html, body {
   color: #86efac;
   min-height: 1em;
 }
-.hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.45;
+.group-h {
+  margin: 16px 0 8px;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--head);
+  border-left: 4px solid var(--bcolor, var(--gold));
+  padding-left: 8px;
 }
 .hint strong { color: var(--text); font-weight: 650; }
 .tabs {

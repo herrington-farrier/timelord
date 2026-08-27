@@ -297,78 +297,85 @@ function busySlot_(start) {
 }
 
 function collectCandidates_(ctx, dateKey) {
-  var by = {};
+  var lists = {};
   var i;
   for (i = 0; i < ctx.buckets.length; i++) {
-    by[ctx.buckets[i].name] = [];
+    lists[ctx.buckets[i].name] = [];
   }
+
+  function pushTitle(bucket, title) {
+    var t = String(title || '').trim();
+    if (!t || !lists[bucket]) {
+      return;
+    }
+    if (lists[bucket].indexOf(t) === -1) {
+      lists[bucket].push(t);
+    }
+  }
+
   for (i = 0; i < ctx.templates.length; i++) {
     var tpl = ctx.templates[i];
-    if (!tpl.active || !tpl.thisWeek || !by[tpl.bucket]) {
+    if (!tpl.active || !tpl.thisWeek) {
       continue;
     }
-    if (!cadenceHitsDate_(tpl.cadence, dateKey)) {
-      continue;
-    }
-    by[tpl.bucket].push({
-      title: tpl.title,
-      hours: tpl.hours,
-      slot: tpl.slot,
-      source: 'template',
-      options: tpl.options
-    });
+    pushTitle(tpl.bucket, tpl.title);
   }
   for (i = 0; i < ctx.tasks.length; i++) {
     var task = ctx.tasks[i];
-    if (!task.active || !task.thisWeek || !by[task.bucket]) {
+    if (!task.active || !task.thisWeek) {
       continue;
     }
-    if (task.due === dateKey || (task.due && task.due < dateKey && dateKey === todayKey_())) {
-      by[task.bucket].push({
-        title: task.title,
-        hours: task.hours,
-        slot: slotForBucket_(ctx.buckets, task.bucket),
-        source: 'task'
-      });
+    pushTitle(task.bucket, task.title);
+  }
+  if (ctx.work && ctx.work.highlights) {
+    for (i = 0; i < ctx.work.highlights.length; i++) {
+      pushTitle('Work', ctx.work.highlights[i]);
     }
   }
-  if (by.Work && ctx.work.dailyHours > 0) {
-    by.Work.push({
-      title: ctx.work.theme ? 'Highlight · ' + ctx.work.theme : 'Work Highlight',
-      hours: ctx.work.dailyHours,
-      slot: 'midday',
-      source: 'work',
-      options: ctx.work.highlights.join('; '),
-      chosen: ''
-    });
+  for (i = 0; i < ctx.fitness.length; i++) {
+    pushTitle('Fitness', ctx.fitness[i].title);
   }
-  var sess = fitnessSessionForDay_(ctx.fitness, dateKey);
-  if (by.Fitness && sess) {
-    by.Fitness.push({
-      title: sess.title,
-      hours: sess.hours,
-      slot: 'midday',
-      source: 'fitness'
-    });
+  for (i = 0; i < ctx.projects.length; i++) {
+    if (ctx.projects[i].active) {
+      pushTitle('Projects', ctx.projects[i].name);
+    }
   }
-  var proj = firstActiveProject_(ctx.projects);
-  if (by.Projects && proj) {
-    var names = ctx.projects
-      .filter(function (x) {
-        return x.active;
-      })
-      .map(function (x) {
-        return x.name;
-      })
-      .join('; ');
-    by.Projects.push({
-      title: 'Project · ' + proj.name,
-      hours: proj.hours,
-      slot: 'midday',
-      source: 'project',
-      options: names,
-      chosen: proj.name
-    });
+
+  var by = {};
+  for (i = 0; i < ctx.buckets.length; i++) {
+    var bucket = ctx.buckets[i];
+    if (bucket.daily <= 0) {
+      by[bucket.name] = [];
+      continue;
+    }
+    var titles = (lists[bucket.name] || []).slice();
+    var chosen = getChosen_(bucket.name);
+    if (!chosen) {
+      if (bucket.name === 'Fitness') {
+        var sess = fitnessSessionForDay_(ctx.fitness, dateKey);
+        if (sess) {
+          chosen = sess.title;
+        }
+      } else if (bucket.name === 'Projects') {
+        var proj = firstActiveProject_(ctx.projects);
+        if (proj) {
+          chosen = proj.name;
+        }
+      }
+    }
+    if (chosen && titles.indexOf(chosen) === -1) {
+      titles.unshift(chosen);
+    }
+    by[bucket.name] = [
+      {
+        title: chosen || bucket.name,
+        hours: bucket.daily,
+        slot: bucket.slot,
+        source: 'bucket',
+        options: titles.join('; '),
+        chosen: chosen || ''
+      }
+    ];
   }
   return by;
 }

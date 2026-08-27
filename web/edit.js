@@ -190,7 +190,7 @@
       field("Days / week", '<input name="days" type="number" step="1" min="1" max="7" value="' + esc(s.daysPerWeek || 7) + '" />') +
       field("Buffer minutes", '<input name="minutes" type="number" step="1" min="0" value="' + esc(s.bufferMinutes || 15) + '" />') +
       '</div><div class="edit-acts"><button type="submit" class="primary">Save day settings</button></div></form>';
-    html += '<p class="hint">Raising daily hours takes Unallocated, then steals from lower-priority buckets down to their minimum. Personal never moves. Colors apply on the next Rebuild.</p>';
+    html += '<p class="hint">Each bucket gets one time slot per day (these hours). Tasks are a checklist — pick Current on Edit or Today. Raising daily hours takes Unallocated, then steals from lower-priority buckets down to their minimum. Personal never moves.</p>';
     html += '<div class="bucket-forms">';
     (s.buckets || []).forEach(function (b) {
       html +=
@@ -268,48 +268,91 @@
     panel.innerHTML = html;
   }
 
+  function chosenMap() {
+    return (catalog && catalog.settings && catalog.settings.chosen) || {};
+  }
+
+  function isCurrent(bucket, title) {
+    return chosenMap()[bucket] === title;
+  }
+
+  function currentCheck(bucket, title) {
+    return (
+      '<label class="check"><input type="checkbox" data-current="' +
+      esc(bucket) +
+      '" value="' +
+      esc(title) +
+      '"' +
+      (isCurrent(bucket, title) ? " checked" : "") +
+      " /> Current</label>"
+    );
+  }
+
   function renderTemplates() {
     var bopts = optionHtml(buckets(), "House");
     var html =
-      '<p class="hint">Recurring bucket work. Cadence examples: daily, eod, weekly:Sat, weekly:Tue,Fri. Options are a semicolon-separated chooser on Today.</p>' +
+      '<p class="hint">List the work for each bucket. Hours live on Hours &amp; colors — not on each task. Check <strong>Current</strong> for the task that fills that bucket’s time slot until you pick a different one.</p>' +
       addBar(
         "template",
         field("Bucket", '<select name="bucket">' + bopts + "</select>") +
           field("Title", text("title", "", 'placeholder="Dishes"')) +
-          field("Hours", num("hours", 0.5)) +
           field("Cadence", '<input name="cadence" list="cadence-list" value="daily" />') +
-          field("Slot", '<select name="slot">' + optionHtml(SLOTS, "morning") + "</select>") +
-          field("Options", text("options", "", 'placeholder="weeding; mulching"')) +
           check("thisWeek", true, "This week")
       );
+    var grouped = {};
     (catalog.templates || []).forEach(function (r) {
-      html +=
-        '<form class="edit-card" data-kind="template" data-row="' +
-        r.row +
-        '" style="--bcolor:#' +
-        esc(colorFor(r.bucket)) +
-        '"><div class="fields">' +
-        field("Bucket", '<select name="bucket">' + optionHtml(buckets(), r.bucket) + "</select>") +
-        field("Title", text("title", r.title)) +
-        field("Hours", num("hours", r.hours)) +
-        field("Cadence", '<input name="cadence" list="cadence-list" value="' + esc(r.cadence) + '" />') +
-        field("Slot", '<select name="slot">' + optionHtml(SLOTS, r.slot) + "</select>") +
-        field("Options", text("options", r.options)) +
-        check("thisWeek", r.thisWeek, "This week") +
-        check("active", r.active, "Active") +
-        '</div><div class="edit-acts"><button type="submit" class="primary">Save</button>' +
-        '<button type="button" class="danger" data-del>Delete</button></div></form>';
+      if (!grouped[r.bucket]) grouped[r.bucket] = [];
+      grouped[r.bucket].push(r);
+    });
+    buckets().forEach(function (b) {
+      var rows = grouped[b] || [];
+      if (!rows.length) return;
+      html += '<h3 class="group-h" style="--bcolor:#' + esc(colorFor(b)) + '">' + esc(b) + "</h3>";
+      rows.forEach(function (r) {
+        html +=
+          '<form class="edit-card" data-kind="template" data-row="' +
+          r.row +
+          '" style="--bcolor:#' +
+          esc(colorFor(r.bucket)) +
+          '"><div class="fields">' +
+          field("Title", text("title", r.title)) +
+          '<input type="hidden" name="bucket" value="' +
+          esc(r.bucket) +
+          '" />' +
+          field("Cadence", '<input name="cadence" list="cadence-list" value="' + esc(r.cadence) + '" />') +
+          check("thisWeek", r.thisWeek, "This week") +
+          check("active", r.active, "Active") +
+          currentCheck(r.bucket, r.title) +
+          '</div><div class="edit-acts"><button type="submit" class="primary">Save</button>' +
+          '<button type="button" class="danger" data-del>Delete</button></div></form>';
+      });
+    });
+    Object.keys(grouped).forEach(function (b) {
+      if (buckets().indexOf(b) >= 0) return;
+      (grouped[b] || []).forEach(function (r) {
+        html +=
+          '<form class="edit-card" data-kind="template" data-row="' +
+          r.row +
+          '"><div class="fields">' +
+          field("Bucket", '<select name="bucket">' + optionHtml(buckets(), r.bucket) + "</select>") +
+          field("Title", text("title", r.title)) +
+          field("Cadence", '<input name="cadence" list="cadence-list" value="' + esc(r.cadence) + '" />') +
+          check("thisWeek", r.thisWeek, "This week") +
+          check("active", r.active, "Active") +
+          currentCheck(r.bucket, r.title) +
+          '</div><div class="edit-acts"><button type="submit" class="primary">Save</button>' +
+          '<button type="button" class="danger" data-del>Delete</button></div></form>';
+      });
     });
     panel.innerHTML = html;
   }
 
   function renderTasks() {
     var html =
-      '<p class="hint">One-offs. Due date + This week puts them in this week’s marked hours.</p>' +
+      '<p class="hint">One-offs that can fill a bucket’s time slot. Check Current to make one the pick until you change it. Hours come from the bucket, not the task.</p>' +
       addBar(
         "task",
         field("Name", text("name", "")) +
-          field("Hours", num("hours", 1)) +
           field("Due", '<input name="due" type="date" />') +
           field("Bucket", '<select name="bucket">' + optionHtml(buckets(), "Work") + "</select>") +
           check("thisWeek", true, "This week")
@@ -320,11 +363,11 @@
         r.row +
         '"><div class="fields">' +
         field("Name", text("name", r.title)) +
-        field("Hours", num("hours", r.hours)) +
         field("Due", '<input name="due" type="date" value="' + esc(r.due) + '" />') +
         field("Bucket", '<select name="bucket">' + optionHtml(buckets(), r.bucket) + "</select>") +
         check("thisWeek", r.thisWeek, "This week") +
         check("active", r.active, "Active") +
+        currentCheck(r.bucket, r.title) +
         '</div><div class="edit-acts"><button type="submit" class="primary">Save</button>' +
         '<button type="button" class="danger" data-del>Delete</button></div></form>';
     });
@@ -334,35 +377,46 @@
   function renderWork() {
     var w = catalog.work || {};
     var h = w.highlights || [];
+    var cur = chosenMap().Work || "";
     panel.innerHTML =
-      '<p class="hint">Make Time Highlight. In the morning, pick one candidate on Today.</p>' +
+      '<p class="hint">Work’s time slot is the Work hours on Hours &amp; colors. These are the highlight candidates. Check Current to keep one until you change it.</p>' +
       '<form class="edit-card" data-kind="work"><div class="fields stack">' +
       field("Week start", '<input name="weekStart" type="date" value="' + esc(w.weekStart) + '" />') +
       field("Theme", text("theme", w.theme || "")) +
-      field("Daily hours", num("dailyHours", w.dailyHours || 3)) +
       field("Highlight 1", text("h1", h[0] || "")) +
       field("Highlight 2", text("h2", h[1] || "")) +
       field("Highlight 3", text("h3", h[2] || "")) +
-      '</div><div class="edit-acts"><button type="submit" class="primary">Save work week</button></div></form>';
+      '</div><div class="edit-acts"><button type="submit" class="primary">Save work week</button></div></form>' +
+      '<div class="edit-card"><div class="task-picks">' +
+      [h[0], h[1], h[2]]
+        .filter(Boolean)
+        .map(function (t) {
+          return (
+            '<label class="check"><input type="checkbox" data-current="Work" value="' +
+            esc(t) +
+            '"' +
+            (cur === t ? " checked" : "") +
+            " /> " +
+            esc(t) +
+            "</label>"
+          );
+        })
+        .join("") +
+      "</div></div>";
   }
 
   function renderProjects() {
     var html =
-      '<p class="hint">Active projects plus default hours for the midday project block. Learning lives in Templates (evening).</p>' +
-      addBar(
-        "project",
-        field("Name", text("name", "")) +
-          field("Hours", num("hours", 1.5)) +
-          check("active", true, "Active")
-      );
+      '<p class="hint">Projects share one time slot (Projects hours). Check Current on the project you are in until you switch.</p>' +
+      addBar("project", field("Name", text("name", "")) + check("active", true, "Active"));
     (catalog.projects || []).forEach(function (r) {
       html +=
         '<form class="edit-card" data-kind="project" data-row="' +
         r.row +
         '"><div class="fields">' +
         field("Name", text("name", r.name)) +
-        field("Hours", num("hours", r.hours)) +
         check("active", r.active, "Active") +
+        currentCheck("Projects", r.name) +
         '</div><div class="edit-acts"><button type="submit" class="primary">Save</button>' +
         '<button type="button" class="danger" data-del>Delete</button></div></form>';
     });
@@ -371,12 +425,11 @@
 
   function renderFitness() {
     var html =
-      '<p class="hint">One session per weekday. Hours count against the Fitness weekly budget.</p>' +
+      '<p class="hint">Suggested session by weekday. Fitness hours live on Hours &amp; colors. Check Current to keep one session until you pick another.</p>' +
       addBar(
         "fitness",
         field("Weekday", '<select name="weekday">' + optionHtml(DAYS, "Mon") + "</select>") +
-          field("Session", text("session", "", 'placeholder="Strength — lower"')) +
-          field("Hours", num("hours", 1))
+          field("Session", text("session", "", 'placeholder="Strength — lower"'))
       );
     (catalog.fitness || []).forEach(function (r) {
       html +=
@@ -385,7 +438,7 @@
         '"><div class="fields">' +
         field("Weekday", '<select name="weekday">' + optionHtml(DAYS, r.weekday) + "</select>") +
         field("Session", text("session", r.title)) +
-        field("Hours", num("hours", r.hours)) +
+        currentCheck("Fitness", r.title) +
         '</div><div class="edit-acts"><button type="submit" class="primary">Save</button>' +
         '<button type="button" class="danger" data-del>Delete</button></div></form>';
     });
@@ -480,24 +533,39 @@
       return run("updatePersonal", v);
     }
     if (kind === "template") {
+      var prevT;
+      (catalog.templates || []).some(function (t) {
+        if (String(t.row) === String(row)) {
+          prevT = t;
+          return true;
+        }
+        return false;
+      });
+      v.hours = prevT ? prevT.hours : 0;
+      v.slot = prevT ? prevT.slot : "morning";
+      v.options = prevT ? prevT.options : "";
       if (adding) return run("addTemplate", v, "Template added.");
       v.row = row;
       return run("updateTemplate", v);
     }
     if (kind === "task") {
+      v.hours = v.hours || "0";
       if (adding) return run("addTask", v, "Task added.");
       v.row = row;
       return run("updateTask", v);
     }
     if (kind === "work") {
+      v.dailyHours = (catalog.work && catalog.work.dailyHours) || 3;
       return run("saveWork", v, "Work week saved.");
     }
     if (kind === "project") {
+      v.hours = v.hours || "1";
       if (adding) return run("addProject", v, "Project added.");
       v.row = row;
       return run("updateProject", v);
     }
     if (kind === "fitness") {
+      v.hours = v.hours || "1";
       if (adding) return run("addFitness", v, "Fitness session added.");
       v.row = row;
       return run("updateFitness", v);
@@ -528,6 +596,13 @@
   });
 
   panel.addEventListener("click", function (e) {
+    var cur = e.target.closest("[data-current]");
+    if (cur && cur.type === "checkbox") {
+      var bucket = cur.getAttribute("data-current");
+      var chosen = cur.checked ? cur.value : "";
+      run("setCurrent", { bucket: bucket, chosen: chosen }, chosen ? chosen + " is current for " + bucket + "." : "Cleared current " + bucket + " task.");
+      return;
+    }
     var bump = e.target.closest("[data-bump]");
     if (bump) {
       e.preventDefault();

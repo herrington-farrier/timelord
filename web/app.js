@@ -301,6 +301,7 @@
           return;
         }
         var cls = r.status === "complete" ? " complete" : r.status === "skipped" ? " skipped" : "";
+        var isLife = r.bucket === "Personal" || r.bucket === "Busy";
         html +=
           '<div class="item' +
           cls +
@@ -313,21 +314,26 @@
           "h</div></div><div class=\"item-meta\">" +
           esc(r.bucket) +
           (r.slot ? " · " + esc(r.slot) : "") +
-          (r.chosen ? " · " + esc(r.chosen) : "") +
           (r.status !== "pending" ? " · " + esc(r.status) : "") +
           "</div>";
         var opts = optionList(r.options);
-        if (opts.length && r.status === "pending") {
-          html += '<div class="item-acts"><select data-pick="' + esc(r.id) + '"><option value="">Choose</option>';
+        if (opts.length && r.status === "pending" && !isLife) {
+          html += '<div class="task-picks">';
           opts.forEach(function (o) {
             html +=
-              "<option" +
-              (o === r.chosen ? " selected" : "") +
-              ">" +
+              '<label class="check"><input type="checkbox" data-pick="' +
+              esc(r.id) +
+              '" data-bucket="' +
+              esc(r.bucket) +
+              '" value="' +
               esc(o) +
-              "</option>";
+              '"' +
+              (o === r.chosen ? " checked" : "") +
+              " /> " +
+              esc(o) +
+              "</label>";
           });
-          html += "</select></div>";
+          html += "</div>";
         }
         if (r.status === "pending") {
           html +=
@@ -335,13 +341,18 @@
             esc(r.id) +
             '">Complete</button><button type="button" class="skip" data-act="skip" data-id="' +
             esc(r.id) +
-            '">Skip</button><button type="button" class="skip" data-act="skipBucket" data-bucket="' +
-            esc(r.bucket) +
-            '">Skip bucket</button></div>';
+            '">Skip</button>';
+          if (!isLife) {
+            html +=
+              '<button type="button" class="skip" data-act="skipBucket" data-bucket="' +
+              esc(r.bucket) +
+              '">Skip bucket</button>';
+          }
+          html += "</div>";
         }
         html += "</div>";
       });
-    dayEl.innerHTML = html || '<p class="err">No packed items for today. Run Timelord → Rebuild today in the sheet.</p>';
+    dayEl.innerHTML = html || '<p class="err">No packed items for today. Tap Rebuild.</p>';
     Array.prototype.forEach.call(dayEl.querySelectorAll("[data-act]"), function (btn) {
       btn.onclick = function () {
         var act = btn.getAttribute("data-act");
@@ -359,10 +370,12 @@
           });
       };
     });
-    Array.prototype.forEach.call(dayEl.querySelectorAll("select[data-pick]"), function (sel) {
-      sel.onchange = function () {
-        jsonp("pick", { id: sel.getAttribute("data-pick"), chosen: sel.value })
-          .then(function () {
+    Array.prototype.forEach.call(dayEl.querySelectorAll("input[data-pick]"), function (box) {
+      box.onchange = function () {
+        var chosen = box.checked ? box.value : "";
+        jsonp("pick", { id: box.getAttribute("data-pick"), chosen: chosen })
+          .then(function (res) {
+            if (res && res.ok === false) throw new Error(res.error || "Could not save pick");
             return load();
           })
           .catch(function (e) {
