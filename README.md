@@ -11,9 +11,10 @@ Time zone: **America/Chicago**.
 1. **Personal** blocks (shower/breakfast, lunch, dinner) — immovable, not stealable.
 2. **Busy** from your Google Calendar — immovable.
 3. Remaining hours (default **12h** day minus personal, busy, and **15-minute buffers** between items) fill **buckets by weight**: Work → Fitness → Food → House → Garden → Projects.
-4. If a bucket’s items do not fit the leftover **day** hours or that bucket’s **weekly remaining**, the whole bucket is pushed to overflow.
+4. Each bucket gets **one slot**. What fills it, in order: a due-dated one-off → a **scheduled** recurring chore that hits that day → a **rotate** list (fitness, dishes) if that cadence hits → the checked **Current** item (projects, work highlights).
+5. If a bucket’s items do not fit the leftover **day** hours or that bucket’s **weekly remaining**, the whole bucket is pushed to overflow.
 
-**Today display order:** morning Personal → House + Garden → Work Highlight → Fitness → Projects → lunch → evening Food → dinner → evening Projects (learning block).
+**Today display order:** morning Personal → House + Garden → Work → Fitness → Projects → lunch → evening Food → dinner.
 
 Buffers count against the day, not against any bucket’s weekly budget. Consecutive personal rows in the same slot can be one block (the seed morning routine is already combined).
 

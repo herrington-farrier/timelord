@@ -89,7 +89,7 @@ html, body {
 .budget-name { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .budget-hrs { font-variant-numeric: tabular-nums; font-weight: 700; margin: 4px 0; }
 .budget-pick { display: flex; gap: 6px; align-items: center; }
-.budget-pick button {
+.budgets .budget-pick button {
   width: 28px; height: 28px; border-radius: 6px;
   border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer;
 }
@@ -264,7 +264,7 @@ html, body {
 }
 .totals {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: 8px;
   margin: 8px 0 12px;
 }
@@ -273,10 +273,18 @@ html, body {
   border: 1px solid var(--panel-edge);
   border-radius: 10px;
   padding: 10px 12px;
+  min-width: 0;
 }
 .total-card span { display: block; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .total-card b { display: block; font-size: 1.15rem; margin: 4px 0 2px; }
-.total-card em { font-style: normal; font-size: 0.75rem; color: var(--muted); }
+.total-card em {
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--muted);
+  display: block;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
 .edit-card {
   background: var(--panel);
   border: 1px solid var(--panel-edge);
@@ -290,12 +298,20 @@ html, body {
 .bucket-card { border-left-width: 5px; }
 .bucket-head {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 10px;
-  align-items: baseline;
+  gap: 4px 10px;
+  align-items: flex-start;
   margin-bottom: 8px;
 }
-.bucket-head span { color: var(--muted); font-size: 0.8rem; }
+.bucket-head strong { min-width: 0; }
+.bucket-head span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+  line-height: 1.35;
+}
 .fields {
   display: flex;
   flex-wrap: wrap;
@@ -340,12 +356,18 @@ html, body {
   color: var(--muted);
   font-size: 0.85rem;
 }
-.edit-acts, .budget-pick {
+.edit-acts, .edit-page .budget-pick {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
   align-items: center;
+}
+.edit-page .budget-pick button {
+  width: auto;
+  height: auto;
+  min-height: 36px;
+  white-space: nowrap;
 }
 .edit-page button {
   font: inherit;
@@ -365,7 +387,27 @@ html, body {
 }
 .edit-page button.danger { color: #f9a8d4; }
 .edit-card .sub { margin-top: 8px; font-size: 0.78rem; color: var(--muted); }
-.bucket-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+.bucket-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 10px; }
+.bucket-card .fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  align-items: start;
+}
+.bucket-card .field { min-width: 0; flex: none; }
+.bucket-card .field:has(input[type="color"]) {
+  max-width: 5.5rem;
+}
+.page-save {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 0 max(10px, env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, var(--bg) 28%);
+  z-index: 2;
+}
+.page-save .primary { min-width: 10rem; }
 @media (max-width: 700px) {
   .title-row { grid-template-columns: 1fr; }
   .title-heading { justify-self: start; }

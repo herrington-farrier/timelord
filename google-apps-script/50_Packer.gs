@@ -297,99 +297,64 @@ function busySlot_(start) {
 }
 
 function collectCandidates_(ctx, dateKey) {
-  var lists = {};
-  var i;
-  for (i = 0; i < ctx.buckets.length; i++) {
-    lists[ctx.buckets[i].name] = [];
-  }
-
-  function pushTitle(bucket, title) {
-    var t = String(title || '').trim();
-    if (!t || !lists[bucket]) {
-      return;
-    }
-    if (lists[bucket].indexOf(t) === -1) {
-      lists[bucket].push(t);
-    }
-  }
-
-  for (i = 0; i < ctx.templates.length; i++) {
-    var tpl = ctx.templates[i];
-    if (!tpl.active || !tpl.thisWeek) {
-      continue;
-    }
-    pushTitle(tpl.bucket, tpl.title);
-  }
-  for (i = 0; i < ctx.tasks.length; i++) {
-    var task = ctx.tasks[i];
-    if (!task.active) {
-      continue;
-    }
-    pushTitle(task.bucket, task.title);
-  }
-  if (ctx.work && ctx.work.highlights) {
-    for (i = 0; i < ctx.work.highlights.length; i++) {
-      pushTitle('Work', ctx.work.highlights[i]);
-    }
-  }
-  for (i = 0; i < ctx.fitness.length; i++) {
-    pushTitle('Fitness', ctx.fitness[i].title);
-  }
-  for (i = 0; i < ctx.projects.length; i++) {
-    if (ctx.projects[i].active) {
-      pushTitle('Projects', ctx.projects[i].name);
-    }
-  }
-
   var by = {};
   var today = todayKey_();
+  var i;
   for (i = 0; i < ctx.buckets.length; i++) {
     var bucket = ctx.buckets[i];
     if (bucket.daily <= 0 || !bucketHitsDate_(bucket.name, dateKey)) {
       by[bucket.name] = [];
       continue;
     }
-    var titles = (lists[bucket.name] || []).slice();
-    var scheduled = scheduledTitlesForBucket_(ctx.tasks, bucket.name, dateKey, today);
-    var cadence = rotatingCadenceTitles_(ctx.templates, bucket.name, dateKey);
-    var chosen = scheduled[0] || cadence[0] || getChosen_(bucket.name);
-    if (!chosen) {
-      if (bucket.name === 'Fitness') {
-        var sess = fitnessSessionForDay_(ctx.fitness, dateKey);
-        if (sess) {
-          chosen = sess.title;
-        }
-      } else if (bucket.name === 'Projects') {
-        var proj = firstActiveProject_(ctx.projects);
-        if (proj) {
-          chosen = proj.name;
-        }
-      }
+    var due = scheduledTitlesForBucket_(ctx.tasks, bucket.name, dateKey, today);
+    var scheduled = scheduledTemplateTitles_(ctx.templates, bucket.name, dateKey);
+    var rotate = rotatingCadenceTitles_(ctx.templates, ctx.fitness, bucket.name, dateKey);
+    var currentList = currentTitles_(ctx, bucket.name);
+    var fill = '';
+    var chosen = '';
+    var extra = [];
+    if (due[0]) {
+      chosen = due[0];
+      fill = 'due';
+      extra = due;
+    } else if (scheduled[0]) {
+      chosen = scheduled[0];
+      fill = 'scheduled';
+      extra = scheduled;
+    } else if (rotate[0]) {
+      chosen = rotate[0];
+      fill = 'rotate';
+      extra = rotate;
+    } else if (currentList.length) {
+      var saved = getChosen_(bucket.name);
+      chosen = currentList.indexOf(saved) >= 0 ? saved : currentList[0];
+      fill = 'current';
+      extra = currentList;
     }
-    var extra = scheduled.concat(cadence);
+    if (!chosen) {
+      by[bucket.name] = [];
+      continue;
+    }
     var merged = [];
-    var t;
     function pushMerged(title) {
       if (title && merged.indexOf(title) === -1) {
         merged.push(title);
       }
     }
     pushMerged(chosen);
+    var t;
     for (t = 0; t < extra.length; t++) {
       pushMerged(extra[t]);
     }
-    for (t = 0; t < titles.length; t++) {
-      pushMerged(titles[t]);
-    }
     by[bucket.name] = [
       {
-        title: chosen || bucket.name,
+        title: chosen,
         hours: bucket.daily,
         slot: bucket.slot,
-        source: 'bucket',
+        source: fill,
         options: merged.join('; '),
-        chosen: chosen || '',
-        scheduled: scheduled.length > 0 || cadence.length > 0
+        chosen: chosen,
+        scheduled: fill === 'due' || fill === 'scheduled' || fill === 'rotate'
       }
     ];
   }
@@ -414,13 +379,16 @@ function scheduledTitlesForBucket_(tasks, bucket, dateKey, today) {
   return due.length ? due : overdue;
 }
 
-function rotatingCadenceTitles_(templates, bucket, dateKey) {
+function scheduledTemplateTitles_(templates, bucket, dateKey) {
   var hits = [];
-  var i;
   var best = 99;
+  var i;
   for (i = 0; i < templates.length; i++) {
     var tpl = templates[i];
     if (!tpl.active || !tpl.thisWeek || tpl.bucket !== bucket) {
+      continue;
+    }
+    if (normalizeMode_(tpl.mode) !== ITEM_MODE.SCHEDULED) {
       continue;
     }
     if (!cadenceHitsDate_(tpl.cadence, dateKey)) {
@@ -441,15 +409,109 @@ function rotatingCadenceTitles_(templates, bucket, dateKey) {
       titles.push(hits[i].title);
     }
   }
+  return titles;
+}
+
+function currentTitles_(ctx, bucket) {
+  var titles = [];
+  function push(title) {
+    var t = String(title || '').trim();
+    if (t && titles.indexOf(t) === -1) {
+      titles.push(t);
+    }
+  }
+  var i;
+  if (bucket === 'Work' && ctx.work && ctx.work.highlights) {
+    for (i = 0; i < ctx.work.highlights.length; i++) {
+      push(ctx.work.highlights[i]);
+    }
+  }
+  if (bucket === 'Projects') {
+    for (i = 0; i < ctx.projects.length; i++) {
+      if (ctx.projects[i].active) {
+        push(ctx.projects[i].name);
+      }
+    }
+  }
+  for (i = 0; i < ctx.templates.length; i++) {
+    var tpl = ctx.templates[i];
+    if (!tpl.active || !tpl.thisWeek || tpl.bucket !== bucket) {
+      continue;
+    }
+    if (normalizeMode_(tpl.mode) === ITEM_MODE.CURRENT) {
+      push(tpl.title);
+    }
+  }
+  return titles;
+}
+
+function rotatePool_(templates, fitness, bucket) {
+  var pool = [];
+  var i;
+  for (i = 0; i < templates.length; i++) {
+    var tpl = templates[i];
+    if (!tpl.active || !tpl.thisWeek || tpl.bucket !== bucket) {
+      continue;
+    }
+    if (normalizeMode_(tpl.mode) !== ITEM_MODE.ROTATE) {
+      continue;
+    }
+    pool.push({ title: tpl.title, cadence: tpl.cadence || 'daily' });
+  }
+  if (!pool.length && bucket === 'Fitness' && fitness && fitness.length) {
+    for (i = 0; i < fitness.length; i++) {
+      pool.push({ title: fitness[i].title, cadence: 'eod' });
+    }
+  }
+  return pool;
+}
+
+function rotatingCadenceTitles_(templates, fitness, bucket, dateKey) {
+  var pool = rotatePool_(templates, fitness, bucket);
+  if (!pool.length) {
+    return [];
+  }
+  var cadence = pool[0].cadence || 'daily';
+  if (!cadenceHitsDate_(cadence, dateKey)) {
+    return [];
+  }
+  var titles = [];
+  var i;
+  for (i = 0; i < pool.length; i++) {
+    if (titles.indexOf(pool[i].title) === -1) {
+      titles.push(pool[i].title);
+    }
+  }
   if (titles.length <= 1) {
     return titles;
   }
+  var pick = cadenceHitIndex_(cadence, dateKey) % titles.length;
+  return titles.slice(pick).concat(titles.slice(0, pick));
+}
+
+function cadenceHitIndex_(cadence, dateKey) {
   var p = parseYmd_(dateKey);
   var epoch = ymdToDate_(2026, 1, 1);
   var dt = ymdToDate_(p.y, p.mo, p.d);
   var diff = Math.round((dt.getTime() - epoch.getTime()) / 86400000);
-  var pick = ((diff % titles.length) + titles.length) % titles.length;
-  return titles.slice(pick).concat(titles.slice(0, pick));
+  if (diff < 0) {
+    return 0;
+  }
+  var cl = String(cadence || 'daily').trim().toLowerCase();
+  if (cl === 'daily') {
+    return diff;
+  }
+  if (cl === 'eod') {
+    return Math.floor(diff / 2);
+  }
+  var n = 0;
+  var i;
+  for (i = 0; i <= diff; i++) {
+    if (cadenceHitsDate_(cadence, addDaysKey_('2026-01-01', i))) {
+      n++;
+    }
+  }
+  return Math.max(0, n - 1);
 }
 
 function cadenceRank_(cadence) {
@@ -470,7 +532,11 @@ function bucketHasScheduledTask_(bucket, dateKey) {
   if (scheduledTitlesForBucket_(readTasks_(), bucket, dateKey, todayKey_()).length) {
     return true;
   }
-  return rotatingCadenceTitles_(readTemplates_(), bucket, dateKey).length > 0;
+  var templates = readTemplates_();
+  if (scheduledTemplateTitles_(templates, bucket, dateKey).length) {
+    return true;
+  }
+  return rotatingCadenceTitles_(templates, readFitness_(), bucket, dateKey).length > 0;
 }
 
 function slotForBucket_(buckets, name) {

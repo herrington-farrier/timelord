@@ -24,7 +24,8 @@ function readPersonal_() {
 }
 
 function readTemplates_() {
-  var rows = dataRows_(sheet_(SHEET.TEMPLATES), 8);
+  ensureTemplateMode_();
+  var rows = dataRows_(sheet_(SHEET.TEMPLATES), 9);
   var out = [];
   var i;
   for (i = 0; i < rows.length; i++) {
@@ -42,10 +43,22 @@ function readTemplates_() {
       slot: String(rows[i][4] || 'morning').trim() || 'morning',
       options: String(rows[i][5] || '').trim(),
       active: toBool_(rows[i][6] === '' ? true : rows[i][6]),
-      thisWeek: toBool_(rows[i][7] === '' ? true : rows[i][7])
+      thisWeek: toBool_(rows[i][7] === '' ? true : rows[i][7]),
+      mode: normalizeMode_(rows[i][8])
     });
   }
   return out;
+}
+
+function normalizeMode_(v) {
+  var m = String(v || '').trim().toLowerCase();
+  if (m === ITEM_MODE.ROTATE || m === 'rotation') {
+    return ITEM_MODE.ROTATE;
+  }
+  if (m === ITEM_MODE.CURRENT) {
+    return ITEM_MODE.CURRENT;
+  }
+  return ITEM_MODE.SCHEDULED;
 }
 
 function readTasks_() {

@@ -169,6 +169,9 @@ function handleAction_(p) {
   if (action === 'saveBucket') {
     return okSettings_(saveBucket(p.bucket, p.color, p.slot, p.min, p.hours));
   }
+  if (action === 'saveEditPage') {
+    return { ok: true, catalog: saveEditPage_(p.tab, p.payload) };
+  }
   if (action === 'setBucketColor') {
     return okSettings_(setBucketColor(p.bucket, p.color));
   }
@@ -203,7 +206,7 @@ function handleAction_(p) {
   }
   if (action === 'addTemplate') {
     return okCatalog_(
-      addTemplate(p.bucket, p.title, p.hours, p.cadence, p.slot, p.options, paramBool_(p.thisWeek, true))
+      addTemplate(p.bucket, p.title, p.hours, p.cadence, p.slot, p.options, paramBool_(p.thisWeek, true), p.mode)
     );
   }
   if (action === 'updateTemplate') {
@@ -217,7 +220,8 @@ function handleAction_(p) {
         p.slot,
         p.options,
         paramBool_(p.active, true),
-        paramBool_(p.thisWeek, true)
+        paramBool_(p.thisWeek, true),
+        p.mode
       )
     );
   }
@@ -282,6 +286,279 @@ function getEditorCatalog_() {
     projects: listProjects(),
     fitness: listFitness()
   };
+}
+
+function parsePayload_(raw) {
+  if (raw == null || raw === '') {
+    return {};
+  }
+  if (typeof raw === 'object') {
+    return raw;
+  }
+  return JSON.parse(String(raw));
+}
+
+function saveEditPage_(tab, payloadRaw) {
+  var data = parsePayload_(payloadRaw);
+  var t = String(tab || data.tab || '').trim();
+  if (t === 'hours') {
+    saveHoursPage_(data);
+  } else if (t === 'personal') {
+    savePersonalPage_(data);
+  } else if (t === 'scheduled' || t === 'rotate' || t === 'templates') {
+    saveTemplatePage_(data);
+  } else if (t === 'oneoffs' || t === 'tasks') {
+    saveTaskPage_(data);
+  } else if (t === 'current' || t === 'work' || t === 'projects') {
+    saveCurrentPage_(data);
+  } else if (t === 'fitness') {
+    saveTemplatePage_(data);
+  }
+  applyCurrentMap_(data.current);
+  return getEditorCatalog_();
+}
+
+function applyCurrentMap_(current) {
+  if (!current || typeof current !== 'object') {
+    return;
+  }
+  var k;
+  for (k in current) {
+    if (Object.prototype.hasOwnProperty.call(current, k)) {
+      setCurrentTask_(k, current[k]);
+    }
+  }
+}
+
+function saveHoursPage_(data) {
+  var meta = data.meta || {};
+  if (meta.hours != null && meta.hours !== '') {
+    var day = roundHours_(Math.max(1, Number(meta.hours)));
+    if (isNaN(day)) {
+      throw new Error('Day hours must be a number.');
+    }
+    setSetting_(SETTINGS_KEYS.DAY_HOURS, day);
+  }
+  if (meta.days != null && meta.days !== '') {
+    var days = Math.max(1, Math.min(7, Math.round(Number(meta.days))));
+    if (isNaN(days)) {
+      throw new Error('Days per week must be a number.');
+    }
+    setSetting_(SETTINGS_KEYS.DAYS_PER_WEEK, days);
+  }
+  if (meta.minutes != null && meta.minutes !== '') {
+    var mins = Math.max(0, Math.round(Number(meta.minutes)));
+    if (isNaN(mins)) {
+      throw new Error('Buffer minutes must be a number.');
+    }
+    setSetting_(SETTINGS_KEYS.BUFFER_MINUTES, mins);
+  }
+
+  var items = data.buckets || [];
+  var sh = sheet_(SHEET.SETTINGS);
+  var i;
+  for (i = 0; i < items.length; i++) {
+    var it = items[i];
+    var b = findBucket_(it.name);
+    if (it.color) {
+      var hex = hexColor_(String(it.color || '').replace(/^#/, ''));
+      sh.getRange(b.row, 3).setValue(hex);
+      try {
+        sh.getRange(b.row, 1, 1, 9).setBackground('#' + hex).setFontColor('#111827');
+      } catch (ignore) {}
+    }
+    if (it.slot) {
+      var slot = String(it.slot || 'midday').trim().toLowerCase();
+      if (slot !== 'morning' && slot !== 'midday' && slot !== 'evening') {
+        slot = 'midday';
+      }
+      sh.getRange(b.row, 4).setValue(slot);
+    }
+    if (it.min != null && it.min !== '') {
+      sh.getRange(b.row, 7).setValue(roundHours_(Math.max(0, Number(it.min))));
+    }
+  }
+
+  var buckets = readBuckets_();
+  var byName = {};
+  for (i = 0; i < items.length; i++) {
+    byName[items[i].name] = items[i];
+  }
+  var targets = [];
+  for (i = 0; i < buckets.length; i++) {
+    var bucket = buckets[i];
+    var row = byName[bucket.name] || {};
+    var min =
+      row.min != null && row.min !== ''
+        ? roundHours_(Math.max(0, Number(row.min)))
+        : bucket.min;
+    var daily = row.daily != null && row.daily !== '' ? toHours_(row.daily) : bucket.daily;
+    var weekly = roundHours_(daily * bucketDays_(bucket.name));
+    if (weekly < min) {
+      weekly = min;
+    }
+    targets.push({ name: bucket.name, weekly: weekly, min: min });
+  }
+
+  var map = readSettingsMap_();
+  var assignable = roundHours_(
+    Math.max(
+      0,
+      getSettingNum_(map, SETTINGS_KEYS.DAY_HOURS, 12) * getSettingNum_(map, SETTINGS_KEYS.DAYS_PER_WEEK, 7) -
+        personalWeeklyHours_()
+    )
+  );
+  var allocated = 0;
+  for (i = 0; i < targets.length; i++) {
+    allocated += targets[i].weekly;
+  }
+  var overflow = roundHours_(allocated - assignable);
+  var si;
+  for (si = 0; si < STEAL_ORDER.length && overflow > 1e-9; si++) {
+    for (i = 0; i < targets.length; i++) {
+      if (targets[i].name !== STEAL_ORDER[si]) {
+        continue;
+      }
+      var stealable = roundHours_(targets[i].weekly - targets[i].min);
+      if (stealable > 0) {
+        var take = Math.min(stealable, overflow);
+        targets[i].weekly = roundHours_(targets[i].weekly - take);
+        overflow = roundHours_(overflow - take);
+      }
+      break;
+    }
+  }
+  for (i = 0; i < targets.length; i++) {
+    writeBucketHours_(targets[i].name, targets[i].weekly);
+  }
+  refreshBudgetNumbers_();
+}
+
+function savePersonalPage_(data) {
+  var rows = data.rows || [];
+  var i;
+  for (i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    updatePersonal(r.row, r.title, r.hours, r.slot, r.days, paramBool_(r.active, true));
+  }
+  var adds = data.adds || [];
+  for (i = 0; i < adds.length; i++) {
+    if (String(adds[i].title || '').trim()) {
+      addPersonal(adds[i].title, adds[i].hours, adds[i].slot, adds[i].days, paramBool_(adds[i].active, true));
+    }
+  }
+}
+
+function saveTemplatePage_(data) {
+  var rows = data.rows || [];
+  var i;
+  for (i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var prev = templateByRow_(r.row);
+    updateTemplate(
+      r.row,
+      r.bucket || (prev && prev.bucket),
+      r.title,
+      r.hours != null && r.hours !== '' ? r.hours : prev ? prev.hours : 0,
+      r.cadence,
+      r.slot || (prev && prev.slot) || 'morning',
+      r.options != null ? r.options : prev ? prev.options : '',
+      paramBool_(r.active, true),
+      paramBool_(r.thisWeek, true),
+      r.mode || (prev && prev.mode)
+    );
+  }
+  var adds = data.adds || [];
+  for (i = 0; i < adds.length; i++) {
+    var a = adds[i];
+    if (!String(a.title || '').trim()) {
+      continue;
+    }
+    addTemplate(
+      a.bucket,
+      a.title,
+      a.hours || 0,
+      a.cadence,
+      a.slot || 'morning',
+      a.options || '',
+      paramBool_(a.thisWeek, true),
+      a.mode
+    );
+  }
+}
+
+function templateByRow_(row) {
+  var list = readTemplates_();
+  var i;
+  for (i = 0; i < list.length; i++) {
+    if (String(list[i].row) === String(row)) {
+      return list[i];
+    }
+  }
+  return null;
+}
+
+function saveTaskPage_(data) {
+  var rows = data.rows || [];
+  var i;
+  for (i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    updateTask(r.row, r.name || r.title, r.hours || 0, r.due, r.bucket, paramBool_(r.thisWeek, true), paramBool_(r.active, true));
+  }
+  var adds = data.adds || [];
+  for (i = 0; i < adds.length; i++) {
+    var a = adds[i];
+    if (String(a.name || a.title || '').trim()) {
+      addTask(a.name || a.title, a.hours || 0, a.due, a.bucket, paramBool_(a.thisWeek, true));
+    }
+  }
+}
+
+function saveCurrentPage_(data) {
+  if (data.work) {
+    var w = data.work;
+    saveWork(w.weekStart, w.theme, w.dailyHours, w.h1, w.h2, w.h3);
+  }
+  var rows = data.rows || [];
+  var i;
+  for (i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (r.kind === 'project') {
+      updateProject(r.row, r.name, paramBool_(r.active, true), r.hours || 1);
+    } else if (r.kind === 'template') {
+      var prev = templateByRow_(r.row);
+      updateTemplate(
+        r.row,
+        r.bucket || (prev && prev.bucket),
+        r.title,
+        prev ? prev.hours : 0,
+        r.cadence || (prev && prev.cadence) || 'daily',
+        prev ? prev.slot : 'midday',
+        prev ? prev.options : '',
+        paramBool_(r.active, true),
+        paramBool_(r.thisWeek, true),
+        r.mode || ITEM_MODE.CURRENT
+      );
+    }
+  }
+  var adds = data.adds || [];
+  for (i = 0; i < adds.length; i++) {
+    var a = adds[i];
+    if (a.kind === 'project' && String(a.name || '').trim()) {
+      addProject(a.name, a.hours || 1, paramBool_(a.active, true));
+    } else if (a.kind === 'template' && String(a.title || '').trim()) {
+      addTemplate(
+        a.bucket,
+        a.title,
+        0,
+        a.cadence || 'daily',
+        'midday',
+        '',
+        paramBool_(a.thisWeek, true),
+        ITEM_MODE.CURRENT
+      );
+    }
+  }
 }
 
 function setPlanStatus_(id, status) {
@@ -428,34 +705,58 @@ function deleteTask(row) {
   return listTasks();
 }
 
-function addTemplate(bucket, title, hours, cadence, slot, options, thisWeek) {
+function addTemplate(bucket, title, hours, cadence, slot, options, thisWeek, mode) {
   var t = String(title || '').trim();
   var b = String(bucket || '').trim();
   if (!t || !b) {
     throw new Error('Template bucket and title are required.');
   }
+  ensureTemplateMode_();
   var sh = sheet_(SHEET.TEMPLATES);
   var row = nextEmptyRow_(sh, 2);
-  sh.getRange(row, 1, 1, 8).setValues([
-    [b, t, toHours_(hours), cadence || 'daily', slot, options || '', true, paramBool_(thisWeek, true)]
+  sh.getRange(row, 1, 1, 9).setValues([
+    [
+      b,
+      t,
+      toHours_(hours),
+      cadence || 'daily',
+      slot,
+      options || '',
+      true,
+      paramBool_(thisWeek, true),
+      normalizeMode_(mode)
+    ]
   ]);
   return listTemplates();
 }
 
-function updateTemplate(row, bucket, title, hours, cadence, slot, options, active, thisWeek) {
+function updateTemplate(row, bucket, title, hours, cadence, slot, options, active, thisWeek, mode) {
   var t = String(title || '').trim();
   var b = String(bucket || '').trim();
   if (!t || !b) {
     throw new Error('Template bucket and title are required.');
   }
+  ensureTemplateMode_();
   sheet_(SHEET.TEMPLATES)
-    .getRange(Number(row), 1, 1, 8)
-    .setValues([[b, t, toHours_(hours), cadence || 'daily', slot, options || '', toBool_(active), toBool_(thisWeek)]]);
+    .getRange(Number(row), 1, 1, 9)
+    .setValues([
+      [
+        b,
+        t,
+        toHours_(hours),
+        cadence || 'daily',
+        slot,
+        options || '',
+        toBool_(active),
+        toBool_(thisWeek),
+        normalizeMode_(mode)
+      ]
+    ]);
   return listTemplates();
 }
 
 function deleteTemplate(row) {
-  sheet_(SHEET.TEMPLATES).getRange(Number(row), 1, 1, 8).clearContent();
+  sheet_(SHEET.TEMPLATES).getRange(Number(row), 1, 1, 9).clearContent();
   return listTemplates();
 }
 

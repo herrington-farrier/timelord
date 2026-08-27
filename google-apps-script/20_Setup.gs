@@ -29,6 +29,7 @@ function runSetup_(quiet) {
   setupPlan_(ss);
   setupSummary_(ss);
   setupLog_(ss);
+  ensureTemplateMode_();
   writeGidsToSettings_();
   refreshBudgetNumbers_();
   if (!quiet) {
@@ -134,10 +135,10 @@ function setupTemplates_(ss) {
   var sh = ensureSheet_(SHEET.TEMPLATES);
   setTabColor_(sh, TAB_COLORS.Templates);
   var seeded = sh.getLastRow() >= 2 && String(sh.getRange(2, 1).getValue()).trim() !== '';
-  trimSheet_(sh, 80, 8);
+  trimSheet_(sh, 80, 9);
   writeHeader_(sh, HEADERS.TEMPLATES);
   if (!seeded) {
-    sh.getRange(2, 1, SEED_TEMPLATES.length, 8).setValues(SEED_TEMPLATES);
+    sh.getRange(2, 1, SEED_TEMPLATES.length, 9).setValues(SEED_TEMPLATES);
   }
   checkboxCol_(sh, 7, 2, 80);
   checkboxCol_(sh, 8, 2, 80);
@@ -148,6 +149,10 @@ function setupTemplates_(ss) {
     .requireValueInList(['morning', 'midday', 'evening'], true)
     .build();
   sh.getRange(2, 5, 79, 1).setDataValidation(slotRule);
+  var modeRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['scheduled', 'rotate', 'current'], true)
+    .build();
+  sh.getRange(2, 9, 79, 1).setDataValidation(modeRule);
   sh.setColumnWidth(1, 110);
   sh.setColumnWidth(2, 280);
   sh.setColumnWidth(4, 150);
@@ -332,6 +337,105 @@ function ensureSettingsBucketLayout_() {
   }
   mergeLearningIntoProjects_();
   refreshBucketDropdowns_();
+  ensureTemplateMode_();
+}
+
+function inferTemplateMode_(bucket, cadence) {
+  if (bucket === 'Fitness') {
+    return ITEM_MODE.ROTATE;
+  }
+  if (bucket === 'House' && String(cadence || '').trim().toLowerCase() === 'daily') {
+    return ITEM_MODE.ROTATE;
+  }
+  return ITEM_MODE.SCHEDULED;
+}
+
+function ensureTemplateMode_() {
+  var sh = ss_().getSheetByName(SHEET.TEMPLATES);
+  if (!sh) {
+    return;
+  }
+  if (sh.getMaxColumns() < 9) {
+    sh.insertColumnAfter(Math.max(sh.getMaxColumns(), 8));
+  }
+  var header = String(sh.getRange(1, 9).getValue() || '').trim();
+  if (header !== 'Mode') {
+    sh.getRange(1, 9)
+      .setValue('Mode')
+      .setFontWeight('bold')
+      .setBackground('#1e293b')
+      .setFontColor('#f8fafc');
+  }
+  var last = sh.getLastRow();
+  if (last >= 2) {
+    var rows = sh.getRange(2, 1, last - 1, 9).getValues();
+    var changed = false;
+    var i;
+    for (i = 0; i < rows.length; i++) {
+      var bucket = String(rows[i][0] || '').trim();
+      var title = String(rows[i][1] || '').trim();
+      if (!bucket || !title) {
+        continue;
+      }
+      if (String(rows[i][8] || '').trim()) {
+        continue;
+      }
+      rows[i][8] = inferTemplateMode_(bucket, rows[i][3]);
+      changed = true;
+    }
+    if (changed) {
+      sh.getRange(2, 1, last - 1, 9).setValues(rows);
+    }
+  }
+  var modeRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['scheduled', 'rotate', 'current'], true)
+    .build();
+  sh.getRange(2, 9, Math.max(sh.getMaxRows() - 1, 1), 1).setDataValidation(modeRule);
+  ensureFitnessRotateTemplates_(sh);
+}
+
+function ensureFitnessRotateTemplates_(sh) {
+  var last = sh.getLastRow();
+  var i;
+  if (last >= 2) {
+    var rows = sh.getRange(2, 1, last - 1, 9).getValues();
+    for (i = 0; i < rows.length; i++) {
+      if (
+        String(rows[i][0] || '').trim() === 'Fitness' &&
+        String(rows[i][1] || '').trim() &&
+        normalizeMode_(rows[i][8]) === ITEM_MODE.ROTATE
+      ) {
+        return;
+      }
+    }
+  }
+  var fitness = [];
+  try {
+    fitness = readFitness_();
+  } catch (ignore) {
+    return;
+  }
+  if (!fitness.length) {
+    return;
+  }
+  var values = [];
+  for (i = 0; i < fitness.length; i++) {
+    values.push([
+      'Fitness',
+      fitness[i].title,
+      fitness[i].hours || 1,
+      'eod',
+      'midday',
+      '',
+      true,
+      true,
+      ITEM_MODE.ROTATE
+    ]);
+  }
+  var start = nextEmptyRow_(sh, 2);
+  sh.getRange(start, 1, values.length, 9).setValues(values);
+  checkboxCol_(sh, 7, start, start + values.length - 1);
+  checkboxCol_(sh, 8, start, start + values.length - 1);
 }
 
 function mergeLearningIntoProjects_() {

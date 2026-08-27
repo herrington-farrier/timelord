@@ -63,8 +63,13 @@ var SETTINGS_KEYS = {
   WEB_APP_HINT: 'Web App URL (paste into web/config.js)'
 };
 
-var SETTINGS_BUCKET_HEADER_ROW = 18;
+var ITEM_MODE = {
+  SCHEDULED: 'scheduled',
+  ROTATE: 'rotate',
+  CURRENT: 'current'
+};
 var SETTINGS_META_LAST_ROW = 16;
+var SETTINGS_BUCKET_HEADER_ROW = 18;
 
 var SEED_BUCKETS = [
   { name: 'Work', weight: 1, color: 'f0c14a', slot: 'midday', weekly: 18, min: 8 },
@@ -82,8 +87,8 @@ var SEED_PERSONAL = [
 ];
 
 var SEED_TEMPLATES = [
-  ['Food', 'Cooking', 0.5, 'daily', 'evening', '', true, true],
-  ['Food', 'Groceries', 1.5, 'weekly:Sun', 'morning', '', true, true],
+  ['Food', 'Cooking', 0.5, 'daily', 'evening', '', true, true, 'scheduled'],
+  ['Food', 'Groceries', 1.5, 'weekly:Sun', 'morning', '', true, true, 'scheduled'],
   [
     'Food',
     'Fermentation / freezer maintenance',
@@ -92,9 +97,10 @@ var SEED_TEMPLATES = [
     'evening',
     'Jun; fermented veggies; stock; granola; condiments; freezer rotation',
     true,
-    true
+    true,
+    'scheduled'
   ],
-  ['Garden', 'Water & check veggies', 0.4, 'eod', 'morning', '', true, true],
+  ['Garden', 'Water & check veggies', 0.4, 'eod', 'morning', '', true, true, 'scheduled'],
   [
     'Garden',
     'Weeding / mulching / feeding',
@@ -103,15 +109,16 @@ var SEED_TEMPLATES = [
     'morning',
     'weeding; mulching; feeding / pruning',
     true,
-    true
+    true,
+    'scheduled'
   ],
-  ['Garden', 'Mowing', 1.5, 'every_2_months', 'morning', '', true, true],
-  ['House', 'Dishes', 0.35, 'daily', 'morning', '', true, true],
-  ['House', 'Kitchen counters', 0.25, 'daily', 'morning', '', true, true],
-  ['House', 'Floors', 0.5, 'weekly:Tue,Fri', 'morning', '', true, true],
-  ['House', 'Laundry', 1, 'weekly:Wed,Sat', 'morning', '', true, true],
-  ['House', 'Bathrooms / bedrooms', 1, 'weekly:Sat', 'morning', '', true, true],
-  ['Projects', 'Learning block', 1, 'weekly:Tue,Thu', 'evening', 'book; course; topic', true, true]
+  ['Garden', 'Mowing', 1.5, 'every_2_months', 'morning', '', true, true, 'scheduled'],
+  ['House', 'Dishes', 0.35, 'daily', 'morning', '', true, true, 'rotate'],
+  ['House', 'Kitchen counters', 0.25, 'daily', 'morning', '', true, true, 'rotate'],
+  ['House', 'Floors', 0.5, 'weekly:Tue,Fri', 'morning', '', true, true, 'scheduled'],
+  ['House', 'Laundry', 1, 'weekly:Wed,Sat', 'morning', '', true, true, 'scheduled'],
+  ['House', 'Bathrooms / bedrooms', 1, 'weekly:Sat', 'morning', '', true, true, 'scheduled'],
+  ['Projects', 'Learning block', 1, 'weekly:Tue,Thu', 'evening', 'book; course; topic', true, true, 'scheduled']
 ];
 
 var SEED_PROJECTS = [
@@ -133,7 +140,7 @@ var SEED_WORK_HIGHLIGHTS = ['Finish the week’s most important deliverable', 'C
 
 var HEADERS = {
   PERSONAL: ['Title', 'Hours', 'Slot', 'Days', 'Active'],
-  TEMPLATES: ['Bucket', 'Title', 'Hours', 'Cadence', 'Slot', 'Options', 'Active', 'This week'],
+  TEMPLATES: ['Bucket', 'Title', 'Hours', 'Cadence', 'Slot', 'Options', 'Active', 'This week', 'Mode'],
   TASKS: ['Name', 'Hours', 'Due Date', 'Bucket', 'This week', 'Active'],
   WORK: ['Field', 'Value'],
   PROJECTS: ['Name', 'Active', 'Default hours'],

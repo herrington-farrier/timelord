@@ -314,10 +314,19 @@
           "h</div></div><div class=\"item-meta\">" +
           esc(r.bucket) +
           (r.slot ? " · " + esc(r.slot) : "") +
+          (r.source === "due"
+            ? " · due today"
+            : r.source === "scheduled"
+            ? " · scheduled"
+            : r.source === "rotate"
+            ? " · rotation"
+            : r.source === "current"
+            ? " · current"
+            : "") +
           (r.status !== "pending" ? " · " + esc(r.status) : "") +
           "</div>";
         var opts = optionList(r.options);
-        if (opts.length && r.status === "pending" && !isLife) {
+        if (opts.length > 1 && r.status === "pending" && !isLife) {
           html += '<div class="task-picks">';
           opts.forEach(function (o) {
             html +=
