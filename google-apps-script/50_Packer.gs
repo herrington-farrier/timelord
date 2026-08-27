@@ -1,5 +1,5 @@
 /**
- * Timelord — day packer: Personal + Busy first, buffers, then buckets by weight.
+ * Timelord — day packer: Personal + Busy first, then each hitting item.
  */
 
 function rebuildToday() {
@@ -23,16 +23,11 @@ function packRange_(startKey, endKey, preserveStatuses) {
   var bufferHours = (nums.bufferMinutes || 15) / 60;
   var buckets = nums.buckets;
   var personal = readPersonal_();
-  var templates = readTemplates_();
-  var tasks = readTasks_();
-  var work = readWork_();
-  var projects = readProjects_();
-  var fitness = readFitness_();
+  var lifeItems = readItems_();
   var busy = readBusy_();
   var prev = preserveStatuses ? indexPlan_(readPlanRows_()) : {};
 
   var days = keysInRange_(startKey, endKey);
-  var weeklyUsed = {};
   var planRows = [];
   var overflowRows = [];
   var headerRows = [];
@@ -40,27 +35,14 @@ function packRange_(startKey, endKey, preserveStatuses) {
 
   for (d = 0; d < days.length; d++) {
     var dateKey = days[d];
-    var weekStart = weekStartKey_(dateKey);
-    if (!weeklyUsed[weekStart]) {
-      weeklyUsed[weekStart] = {};
-      var bi;
-      for (bi = 0; bi < buckets.length; bi++) {
-        weeklyUsed[weekStart][buckets[bi].name] = 0;
-      }
-    }
     var packed = packOneDay_({
       dateKey: dateKey,
       dayHours: dayHours,
       bufferHours: bufferHours,
       buckets: buckets,
       personal: personal,
-      templates: templates,
-      tasks: tasks,
-      work: work,
-      projects: projects,
-      fitness: fitness,
+      items: lifeItems,
       busy: busy,
-      weeklyUsed: weeklyUsed[weekStart],
       prev: prev
     });
     var i;
@@ -75,21 +57,13 @@ function packRange_(startKey, endKey, preserveStatuses) {
       date: dateKey,
       bucket: '',
       title:
-        'day ' +
-        dayHours +
-        'h · personal ' +
-        packed.stats.personal +
-        'h · busy ' +
-        packed.stats.busy +
-        'h · buffers ' +
-        packed.stats.buffers +
-        'h · packed ' +
-        packed.stats.packed +
-        'h · left ' +
-        packed.stats.remaining +
-        'h · overflow ' +
-        packed.stats.overflow +
-        'h',
+        fmtDuration_(dayHours) +
+        ' day · packed ' +
+        fmtDuration_(packed.stats.packed) +
+        ' · left ' +
+        fmtDuration_(packed.stats.remaining) +
+        ' · overflow ' +
+        fmtDuration_(packed.stats.overflow),
       hours: packed.stats.remaining,
       reason: '',
       color: '334155'
@@ -97,9 +71,8 @@ function packRange_(startKey, endKey, preserveStatuses) {
   }
 
   writePlan_(planRows);
-  writeSummary_(headerRows, overflowRows, buckets, weeklyUsed, startKey);
+  writeSummary_(headerRows, overflowRows, startKey);
   setSetting_(SETTINGS_KEYS.LAST_PACKED, chicagoNow_());
-  refreshBudgetNumbers_();
 }
 
 function indexPlan_(rows) {
@@ -121,7 +94,6 @@ function packOneDay_(ctx) {
   function pushItem(raw) {
     var prevRow = ctx.prev[planMatchKey_(raw)];
     var status = prevRow && prevRow.status ? prevRow.status : 'pending';
-    var chosen = prevRow && prevRow.chosen ? prevRow.chosen : raw.chosen || '';
     var row = {
       id: prevRow && prevRow.id ? prevRow.id : newId_(),
       date: dateKey,
@@ -131,8 +103,8 @@ function packOneDay_(ctx) {
       slot: raw.slot,
       status: status,
       source: raw.source,
-      options: raw.options || '',
-      chosen: chosen,
+      options: '',
+      chosen: raw.title,
       color: raw.color,
       sort: raw.sort,
       countsWeek: !!raw.countsWeek
@@ -187,62 +159,36 @@ function packOneDay_(ctx) {
 
   remaining = Math.max(0, roundHours_(remaining));
 
-  var candidatesByBucket = collectCandidates_(ctx, dateKey);
-  var bi;
-  for (bi = 0; bi < ctx.buckets.length; bi++) {
-    var bucket = ctx.buckets[bi];
-    var cands = candidatesByBucket[bucket.name] || [];
-    if (!cands.length) {
-      continue;
-    }
-    var need = 0;
-    var ci;
-    for (ci = 0; ci < cands.length; ci++) {
-      need += cands[ci].hours;
-    }
-    need = roundHours_(need);
-    var weekLeft = roundHours_(bucket.weekly - (ctx.weeklyUsed[bucket.name] || 0));
-    var buffersForBucket = roundHours_(cands.length * ctx.bufferHours);
-    var dayCost = roundHours_(need + buffersForBucket);
-    var reason = '';
-    if (need > weekLeft + 1e-9) {
-      reason = 'over weekly budget';
-    } else if (dayCost > remaining + 1e-9) {
-      reason = remaining <= 0 ? 'day full' : 'bucket over day';
-    }
-    if (reason) {
-      for (ci = 0; ci < cands.length; ci++) {
-        overflow.push({
-          kind: 'overflow',
-          date: dateKey,
-          bucket: bucket.name,
-          title: cands[ci].title,
-          hours: cands[ci].hours,
-          reason: reason,
-          color: bucket.color
-        });
-        stats.overflow = roundHours_(stats.overflow + cands[ci].hours);
-      }
-      continue;
-    }
-    for (ci = 0; ci < cands.length; ci++) {
-      var c = cands[ci];
-      pushItem({
-        bucket: bucket.name,
+  var cands = collectHittingItems_(ctx.items, ctx.buckets, dateKey);
+  var ci;
+  for (ci = 0; ci < cands.length; ci++) {
+    var c = cands[ci];
+    var dayCost = roundHours_(c.hours + ctx.bufferHours);
+    if (dayCost > remaining + 1e-9) {
+      overflow.push({
+        kind: 'overflow',
+        date: dateKey,
+        bucket: c.bucket,
         title: c.title,
         hours: c.hours,
-        slot: c.slot || bucket.slot,
-        source: c.source,
-        options: c.options || '',
-        chosen: c.chosen || '',
-        color: bucket.color,
-        sort: displayRank_(bucket.name, c.slot || bucket.slot),
-        countsWeek: true
+        reason: remaining <= 0 ? 'day full' : 'does not fit',
+        color: c.color
       });
-      ctx.weeklyUsed[bucket.name] = roundHours_((ctx.weeklyUsed[bucket.name] || 0) + c.hours);
-      remaining = roundHours_(remaining - c.hours);
-      stats.packed = roundHours_(stats.packed + c.hours);
+      stats.overflow = roundHours_(stats.overflow + c.hours);
+      continue;
     }
+    pushItem({
+      bucket: c.bucket,
+      title: c.title,
+      hours: c.hours,
+      slot: c.slot,
+      source: c.source,
+      color: c.color,
+      sort: displayRank_(c.bucket, c.slot),
+      countsWeek: true
+    });
+    remaining = roundHours_(remaining - c.hours);
+    stats.packed = roundHours_(stats.packed + c.hours);
   }
 
   items.sort(function (a, b) {
@@ -296,257 +242,63 @@ function busySlot_(start) {
   return 'evening';
 }
 
-function collectCandidates_(ctx, dateKey) {
-  var by = {};
+function collectHittingItems_(lifeItems, buckets, dateKey) {
   var today = todayKey_();
-  var i;
-  for (i = 0; i < ctx.buckets.length; i++) {
-    var bucket = ctx.buckets[i];
-    if (bucket.daily <= 0 || !bucketHitsDate_(bucket.name, dateKey)) {
-      by[bucket.name] = [];
-      continue;
-    }
-    var due = scheduledTitlesForBucket_(ctx.tasks, bucket.name, dateKey, today);
-    var scheduled = scheduledTemplateTitles_(ctx.templates, bucket.name, dateKey);
-    var rotate = rotatingCadenceTitles_(ctx.templates, ctx.fitness, bucket.name, dateKey);
-    var currentList = currentTitles_(ctx, bucket.name);
-    var fill = '';
-    var chosen = '';
-    var extra = [];
-    if (due[0]) {
-      chosen = due[0];
-      fill = 'due';
-      extra = due;
-    } else if (scheduled[0]) {
-      chosen = scheduled[0];
-      fill = 'scheduled';
-      extra = scheduled;
-    } else if (rotate[0]) {
-      chosen = rotate[0];
-      fill = 'rotate';
-      extra = rotate;
-    } else if (currentList.length) {
-      var saved = getChosen_(bucket.name);
-      chosen = currentList.indexOf(saved) >= 0 ? saved : currentList[0];
-      fill = 'current';
-      extra = currentList;
-    }
-    if (!chosen) {
-      by[bucket.name] = [];
-      continue;
-    }
-    var merged = [];
-    function pushMerged(title) {
-      if (title && merged.indexOf(title) === -1) {
-        merged.push(title);
-      }
-    }
-    pushMerged(chosen);
-    var t;
-    for (t = 0; t < extra.length; t++) {
-      pushMerged(extra[t]);
-    }
-    by[bucket.name] = [
-      {
-        title: chosen,
-        hours: bucket.daily,
-        slot: bucket.slot,
-        source: fill,
-        options: merged.join('; '),
-        chosen: chosen,
-        scheduled: fill === 'due' || fill === 'scheduled' || fill === 'rotate'
-      }
-    ];
-  }
-  return by;
-}
-
-function scheduledTitlesForBucket_(tasks, bucket, dateKey, today) {
-  var due = [];
-  var overdue = [];
-  var i;
-  for (i = 0; i < tasks.length; i++) {
-    var task = tasks[i];
-    if (!task.active || task.bucket !== bucket || !task.due) {
-      continue;
-    }
-    if (task.due === dateKey) {
-      due.push(task.title);
-    } else if (task.due < dateKey && dateKey === today) {
-      overdue.push(task.title);
-    }
-  }
-  return due.length ? due : overdue;
-}
-
-function scheduledTemplateTitles_(templates, bucket, dateKey) {
-  var hits = [];
-  var best = 99;
-  var i;
-  for (i = 0; i < templates.length; i++) {
-    var tpl = templates[i];
-    if (!tpl.active || !tpl.thisWeek || tpl.bucket !== bucket) {
-      continue;
-    }
-    if (normalizeMode_(tpl.mode) !== ITEM_MODE.SCHEDULED) {
-      continue;
-    }
-    if (!cadenceHitsDate_(tpl.cadence, dateKey)) {
-      continue;
-    }
-    var rank = cadenceRank_(tpl.cadence);
-    if (rank < best) {
-      best = rank;
-    }
-    hits.push({ title: tpl.title, rank: rank });
-  }
-  var titles = [];
-  for (i = 0; i < hits.length; i++) {
-    if (hits[i].rank !== best) {
-      continue;
-    }
-    if (titles.indexOf(hits[i].title) === -1) {
-      titles.push(hits[i].title);
-    }
-  }
-  return titles;
-}
-
-function currentTitles_(ctx, bucket) {
-  var titles = [];
-  function push(title) {
-    var t = String(title || '').trim();
-    if (t && titles.indexOf(t) === -1) {
-      titles.push(t);
-    }
-  }
-  var i;
-  if (bucket === 'Work' && ctx.work && ctx.work.highlights) {
-    for (i = 0; i < ctx.work.highlights.length; i++) {
-      push(ctx.work.highlights[i]);
-    }
-  }
-  if (bucket === 'Projects') {
-    for (i = 0; i < ctx.projects.length; i++) {
-      if (ctx.projects[i].active) {
-        push(ctx.projects[i].name);
-      }
-    }
-  }
-  for (i = 0; i < ctx.templates.length; i++) {
-    var tpl = ctx.templates[i];
-    if (!tpl.active || !tpl.thisWeek || tpl.bucket !== bucket) {
-      continue;
-    }
-    if (normalizeMode_(tpl.mode) === ITEM_MODE.CURRENT) {
-      push(tpl.title);
-    }
-  }
-  return titles;
-}
-
-function rotatePool_(templates, fitness, bucket) {
-  var pool = [];
-  var i;
-  for (i = 0; i < templates.length; i++) {
-    var tpl = templates[i];
-    if (!tpl.active || !tpl.thisWeek || tpl.bucket !== bucket) {
-      continue;
-    }
-    if (normalizeMode_(tpl.mode) !== ITEM_MODE.ROTATE) {
-      continue;
-    }
-    pool.push({ title: tpl.title, cadence: tpl.cadence || 'daily' });
-  }
-  if (!pool.length && bucket === 'Fitness' && fitness && fitness.length) {
-    for (i = 0; i < fitness.length; i++) {
-      pool.push({ title: fitness[i].title, cadence: 'eod' });
-    }
-  }
-  return pool;
-}
-
-function rotatingCadenceTitles_(templates, fitness, bucket, dateKey) {
-  var pool = rotatePool_(templates, fitness, bucket);
-  if (!pool.length) {
-    return [];
-  }
-  var cadence = pool[0].cadence || 'daily';
-  if (!cadenceHitsDate_(cadence, dateKey)) {
-    return [];
-  }
-  var titles = [];
-  var i;
-  for (i = 0; i < pool.length; i++) {
-    if (titles.indexOf(pool[i].title) === -1) {
-      titles.push(pool[i].title);
-    }
-  }
-  if (titles.length <= 1) {
-    return titles;
-  }
-  var pick = cadenceHitIndex_(cadence, dateKey) % titles.length;
-  return titles.slice(pick).concat(titles.slice(0, pick));
-}
-
-function cadenceHitIndex_(cadence, dateKey) {
-  var p = parseYmd_(dateKey);
-  var epoch = ymdToDate_(2026, 1, 1);
-  var dt = ymdToDate_(p.y, p.mo, p.d);
-  var diff = Math.round((dt.getTime() - epoch.getTime()) / 86400000);
-  if (diff < 0) {
-    return 0;
-  }
-  var cl = String(cadence || 'daily').trim().toLowerCase();
-  if (cl === 'daily') {
-    return diff;
-  }
-  if (cl === 'eod') {
-    return Math.floor(diff / 2);
-  }
-  var n = 0;
-  var i;
-  for (i = 0; i <= diff; i++) {
-    if (cadenceHitsDate_(cadence, addDaysKey_('2026-01-01', i))) {
-      n++;
-    }
-  }
-  return Math.max(0, n - 1);
-}
-
-function cadenceRank_(cadence) {
-  var c = String(cadence || 'daily').trim().toLowerCase();
-  if (c.indexOf('weekly:') === 0 || c === 'eod' || c.indexOf('every_') === 0) {
-    return 0;
-  }
-  if (c === 'weekdays' || c === 'weekends') {
-    return 1;
-  }
-  if (c === 'daily') {
-    return 2;
-  }
-  return 1;
-}
-
-function bucketHasScheduledTask_(bucket, dateKey) {
-  if (scheduledTitlesForBucket_(readTasks_(), bucket, dateKey, todayKey_()).length) {
-    return true;
-  }
-  var templates = readTemplates_();
-  if (scheduledTemplateTitles_(templates, bucket, dateKey).length) {
-    return true;
-  }
-  return rotatingCadenceTitles_(templates, readFitness_(), bucket, dateKey).length > 0;
-}
-
-function slotForBucket_(buckets, name) {
+  var color = {};
+  var defaultSlot = {};
   var i;
   for (i = 0; i < buckets.length; i++) {
-    if (buckets[i].name === name) {
-      return buckets[i].slot;
-    }
+    color[buckets[i].name] = buckets[i].color;
+    defaultSlot[buckets[i].name] = buckets[i].slot;
   }
-  return 'midday';
+  var out = [];
+  for (i = 0; i < lifeItems.length; i++) {
+    var it = lifeItems[i];
+    if (!it.active || it.hours <= 0) {
+      continue;
+    }
+    var hit = itemHitsDate_(it, dateKey, today);
+    if (!hit) {
+      continue;
+    }
+    out.push({
+      bucket: it.bucket,
+      title: it.title,
+      hours: it.hours,
+      slot: it.slot || defaultSlot[it.bucket] || 'midday',
+      source: hit,
+      color: color[it.bucket] || '94a3b8'
+    });
+  }
+  out.sort(function (a, b) {
+    var ra = displayRank_(a.bucket, a.slot);
+    var rb = displayRank_(b.bucket, b.slot);
+    if (ra !== rb) {
+      return ra - rb;
+    }
+    return a.title < b.title ? -1 : a.title > b.title ? 1 : 0;
+  });
+  return out;
+}
+
+function itemHitsDate_(it, dateKey, today) {
+  if (it.kind === ITEM_KIND.RECURRING) {
+    return cadenceHitsDate_(it.cadence || 'daily', dateKey) ? 'recurring' : '';
+  }
+  if (it.due) {
+    if (it.due === dateKey) {
+      return 'due';
+    }
+    if (it.due < dateKey && dateKey === today) {
+      return 'due';
+    }
+    return '';
+  }
+  if (!it.current) {
+    return '';
+  }
+  var cadence = it.cadence || (it.bucket === 'Work' ? 'weekdays' : 'daily');
+  return cadenceHitsDate_(cadence, dateKey) ? 'current' : '';
 }
 
 function writePlan_(rows) {
@@ -589,45 +341,16 @@ function colorPlanRows_(sh, rows) {
   }
 }
 
-function writeSummary_(headers, overflow, buckets, weeklyUsed, todayKey) {
+function writeSummary_(headers, overflow, todayKey) {
   var sh = sheet_(SHEET.SUMMARY);
   var last = Math.max(sh.getLastRow(), 1);
   if (last >= 2) {
     sh.getRange(2, 1, last - 1, HEADERS.SUMMARY.length).clearContent();
   }
   var values = [];
-  var weekStart = weekStartKey_(todayKey);
-  var weekEnd = weekEndKey_(weekStart);
-  var used = weeklyUsed[weekStart] || {};
-  var days = getSettingNum_(readSettingsMap_(), SETTINGS_KEYS.DAYS_PER_WEEK, 7) || 7;
   var i;
-  values.push(['week', todayKey, '', 'This week ' + weekStart + ' → ' + weekEnd, '', '', '334155']);
-  for (i = 0; i < buckets.length; i++) {
-    var b = buckets[i];
-    var u = used[b.name] || 0;
-    values.push([
-      'bucket-week',
-      todayKey,
-      b.name,
-      'budget ' +
-        b.weekly +
-        'h/wk (' +
-        roundHours_(b.weekly / days) +
-        'h/day) · used ' +
-        roundHours_(u) +
-        'h · remaining ' +
-        roundHours_(b.weekly - u) +
-        'h',
-      roundHours_(b.weekly - u),
-      '',
-      b.color
-    ]);
-  }
   for (i = 0; i < headers.length; i++) {
     var h = headers[i];
-    if (h.date > addDaysKey_(todayKey, 6) && h.kind === 'totals') {
-      continue;
-    }
     values.push([h.kind, h.date, h.bucket, h.title, h.hours, h.reason, h.color]);
   }
   for (i = 0; i < overflow.length; i++) {
@@ -656,7 +379,7 @@ function getTodayPayload_(dateKey) {
     return a.sort - b.sort;
   });
   var summary = readSummaryRows_().filter(function (r) {
-    return r.date === key || r.kind === 'bucket-week' || r.kind === 'week';
+    return r.date === key;
   });
   return {
     date: key,

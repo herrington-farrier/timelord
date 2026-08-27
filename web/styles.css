@@ -408,6 +408,13 @@ html, body {
   z-index: 2;
 }
 .page-save .primary { min-width: 10rem; }
+.day-totals {
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 4px 0 8px;
+}
+.kind-hourly, .kind-recurring { display: contents; }
+.kind-hourly.hidden, .kind-recurring.hidden { display: none; }
 @media (max-width: 700px) {
   .title-row { grid-template-columns: 1fr; }
   .title-heading { justify-self: start; }

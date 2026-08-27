@@ -126,11 +126,14 @@
     return isNaN(n) ? 0 : n;
   }
 
-  function fmtHrs(n) {
-    var x = Number(n);
-    if (isNaN(x) || !x) return "";
-    if (Math.abs(x - Math.round(x)) < 1e-6) return Math.round(x) + "h";
-    return x.toFixed(1) + "h";
+  function fmtDuration(hours) {
+    var mins = Math.round(Number(hours) * 60);
+    if (isNaN(mins) || !mins) return "";
+    var h = Math.floor(mins / 60);
+    var m = mins % 60;
+    if (h && m) return h + "h " + m + "m";
+    if (h) return h + "h";
+    return m + "m";
   }
 
   function parsePlan(rows) {
@@ -211,7 +214,7 @@
           esc(it.bucket) +
           " · " +
           esc(it.title) +
-          (fmtHrs(it.hours) ? " · " + fmtHrs(it.hours) : "") +
+          (fmtDuration(it.hours) ? " · " + fmtDuration(it.hours) : "") +
           "</div>";
       });
       (over[key] || []).forEach(function (it) {
@@ -244,6 +247,7 @@
             esc(it.color) +
             '">' +
             esc(it.title) +
+            (fmtDuration(it.hours) ? " · " + fmtDuration(it.hours) : "") +
             "</div>"
           );
         })
@@ -254,6 +258,7 @@
           esc(it.color) +
           '">' +
           esc(it.title) +
+          (fmtDuration(it.hours) ? " · " + fmtDuration(it.hours) : "") +
           "</div>";
       });
       var num = k.slice(8);

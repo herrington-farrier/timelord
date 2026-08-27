@@ -117,6 +117,39 @@ function roundHours_(n) {
   return Math.round(Number(n) * 1000) / 1000;
 }
 
+function hoursToMinutes_(hours) {
+  return Math.round(toHours_(hours) * 60);
+}
+
+function hmToHours_(h, m) {
+  var mins = (Number(h) || 0) * 60 + (Number(m) || 0);
+  if (mins < 0) {
+    mins = 0;
+  }
+  return roundHours_(mins / 60);
+}
+
+function splitHm_(hours) {
+  var mins = hoursToMinutes_(hours);
+  return { h: Math.floor(mins / 60), m: mins % 60 };
+}
+
+function fmtDuration_(hours) {
+  var mins = hoursToMinutes_(hours);
+  if (!mins) {
+    return '0m';
+  }
+  var h = Math.floor(mins / 60);
+  var m = mins % 60;
+  if (h && m) {
+    return h + 'h ' + m + 'm';
+  }
+  if (h) {
+    return h + 'h';
+  }
+  return m + 'm';
+}
+
 function hexColor_(s) {
   var t = String(s || '').replace(/^#/, '').trim();
   if (/^[0-9a-fA-F]{6}$/.test(t)) {
@@ -182,7 +215,9 @@ function trimSheet_(sh, keepRows, keepCols) {
 }
 
 function checkboxCol_(sh, col, startRow, endRow) {
-  sh.getRange(startRow, col, endRow - startRow + 1, 1).insertCheckboxes();
+  try {
+    sh.getRange(startRow, col, endRow - startRow + 1, 1).insertCheckboxes();
+  } catch (ignore) {}
 }
 
 function protectSheet_(sh) {

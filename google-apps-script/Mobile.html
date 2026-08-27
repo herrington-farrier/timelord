@@ -34,6 +34,15 @@
     <script>
       function fail(e) { document.getElementById('err').textContent = e && e.message ? e.message : String(e); }
       function esc(s) { return String(s||'').replace(/[&<>"]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]); }); }
+      function fmtDur(hours) {
+        var mins = Math.round(Number(hours) * 60);
+        if (isNaN(mins) || mins <= 0) return '0m';
+        var h = Math.floor(mins / 60);
+        var m = mins % 60;
+        if (h && m) return h + 'h ' + m + 'm';
+        if (h) return h + 'h';
+        return m + 'm';
+      }
       function render(payload) {
         document.getElementById('err').textContent = '';
         var p = payload.payload || payload;
@@ -45,17 +54,7 @@
           }
           var cls = r.status === 'complete' ? ' done' : r.status === 'skipped' ? ' skipped' : '';
           html += '<div class="item' + cls + '" style="border-left-color:#' + esc(r.color) + '"><div class="title">' + esc(r.title) +
-            '</div><div class="meta">' + esc(r.bucket) + ' · ' + r.hours + 'h' + (r.chosen ? ' · ' + esc(r.chosen) : '') + '</div>';
-          if (r.options && (r.source === 'work' || r.source === 'project' || r.options)) {
-            var opts = String(r.options).split(';').map(function (x) { return x.trim(); }).filter(Boolean);
-            if (opts.length) {
-              html += '<div class="acts"><select data-id="' + esc(r.id) + '" class="pick"><option value="">Choose</option>';
-              opts.forEach(function (o) {
-                html += '<option' + (o === r.chosen ? ' selected' : '') + '>' + esc(o) + '</option>';
-              });
-              html += '</select></div>';
-            }
-          }
+            '</div><div class="meta">' + esc(r.bucket) + ' · ' + esc(fmtDur(r.hours)) + '</div>';
           if (r.status === 'pending') {
             html += '<div class="acts"><button data-act="complete" data-id="' + esc(r.id) + '">Complete</button>' +
               '<button data-act="skip" data-id="' + esc(r.id) + '">Skip</button></div>';
@@ -65,22 +64,13 @@
         document.getElementById('list').innerHTML = html;
         var fall = (p.summary || []).filter(function (s) { return s.kind === 'overflow' && s.date === p.date; });
         document.getElementById('fall').innerHTML = fall.length
-          ? '<strong>Falling off</strong><br>' + fall.map(function (s) { return esc(s.bucket) + ': ' + esc(s.title) + ' (' + s.reason + ')'; }).join('<br>')
+          ? '<strong>Falling off</strong><br>' + fall.map(function (s) { return esc(s.bucket) + ': ' + esc(s.title) + ' · ' + esc(fmtDur(s.hours)); }).join('<br>')
           : '';
         Array.prototype.forEach.call(document.querySelectorAll('[data-act]'), function (btn) {
           btn.onclick = function () {
             google.script.run.withSuccessHandler(load).withFailureHandler(fail).handleAction_({
               action: btn.getAttribute('data-act'),
               id: btn.getAttribute('data-id')
-            });
-          };
-        });
-        Array.prototype.forEach.call(document.querySelectorAll('.pick'), function (sel) {
-          sel.onchange = function () {
-            google.script.run.withSuccessHandler(load).withFailureHandler(fail).handleAction_({
-              action: 'pick',
-              id: sel.getAttribute('data-id'),
-              chosen: sel.value
             });
           };
         });

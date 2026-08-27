@@ -6,7 +6,7 @@ function setupSheet() {
   var ui = SpreadsheetApp.getUi();
   var resp = ui.alert(
     MENU_NAME,
-    'Create all Timelord tabs, colors, and seed data on this spreadsheet?\n\nExisting values on Settings / Personal / Templates are kept if those tabs already have rows.',
+    'Create Timelord tabs, colors, and seed items on this spreadsheet?\n\nExisting Personal / Items rows are kept if those tabs already have data.',
     ui.ButtonSet.OK_CANCEL
   );
   if (resp !== ui.Button.OK) {
@@ -20,16 +20,12 @@ function runSetup_(quiet) {
   var ss = ss_();
   setupSettings_(ss);
   setupPersonal_(ss);
-  setupTemplates_(ss);
-  setupTasks_(ss);
-  setupWork_(ss);
-  setupProjects_(ss);
-  setupFitness_(ss);
+  setupItems_(ss);
   setupBusy_(ss);
   setupPlan_(ss);
   setupSummary_(ss);
   setupLog_(ss);
-  ensureTemplateMode_();
+  migrateItemsFromLegacy_();
   writeGidsToSettings_();
   refreshBudgetNumbers_();
   if (!quiet) {
@@ -58,11 +54,11 @@ function setupSettings_(ss) {
     [SETTINGS_KEYS.DAYS_PER_WEEK, 7],
     [SETTINGS_KEYS.BUFFER_MINUTES, 15],
     [SETTINGS_KEYS.TIMEZONE, TZ],
-    [SETTINGS_KEYS.GROSS, 84],
-    [SETTINGS_KEYS.PERSONAL_WEEKLY, 17.5],
-    [SETTINGS_KEYS.ASSIGNABLE, 66.5],
-    [SETTINGS_KEYS.ALLOCATED, 62],
-    [SETTINGS_KEYS.UNALLOCATED, 4.5],
+    ['', ''],
+    ['', ''],
+    ['', ''],
+    ['', ''],
+    ['', ''],
     [SETTINGS_KEYS.LAST_PACKED, ''],
     [SETTINGS_KEYS.SPREADSHEET_ID, ss.getId()],
     [SETTINGS_KEYS.PLAN_GID, ''],
@@ -79,36 +75,29 @@ function setupSettings_(ss) {
   sh.setColumnWidth(1, 260);
   sh.setColumnWidth(2, 220);
   sh.getRange(2, 2, 3, 1).setNumberFormat('0.##');
-
-  sh.getRange(SETTINGS_BUCKET_HEADER_ROW, 1, 1, 9).setValues([
-    ['Name', 'Weight', 'Color', 'Slot', 'Daily hours', 'Weekly hours', 'Minimum', 'Marked', 'Remaining']
-  ]);
-  sh.getRange(SETTINGS_BUCKET_HEADER_ROW, 1, 1, 9)
-    .setFontWeight('bold')
-    .setBackground('#1e293b')
-    .setFontColor('#f8fafc');
+  writeBucketHeader_(sh);
   var i;
   var start = SETTINGS_BUCKET_HEADER_ROW + 1;
-  var days = 7;
   for (i = 0; i < SEED_BUCKETS.length; i++) {
     var b = SEED_BUCKETS[i];
     var row = start + i;
-    var daily = roundHours_(b.weekly / days);
-    sh.getRange(row, 1, 1, 9).setValues([
-      [b.name, b.weight, b.color, b.slot, daily, b.weekly, b.min, 0, b.weekly]
-    ]);
-    sh.getRange(row, 1, 1, 9).setBackground('#' + b.color).setFontColor('#111827');
+    sh.getRange(row, 1, 1, 4).setValues([[b.name, b.weight, b.color, b.slot]]);
+    sh.getRange(row, 1, 1, 4).setBackground('#' + b.color).setFontColor('#111827');
   }
-  sh.getRange(start, 5, SEED_BUCKETS.length, 3).setNumberFormat('0.##');
   sh.setColumnWidth(3, 90);
   sh.setColumnWidth(4, 100);
-  sh.setColumnWidth(5, 110);
-  sh.setColumnWidth(6, 120);
-  sh.setColumnWidth(7, 90);
   var rule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['morning', 'midday', 'evening'], true)
     .build();
   sh.getRange(start, 4, SEED_BUCKETS.length, 1).setDataValidation(rule);
+}
+
+function writeBucketHeader_(sh) {
+  sh.getRange(SETTINGS_BUCKET_HEADER_ROW, 1, 1, 4).setValues([['Name', 'Weight', 'Color', 'Slot']]);
+  sh.getRange(SETTINGS_BUCKET_HEADER_ROW, 1, 1, 4)
+    .setFontWeight('bold')
+    .setBackground('#1e293b')
+    .setFontColor('#f8fafc');
 }
 
 function setupPersonal_(ss) {
@@ -131,99 +120,32 @@ function setupPersonal_(ss) {
   sh.getRange(2, 1, 39, 5).setBackground('#f6efe8');
 }
 
-function setupTemplates_(ss) {
-  var sh = ensureSheet_(SHEET.TEMPLATES);
-  setTabColor_(sh, TAB_COLORS.Templates);
-  var seeded = sh.getLastRow() >= 2 && String(sh.getRange(2, 1).getValue()).trim() !== '';
-  trimSheet_(sh, 80, 9);
-  writeHeader_(sh, HEADERS.TEMPLATES);
-  if (!seeded) {
-    sh.getRange(2, 1, SEED_TEMPLATES.length, 9).setValues(SEED_TEMPLATES);
-  }
-  checkboxCol_(sh, 7, 2, 80);
-  checkboxCol_(sh, 8, 2, 80);
-  sh.getRange(2, 3, 79, 1).setNumberFormat('0.##');
+function setupItems_(ss) {
+  var sh = ensureSheet_(SHEET.ITEMS);
+  setTabColor_(sh, TAB_COLORS.Items);
+  trimSheet_(sh, 120, 9);
+  writeHeader_(sh, HEADERS.ITEMS);
+  applyItemValidations_(sh);
+}
+
+function applyItemValidations_(sh) {
+  checkboxCol_(sh, 7, 2, 120);
+  checkboxCol_(sh, 8, 2, 120);
+  sh.getRange(2, 3, 119, 1).setNumberFormat('0.###');
+  sh.getRange(2, 6, 119, 1).setNumberFormat('yyyy-mm-dd');
   var bucketRule = SpreadsheetApp.newDataValidation().requireValueInList(BUCKET_ORDER, true).build();
-  sh.getRange(2, 1, 79, 1).setDataValidation(bucketRule);
+  sh.getRange(2, 1, 119, 1).setDataValidation(bucketRule);
+  var kindRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList([ITEM_KIND.RECURRING, ITEM_KIND.HOURLY], true)
+    .build();
+  sh.getRange(2, 4, 119, 1).setDataValidation(kindRule);
   var slotRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['morning', 'midday', 'evening'], true)
     .build();
-  sh.getRange(2, 5, 79, 1).setDataValidation(slotRule);
-  var modeRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['scheduled', 'rotate', 'current'], true)
-    .build();
-  sh.getRange(2, 9, 79, 1).setDataValidation(modeRule);
+  sh.getRange(2, 9, 119, 1).setDataValidation(slotRule);
   sh.setColumnWidth(1, 110);
   sh.setColumnWidth(2, 280);
-  sh.setColumnWidth(4, 150);
-  sh.setColumnWidth(6, 280);
-}
-
-function setupTasks_(ss) {
-  var sh = ensureSheet_(SHEET.TASKS);
-  setTabColor_(sh, TAB_COLORS.Tasks);
-  trimSheet_(sh, 80, 6);
-  writeHeader_(sh, HEADERS.TASKS);
-  checkboxCol_(sh, 5, 2, 80);
-  checkboxCol_(sh, 6, 2, 80);
-  sh.getRange(2, 3, 79, 1).setNumberFormat('yyyy-mm-dd');
-  sh.getRange(2, 2, 79, 1).setNumberFormat('0.##');
-  var bucketRule = SpreadsheetApp.newDataValidation().requireValueInList(BUCKET_ORDER, true).build();
-  sh.getRange(2, 4, 79, 1).setDataValidation(bucketRule);
-  sh.setColumnWidth(1, 260);
-}
-
-function setupWork_(ss) {
-  var sh = ensureSheet_(SHEET.WORK);
-  setTabColor_(sh, 'f0c14a');
-  var seeded = sh.getLastRow() >= 2 && String(sh.getRange(2, 1).getValue()).trim() !== '';
-  trimSheet_(sh, 20, 2);
-  writeHeader_(sh, HEADERS.WORK);
-  if (!seeded) {
-    var weekStart = weekStartKey_(todayKey_());
-    sh.getRange(2, 1, 6, 2).setValues([
-      ['Week start', weekStart],
-      ['Theme', 'This week’s most important work'],
-      ['Daily hours', 3],
-      ['Highlight 1', SEED_WORK_HIGHLIGHTS[0]],
-      ['Highlight 2', SEED_WORK_HIGHLIGHTS[1]],
-      ['Highlight 3', SEED_WORK_HIGHLIGHTS[2]]
-    ]);
-  }
-  sh.setColumnWidth(1, 140);
-  sh.setColumnWidth(2, 420);
-  sh.getRange(2, 1, 19, 2).setBackground('#fff7d6');
-}
-
-function setupProjects_(ss) {
-  var sh = ensureSheet_(SHEET.PROJECTS);
-  setTabColor_(sh, 'a78bfa');
-  var seeded = sh.getLastRow() >= 2 && String(sh.getRange(2, 1).getValue()).trim() !== '';
-  trimSheet_(sh, 40, 3);
-  writeHeader_(sh, HEADERS.PROJECTS);
-  if (!seeded) {
-    sh.getRange(2, 1, SEED_PROJECTS.length, 3).setValues(SEED_PROJECTS);
-  }
-  checkboxCol_(sh, 2, 2, 40);
-  sh.getRange(2, 3, 39, 1).setNumberFormat('0.##');
-  sh.setColumnWidth(1, 260);
-}
-
-function setupFitness_(ss) {
-  var sh = ensureSheet_(SHEET.FITNESS);
-  setTabColor_(sh, 'fb923c');
-  var seeded = sh.getLastRow() >= 2 && String(sh.getRange(2, 1).getValue()).trim() !== '';
-  trimSheet_(sh, 20, 3);
-  writeHeader_(sh, HEADERS.FITNESS);
-  if (!seeded) {
-    sh.getRange(2, 1, SEED_FITNESS.length, 3).setValues(SEED_FITNESS);
-  }
-  var dayRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], true)
-    .build();
-  sh.getRange(2, 1, 19, 1).setDataValidation(dayRule);
-  sh.getRange(2, 3, 19, 1).setNumberFormat('0.##');
-  sh.setColumnWidth(2, 220);
+  sh.setColumnWidth(5, 150);
 }
 
 function setupBusy_(ss) {
@@ -307,175 +229,35 @@ function daysPerWeek_() {
   return getSettingNum_(readSettingsMap_(), SETTINGS_KEYS.DAYS_PER_WEEK, 7) || 7;
 }
 
-/** Insert Daily hours column on existing sheets (Weekly used to be column E). */
 function ensureSettingsBucketLayout_() {
   var sh = sheet_(SHEET.SETTINGS);
-  var headers = sh.getRange(SETTINGS_BUCKET_HEADER_ROW, 1, 1, 9).getValues()[0];
-  var e = String(headers[4] || '').trim();
-  if (e !== 'Daily hours') {
-    sh.insertColumnBefore(5);
-    sh.getRange(SETTINGS_BUCKET_HEADER_ROW, 5)
-      .setValue('Daily hours')
-      .setFontWeight('bold')
-      .setBackground('#1e293b')
-      .setFontColor('#f8fafc');
-    var days = daysPerWeek_();
-    var i;
-    for (i = 0; i < 7; i++) {
-      var row = SETTINGS_BUCKET_HEADER_ROW + 1 + i;
-      var weekly = toHours_(sh.getRange(row, 6).getValue());
-      sh.getRange(row, 5).setValue(roundHours_(weekly / days));
-      var color = String(sh.getRange(row, 3).getValue() || '').replace(/^#/, '');
-      if (color) {
-        try {
-          sh.getRange(row, 5, 1, 1).setBackground('#' + hexColor_(color)).setFontColor('#111827');
-        } catch (ignore) {}
-      }
-    }
-    sh.getRange(SETTINGS_BUCKET_HEADER_ROW + 1, 5, 7, 1).setNumberFormat('0.##');
-    sh.setColumnWidth(5, 110);
-  }
+  writeBucketHeader_(sh);
   mergeLearningIntoProjects_();
   refreshBucketDropdowns_();
-  ensureTemplateMode_();
-}
-
-function inferTemplateMode_(bucket, cadence) {
-  if (bucket === 'Fitness') {
-    return ITEM_MODE.ROTATE;
-  }
-  if (bucket === 'House' && String(cadence || '').trim().toLowerCase() === 'daily') {
-    return ITEM_MODE.ROTATE;
-  }
-  return ITEM_MODE.SCHEDULED;
-}
-
-function ensureTemplateMode_() {
-  var sh = ss_().getSheetByName(SHEET.TEMPLATES);
-  if (!sh) {
-    return;
-  }
-  if (sh.getMaxColumns() < 9) {
-    sh.insertColumnAfter(Math.max(sh.getMaxColumns(), 8));
-  }
-  var header = String(sh.getRange(1, 9).getValue() || '').trim();
-  if (header !== 'Mode') {
-    sh.getRange(1, 9)
-      .setValue('Mode')
-      .setFontWeight('bold')
-      .setBackground('#1e293b')
-      .setFontColor('#f8fafc');
-  }
-  var last = sh.getLastRow();
-  if (last >= 2) {
-    var rows = sh.getRange(2, 1, last - 1, 9).getValues();
-    var changed = false;
-    var i;
-    for (i = 0; i < rows.length; i++) {
-      var bucket = String(rows[i][0] || '').trim();
-      var title = String(rows[i][1] || '').trim();
-      if (!bucket || !title) {
-        continue;
-      }
-      if (String(rows[i][8] || '').trim()) {
-        continue;
-      }
-      rows[i][8] = inferTemplateMode_(bucket, rows[i][3]);
-      changed = true;
-    }
-    if (changed) {
-      sh.getRange(2, 1, last - 1, 9).setValues(rows);
-    }
-  }
-  var modeRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['scheduled', 'rotate', 'current'], true)
-    .build();
-  sh.getRange(2, 9, Math.max(sh.getMaxRows() - 1, 1), 1).setDataValidation(modeRule);
-  ensureFitnessRotateTemplates_(sh);
-}
-
-function ensureFitnessRotateTemplates_(sh) {
-  var last = sh.getLastRow();
-  var i;
-  if (last >= 2) {
-    var rows = sh.getRange(2, 1, last - 1, 9).getValues();
-    for (i = 0; i < rows.length; i++) {
-      if (
-        String(rows[i][0] || '').trim() === 'Fitness' &&
-        String(rows[i][1] || '').trim() &&
-        normalizeMode_(rows[i][8]) === ITEM_MODE.ROTATE
-      ) {
-        return;
-      }
-    }
-  }
-  var fitness = [];
-  try {
-    fitness = readFitness_();
-  } catch (ignore) {
-    return;
-  }
-  if (!fitness.length) {
-    return;
-  }
-  var values = [];
-  for (i = 0; i < fitness.length; i++) {
-    values.push([
-      'Fitness',
-      fitness[i].title,
-      fitness[i].hours || 1,
-      'eod',
-      'midday',
-      '',
-      true,
-      true,
-      ITEM_MODE.ROTATE
-    ]);
-  }
-  var start = nextEmptyRow_(sh, 2);
-  sh.getRange(start, 1, values.length, 9).setValues(values);
-  checkboxCol_(sh, 7, start, start + values.length - 1);
-  checkboxCol_(sh, 8, start, start + values.length - 1);
 }
 
 function mergeLearningIntoProjects_() {
   var sh = sheet_(SHEET.SETTINGS);
   var start = SETTINGS_BUCKET_HEADER_ROW + 1;
-  var rows = sh.getRange(start, 1, 8, 9).getValues();
+  var rows = sh.getRange(start, 1, 8, 4).getValues();
   var learnIdx = -1;
-  var projIdx = -1;
   var i;
   for (i = 0; i < rows.length; i++) {
-    var name = String(rows[i][0] || '').trim();
-    if (name === 'Learning') {
+    if (String(rows[i][0] || '').trim() === 'Learning') {
       learnIdx = i;
-    }
-    if (name === 'Projects') {
-      projIdx = i;
     }
   }
   if (learnIdx < 0) {
-    relabelLearningSources_();
     return;
-  }
-  var days = daysPerWeek_();
-  if (projIdx >= 0) {
-    var pWeekly = toHours_(rows[projIdx][5]) + toHours_(rows[learnIdx][5]);
-    var pMin = toHours_(rows[projIdx][6]) + toHours_(rows[learnIdx][6]);
-    var projRow = start + projIdx;
-    sh.getRange(projRow, 5).setValue(roundHours_(pWeekly / days));
-    sh.getRange(projRow, 6).setValue(roundHours_(pWeekly));
-    sh.getRange(projRow, 7).setValue(roundHours_(pMin));
   }
   sh.getRange(start + learnIdx, 1, 1, 9).clearContent();
   compactSettingsBucketRows_();
-  relabelLearningSources_();
 }
 
 function compactSettingsBucketRows_() {
   var sh = sheet_(SHEET.SETTINGS);
   var start = SETTINGS_BUCKET_HEADER_ROW + 1;
-  var rows = sh.getRange(start, 1, 8, 9).getValues();
+  var rows = sh.getRange(start, 1, 8, 4).getValues();
   var kept = [];
   var i;
   for (i = 0; i < rows.length; i++) {
@@ -483,66 +265,33 @@ function compactSettingsBucketRows_() {
       kept.push(rows[i]);
     }
   }
-  sh.getRange(start, 1, 8, 9).clearContent();
+  sh.getRange(start, 1, 8, 4).clearContent();
   if (!kept.length) {
     return;
   }
-  sh.getRange(start, 1, kept.length, 9).setValues(kept);
+  sh.getRange(start, 1, kept.length, 4).setValues(kept);
   for (i = 0; i < kept.length; i++) {
     var color = String(kept[i][2] || '').replace(/^#/, '');
     if (color) {
       try {
-        sh.getRange(start + i, 1, 1, 9).setBackground('#' + hexColor_(color)).setFontColor('#111827');
+        sh.getRange(start + i, 1, 1, 4).setBackground('#' + hexColor_(color)).setFontColor('#111827');
       } catch (ignore) {}
     }
   }
 }
 
-function relabelLearningSources_() {
-  replaceBucketNameOnSheet_(SHEET.TEMPLATES, 1, 'Learning', 'Projects');
-  replaceBucketNameOnSheet_(SHEET.TASKS, 4, 'Learning', 'Projects');
-}
-
-function replaceBucketNameOnSheet_(sheetName, col, from, to) {
-  var sh = ss_().getSheetByName(sheetName);
-  if (!sh) {
-    return;
-  }
-  var last = sh.getLastRow();
-  if (last < 2) {
-    return;
-  }
-  var range = sh.getRange(2, col, last - 1, 1);
-  var vals = range.getValues();
-  var i;
-  var changed = false;
-  for (i = 0; i < vals.length; i++) {
-    if (String(vals[i][0] || '').trim() === from) {
-      vals[i][0] = to;
-      changed = true;
-    }
-  }
-  if (changed) {
-    range.setValues(vals);
-  }
-}
-
 function refreshBucketDropdowns_() {
   var rule = SpreadsheetApp.newDataValidation().requireValueInList(BUCKET_ORDER, true).build();
-  var tpl = ss_().getSheetByName(SHEET.TEMPLATES);
-  var tasks = ss_().getSheetByName(SHEET.TASKS);
-  if (tpl && tpl.getMaxRows() >= 2) {
-    tpl.getRange(2, 1, Math.max(tpl.getMaxRows() - 1, 1), 1).setDataValidation(rule);
-  }
-  if (tasks && tasks.getMaxRows() >= 2) {
-    tasks.getRange(2, 4, Math.max(tasks.getMaxRows() - 1, 1), 1).setDataValidation(rule);
+  var items = ss_().getSheetByName(SHEET.ITEMS);
+  if (items && items.getMaxRows() >= 2) {
+    items.getRange(2, 1, Math.max(items.getMaxRows() - 1, 1), 1).setDataValidation(rule);
   }
 }
 
 function readBuckets_() {
   ensureSettingsBucketLayout_();
   var sh = sheet_(SHEET.SETTINGS);
-  var rows = sh.getRange(SETTINGS_BUCKET_HEADER_ROW + 1, 1, 7, 9).getValues();
+  var rows = sh.getRange(SETTINGS_BUCKET_HEADER_ROW + 1, 1, 7, 4).getValues();
   var out = [];
   var i;
   for (i = 0; i < rows.length; i++) {
@@ -550,22 +299,12 @@ function readBuckets_() {
     if (!name) {
       continue;
     }
-    var days = bucketDays_(name);
-    var weekly = toHours_(rows[i][5]);
-    var remaining = toHours_(rows[i][8]);
     out.push({
       row: SETTINGS_BUCKET_HEADER_ROW + 1 + i,
       name: name,
       weight: Number(rows[i][1]) || 99,
       color: hexColor_(rows[i][2]),
-      slot: String(rows[i][3] || 'midday').trim() || 'midday',
-      daily: toHours_(rows[i][4]) || roundHours_(weekly / days),
-      weekly: weekly,
-      min: toHours_(rows[i][6]),
-      minDaily: roundHours_(toHours_(rows[i][6]) / days),
-      marked: toHours_(rows[i][7]),
-      remaining: remaining,
-      remainingDaily: roundHours_(remaining / days)
+      slot: String(rows[i][3] || 'midday').trim() || 'midday'
     });
   }
   out.sort(function (a, b) {
@@ -574,17 +313,234 @@ function readBuckets_() {
   return out;
 }
 
-function writeBucketHours_(name, weekly) {
-  var buckets = readBuckets_();
+function itemKey_(bucket, title) {
+  return String(bucket || '').trim() + '|' + String(title || '').trim().toLowerCase();
+}
+
+function migrateItemsFromLegacy_() {
+  var sh = ensureSheet_(SHEET.ITEMS);
+  if (sh.getLastRow() < 2 || String(sh.getRange(1, 1).getValue() || '').trim() !== 'Bucket') {
+    setupItems_(ss_());
+  }
+  var existing = {};
+  var current = readItemsRaw_();
   var i;
-  for (i = 0; i < buckets.length; i++) {
-    if (buckets[i].name === name) {
-      var sh = sheet_(SHEET.SETTINGS);
-      var w = roundHours_(weekly);
-      sh.getRange(buckets[i].row, 5).setValue(roundHours_(w / bucketDays_(name)));
-      sh.getRange(buckets[i].row, 6).setValue(w);
+  for (i = 0; i < current.length; i++) {
+    existing[itemKey_(current[i].bucket, current[i].title)] = true;
+  }
+  if (current.length) {
+    return;
+  }
+  var rows = [];
+  function add(bucket, title, hours, kind, cadence, due, isCurrent, slot) {
+    var t = String(title || '').trim();
+    var b = String(bucket || '').trim();
+    if (!t || !b || existing[itemKey_(b, t)]) {
       return;
     }
+    existing[itemKey_(b, t)] = true;
+    rows.push([
+      b,
+      t,
+      toHours_(hours) || 0.5,
+      kind,
+      cadence || '',
+      due || '',
+      !!isCurrent,
+      true,
+      slot || slotForName_(b)
+    ]);
   }
-  throw new Error('Unknown bucket: ' + name);
+  try {
+    var tpls = readLegacyTemplates_();
+    for (i = 0; i < tpls.length; i++) {
+      var tpl = tpls[i];
+      var kind = tpl.mode === 'current' ? ITEM_KIND.HOURLY : ITEM_KIND.RECURRING;
+      add(tpl.bucket, tpl.title, tpl.hours, kind, tpl.cadence, '', kind === ITEM_KIND.HOURLY, tpl.slot);
+    }
+  } catch (ignore) {}
+  try {
+    var tasks = readLegacyTasks_();
+    for (i = 0; i < tasks.length; i++) {
+      add(tasks[i].bucket, tasks[i].title, tasks[i].hours || 1, ITEM_KIND.HOURLY, '', tasks[i].due, false, slotForName_(tasks[i].bucket));
+    }
+  } catch (ignore2) {}
+  try {
+    var work = readLegacyWork_();
+    for (i = 0; i < work.highlights.length; i++) {
+      add('Work', work.highlights[i], work.dailyHours || 3, ITEM_KIND.HOURLY, 'weekdays', '', i === 0, 'midday');
+    }
+  } catch (ignore3) {}
+  try {
+    var projects = readLegacyProjects_();
+    var first = true;
+    for (i = 0; i < projects.length; i++) {
+      if (!projects[i].active) {
+        continue;
+      }
+      add('Projects', projects[i].name, projects[i].hours || 1, ITEM_KIND.HOURLY, 'daily', '', first, 'midday');
+      first = false;
+    }
+  } catch (ignore4) {}
+  try {
+    var fitness = readLegacyFitness_();
+    for (i = 0; i < fitness.length; i++) {
+      add('Fitness', fitness[i].title, fitness[i].hours || 1, ITEM_KIND.RECURRING, 'weekly:' + fitness[i].weekday, '', false, 'midday');
+    }
+  } catch (ignore5) {}
+  if (!rows.length) {
+    sh.getRange(2, 1, SEED_ITEMS.length, 9).setValues(SEED_ITEMS);
+    applyItemValidations_(sh);
+    return;
+  }
+  var start = nextEmptyRow_(sh, 2);
+  sh.getRange(start, 1, rows.length, 9).setValues(rows);
+  applyItemValidations_(sh);
+}
+
+function readItemsRaw_() {
+  var sh = ss_().getSheetByName(SHEET.ITEMS);
+  if (!sh || sh.getLastRow() < 2) {
+    return [];
+  }
+  var data = dataRows_(sh, 9);
+  var out = [];
+  var i;
+  for (i = 0; i < data.length; i++) {
+    var bucket = String(data[i][0] || '').trim();
+    var title = String(data[i][1] || '').trim();
+    if (!bucket || !title) {
+      continue;
+    }
+    out.push({ bucket: bucket, title: title });
+  }
+  return out;
+}
+
+function slotForName_(name) {
+  var i;
+  for (i = 0; i < SEED_BUCKETS.length; i++) {
+    if (SEED_BUCKETS[i].name === name) {
+      return SEED_BUCKETS[i].slot;
+    }
+  }
+  return 'midday';
+}
+
+function readLegacyTemplates_() {
+  var sh = ss_().getSheetByName('Templates');
+  if (!sh) {
+    return [];
+  }
+  var rows = dataRows_(sh, 9);
+  var out = [];
+  var i;
+  for (i = 0; i < rows.length; i++) {
+    var title = String(rows[i][1] || '').trim();
+    var bucket = String(rows[i][0] || '').trim();
+    if (!title || !bucket) {
+      continue;
+    }
+    out.push({
+      bucket: bucket,
+      title: title,
+      hours: toHours_(rows[i][2]),
+      cadence: String(rows[i][3] || 'daily').trim() || 'daily',
+      slot: String(rows[i][4] || 'morning').trim() || 'morning',
+      mode: String(rows[i][8] || 'scheduled').trim().toLowerCase()
+    });
+  }
+  return out;
+}
+
+function readLegacyTasks_() {
+  var sh = ss_().getSheetByName('Tasks');
+  if (!sh) {
+    return [];
+  }
+  var rows = dataRows_(sh, 6);
+  var out = [];
+  var i;
+  for (i = 0; i < rows.length; i++) {
+    var name = String(rows[i][0] || '').trim();
+    if (!name) {
+      continue;
+    }
+    var due = parseYmd_(rows[i][2]);
+    out.push({
+      title: name,
+      hours: toHours_(rows[i][1]),
+      due: due ? due.key : '',
+      bucket: String(rows[i][3] || '').trim()
+    });
+  }
+  return out;
+}
+
+function readLegacyWork_() {
+  var sh = ss_().getSheetByName('Work');
+  var out = { dailyHours: 3, highlights: [] };
+  if (!sh) {
+    return out;
+  }
+  var rows = dataRows_(sh, 2);
+  var i;
+  for (i = 0; i < rows.length; i++) {
+    var field = String(rows[i][0] || '').trim().toLowerCase();
+    var val = rows[i][1];
+    if (field === 'daily hours') {
+      out.dailyHours = toHours_(val) || 3;
+    } else if (field.indexOf('highlight') === 0) {
+      var h = String(val || '').trim();
+      if (h) {
+        out.highlights.push(h);
+      }
+    }
+  }
+  return out;
+}
+
+function readLegacyProjects_() {
+  var sh = ss_().getSheetByName('Projects');
+  if (!sh) {
+    return [];
+  }
+  var rows = dataRows_(sh, 3);
+  var out = [];
+  var i;
+  for (i = 0; i < rows.length; i++) {
+    var name = String(rows[i][0] || '').trim();
+    if (!name) {
+      continue;
+    }
+    out.push({
+      name: name,
+      active: toBool_(rows[i][1] === '' ? true : rows[i][1]),
+      hours: toHours_(rows[i][2]) || 1
+    });
+  }
+  return out;
+}
+
+function readLegacyFitness_() {
+  var sh = ss_().getSheetByName('Fitness');
+  if (!sh) {
+    return [];
+  }
+  var rows = dataRows_(sh, 3);
+  var out = [];
+  var i;
+  for (i = 0; i < rows.length; i++) {
+    var day = String(rows[i][0] || '').trim();
+    var session = String(rows[i][1] || '').trim();
+    if (!day || !session) {
+      continue;
+    }
+    out.push({
+      weekday: day.slice(0, 3),
+      title: session,
+      hours: toHours_(rows[i][2]) || 1
+    });
+  }
+  return out;
 }

@@ -23,9 +23,17 @@ function readPersonal_() {
   return out;
 }
 
-function readTemplates_() {
-  ensureTemplateMode_();
-  var rows = dataRows_(sheet_(SHEET.TEMPLATES), 9);
+function normalizeKind_(v) {
+  var k = String(v || '').trim().toLowerCase();
+  if (k === ITEM_KIND.HOURLY) {
+    return ITEM_KIND.HOURLY;
+  }
+  return ITEM_KIND.RECURRING;
+}
+
+function readItems_() {
+  ensureItemsReady_();
+  var rows = dataRows_(sheet_(SHEET.ITEMS), 9);
   var out = [];
   var i;
   for (i = 0; i < rows.length; i++) {
@@ -34,138 +42,29 @@ function readTemplates_() {
     if (!title || !bucket) {
       continue;
     }
+    var due = parseYmd_(rows[i][5]);
     out.push({
       row: i + 2,
       bucket: bucket,
       title: title,
       hours: toHours_(rows[i][2]),
-      cadence: String(rows[i][3] || 'daily').trim() || 'daily',
-      slot: String(rows[i][4] || 'morning').trim() || 'morning',
-      options: String(rows[i][5] || '').trim(),
-      active: toBool_(rows[i][6] === '' ? true : rows[i][6]),
-      thisWeek: toBool_(rows[i][7] === '' ? true : rows[i][7]),
-      mode: normalizeMode_(rows[i][8])
-    });
-  }
-  return out;
-}
-
-function normalizeMode_(v) {
-  var m = String(v || '').trim().toLowerCase();
-  if (m === ITEM_MODE.ROTATE || m === 'rotation') {
-    return ITEM_MODE.ROTATE;
-  }
-  if (m === ITEM_MODE.CURRENT) {
-    return ITEM_MODE.CURRENT;
-  }
-  return ITEM_MODE.SCHEDULED;
-}
-
-function readTasks_() {
-  var rows = dataRows_(sheet_(SHEET.TASKS), 6);
-  var out = [];
-  var i;
-  for (i = 0; i < rows.length; i++) {
-    var name = String(rows[i][0] || '').trim();
-    if (!name) {
-      continue;
-    }
-    var due = parseYmd_(rows[i][2]);
-    out.push({
-      row: i + 2,
-      title: name,
-      hours: toHours_(rows[i][1]),
+      kind: normalizeKind_(rows[i][3]),
+      cadence: String(rows[i][4] || '').trim(),
       due: due ? due.key : '',
-      bucket: String(rows[i][3] || '').trim(),
-      thisWeek: toBool_(rows[i][4]),
-      active: toBool_(rows[i][5] === '' ? true : rows[i][5])
+      current: toBool_(rows[i][6]),
+      active: toBool_(rows[i][7] === '' ? true : rows[i][7]),
+      slot: String(rows[i][8] || '').trim() || slotForName_(bucket)
     });
   }
   return out;
 }
 
-function readWork_() {
-  var rows = dataRows_(sheet_(SHEET.WORK), 2);
-  var out = { weekStart: '', theme: '', dailyHours: 3, highlights: [] };
-  var i;
-  for (i = 0; i < rows.length; i++) {
-    var field = String(rows[i][0] || '').trim().toLowerCase();
-    var val = rows[i][1];
-    if (field === 'week start') {
-      var p = parseYmd_(val);
-      out.weekStart = p ? p.key : String(val || '');
-    } else if (field === 'theme') {
-      out.theme = String(val || '').trim();
-    } else if (field === 'daily hours') {
-      out.dailyHours = toHours_(val) || 3;
-    } else if (field.indexOf('highlight') === 0) {
-      var h = String(val || '').trim();
-      if (h) {
-        out.highlights.push(h);
-      }
-    }
+function ensureItemsReady_() {
+  var sh = ss_().getSheetByName(SHEET.ITEMS);
+  if (!sh) {
+    setupItems_(ss_());
   }
-  return out;
-}
-
-function readProjects_() {
-  var rows = dataRows_(sheet_(SHEET.PROJECTS), 3);
-  var out = [];
-  var i;
-  for (i = 0; i < rows.length; i++) {
-    var name = String(rows[i][0] || '').trim();
-    if (!name) {
-      continue;
-    }
-    out.push({
-      row: i + 2,
-      name: name,
-      active: toBool_(rows[i][1] === '' ? true : rows[i][1]),
-      hours: toHours_(rows[i][2]) || 1
-    });
-  }
-  return out;
-}
-
-function firstActiveProject_(projects) {
-  var i;
-  for (i = 0; i < projects.length; i++) {
-    if (projects[i].active) {
-      return projects[i];
-    }
-  }
-  return null;
-}
-
-function readFitness_() {
-  var rows = dataRows_(sheet_(SHEET.FITNESS), 3);
-  var out = [];
-  var i;
-  for (i = 0; i < rows.length; i++) {
-    var day = String(rows[i][0] || '').trim();
-    var session = String(rows[i][1] || '').trim();
-    if (!day || !session) {
-      continue;
-    }
-    out.push({
-      row: i + 2,
-      weekday: day.slice(0, 3),
-      title: session,
-      hours: toHours_(rows[i][2]) || 1
-    });
-  }
-  return out;
-}
-
-function fitnessSessionForDay_(fitness, dateKey) {
-  var wd = weekdayName_(dateKey);
-  var i;
-  for (i = 0; i < fitness.length; i++) {
-    if (fitness[i].weekday === wd) {
-      return fitness[i];
-    }
-  }
-  return null;
+  migrateItemsFromLegacy_();
 }
 
 function readBusy_() {
@@ -230,36 +129,5 @@ function planMatchKey_(row) {
   if (row.source === 'personal' || row.source === 'busy') {
     return [row.date, row.bucket, row.source, row.title].join('|');
   }
-  return [row.date, row.bucket].join('|');
-}
-
-function chosenPropKey_(bucket) {
-  return 'chosen.' + String(bucket || '').trim();
-}
-
-function getChosen_(bucket) {
-  return String(PropertiesService.getScriptProperties().getProperty(chosenPropKey_(bucket)) || '').trim();
-}
-
-function setChosen_(bucket, title) {
-  var props = PropertiesService.getScriptProperties();
-  var key = chosenPropKey_(bucket);
-  var val = String(title || '').trim();
-  if (!val) {
-    props.deleteProperty(key);
-    return;
-  }
-  props.setProperty(key, val);
-}
-
-function getChosenMap_() {
-  var out = {};
-  var all = PropertiesService.getScriptProperties().getProperties() || {};
-  var k;
-  for (k in all) {
-    if (Object.prototype.hasOwnProperty.call(all, k) && k.indexOf('chosen.') === 0) {
-      out[k.slice(7)] = all[k];
-    }
-  }
-  return out;
+  return [row.date, row.bucket, row.title].join('|');
 }

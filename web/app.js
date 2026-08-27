@@ -4,7 +4,8 @@
   var errEl = document.getElementById("err");
   var dayEl = document.getElementById("day");
   var fallEl = document.getElementById("fall");
-  var budgetsEl = document.getElementById("budgets");
+  var fallWrap = document.getElementById("fall-wrap");
+  var totalsEl = document.getElementById("day-totals");
   var stampEl = document.getElementById("packed-stamp");
   var setupEl = document.getElementById("setup");
   var dailyTimer = null;
@@ -118,11 +119,14 @@
     return isNaN(n) ? 0 : n;
   }
 
-  function fmtHrs(n) {
-    var x = Number(n);
-    if (isNaN(x)) return "0";
-    if (Math.abs(x - Math.round(x)) < 1e-6) return String(Math.round(x));
-    return x.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  function fmtDuration(hours) {
+    var mins = Math.round(Number(hours) * 60);
+    if (isNaN(mins) || mins <= 0) return "0m";
+    var h = Math.floor(mins / 60);
+    var m = mins % 60;
+    if (h && m) return h + "h " + m + "m";
+    if (h) return h + "h";
+    return m + "m";
   }
 
   function parsePlan(rows) {
@@ -189,18 +193,11 @@
         continue;
       }
       if (!a || a === "Name") continue;
-      var daily = num(r[4]);
-      var weekly = num(r[5]);
       buckets.push({
         name: a,
         weight: num(r[1]),
         color: String(r[2] || "").replace(/^#/, ""),
-        slot: String(r[3] || ""),
-        daily: daily || (weekly ? weekly / 7 : 0),
-        weekly: weekly,
-        min: num(r[6]),
-        marked: num(r[7]),
-        remaining: num(r[8])
+        slot: String(r[3] || "")
       });
     }
     return { meta: meta, buckets: buckets };
@@ -246,47 +243,12 @@
     errEl.textContent = msg || "";
   }
 
-  function optionList(str) {
-    return String(str || "")
-      .split(/[;|]/)
-      .map(function (x) {
-        return x.trim();
-      })
-      .filter(Boolean);
-  }
-
-  function renderBudgets(settings) {
-    var html = "";
-    (settings.buckets || []).forEach(function (b) {
-      html +=
-        '<div class="budget" style="--bcolor:#' +
-        esc(b.color) +
-        '"><div class="budget-name">' +
-        esc(b.name) +
-        "</div><div class=\"budget-hrs\">" +
-        fmtHrs(b.daily) +
-        "h/day <span style=\"color:var(--muted);font-weight:500\">· " +
-        fmtHrs(b.weekly) +
-        "h/wk</span></div><div class=\"budget-hrs\" style=\"font-size:0.8rem;color:var(--muted)\">left " +
-        fmtHrs(b.remaining) +
-        "h this week</div><div class=\"budget-pick\"><button type=\"button\" data-bkt=\"" +
-        esc(b.name) +
-        '" data-d="-0.25">−</button><button type="button" data-bkt="' +
-        esc(b.name) +
-        '" data-d="0.25">+</button></div></div>';
-    });
-    budgetsEl.innerHTML = html;
-    Array.prototype.forEach.call(budgetsEl.querySelectorAll("button[data-bkt]"), function (btn) {
-      btn.onclick = function () {
-        jsonp("bumpDailyHours", { bucket: btn.getAttribute("data-bkt"), delta: btn.getAttribute("data-d") })
-          .then(function () {
-            return load();
-          })
-          .catch(function (e) {
-            setErr(e.message || String(e));
-          });
-      };
-    });
+  function renderTotals(summary, dateKey, settings) {
+    var row = (summary || []).filter(function (s) {
+      return s.kind === "totals" && s.date === dateKey;
+    })[0];
+    var dayH = settings && settings.meta ? num(settings.meta["Day hours"]) : 12;
+    totalsEl.textContent = row && row.title ? row.title : fmtDuration(dayH) + " day";
   }
 
   function renderDay(plan, dateKey) {
@@ -301,7 +263,6 @@
           return;
         }
         var cls = r.status === "complete" ? " complete" : r.status === "skipped" ? " skipped" : "";
-        var isLife = r.bucket === "Personal" || r.bucket === "Busy";
         html +=
           '<div class="item' +
           cls +
@@ -310,81 +271,27 @@
           '"><div class="item-top"><div class="item-title">' +
           esc(r.title) +
           '</div><div class="item-hours">' +
-          fmtHrs(r.hours) +
-          "h</div></div><div class=\"item-meta\">" +
+          fmtDuration(r.hours) +
+          '</div></div><div class="item-meta">' +
           esc(r.bucket) +
-          (r.slot ? " · " + esc(r.slot) : "") +
-          (r.source === "due"
-            ? " · due today"
-            : r.source === "scheduled"
-            ? " · scheduled"
-            : r.source === "rotate"
-            ? " · rotation"
-            : r.source === "current"
-            ? " · current"
-            : "") +
           (r.status !== "pending" ? " · " + esc(r.status) : "") +
           "</div>";
-        var opts = optionList(r.options);
-        if (opts.length > 1 && r.status === "pending" && !isLife) {
-          html += '<div class="task-picks">';
-          opts.forEach(function (o) {
-            html +=
-              '<label class="check"><input type="checkbox" data-pick="' +
-              esc(r.id) +
-              '" data-bucket="' +
-              esc(r.bucket) +
-              '" value="' +
-              esc(o) +
-              '"' +
-              (o === r.chosen ? " checked" : "") +
-              " /> " +
-              esc(o) +
-              "</label>";
-          });
-          html += "</div>";
-        }
         if (r.status === "pending") {
           html +=
             '<div class="item-acts"><button type="button" data-act="complete" data-id="' +
             esc(r.id) +
             '">Complete</button><button type="button" class="skip" data-act="skip" data-id="' +
             esc(r.id) +
-            '">Skip</button>';
-          if (!isLife) {
-            html +=
-              '<button type="button" class="skip" data-act="skipBucket" data-bucket="' +
-              esc(r.bucket) +
-              '">Skip bucket</button>';
-          }
-          html += "</div>";
+            '">Skip</button></div>';
         }
         html += "</div>";
       });
     dayEl.innerHTML = html || '<p class="err">No packed items for today. Tap Rebuild.</p>';
     Array.prototype.forEach.call(dayEl.querySelectorAll("[data-act]"), function (btn) {
       btn.onclick = function () {
-        var act = btn.getAttribute("data-act");
-        var params =
-          act === "skipBucket"
-            ? { bucket: btn.getAttribute("data-bucket"), date: dateKey }
-            : { id: btn.getAttribute("data-id") };
-        jsonp(act, params)
+        jsonp(btn.getAttribute("data-act"), { id: btn.getAttribute("data-id") })
           .then(function (res) {
             if (res && res.ok === false) throw new Error(res.error || "Update failed");
-            return load();
-          })
-          .catch(function (e) {
-            setErr(e.message || String(e));
-          });
-      };
-    });
-    Array.prototype.forEach.call(dayEl.querySelectorAll("input[data-pick]"), function (box) {
-      box.onchange = function () {
-        var chosen = box.checked ? box.value : "";
-        jsonp("pick", { id: box.getAttribute("data-pick"), chosen: chosen })
-          .then(function (res) {
-            if (res && res.ok === false) throw new Error(res.error || "Could not save pick");
             return load();
           })
           .catch(function (e) {
@@ -399,22 +306,19 @@
       return s.kind === "overflow" && s.date === dateKey;
     });
     if (!rows.length) {
-      fallEl.innerHTML = '<p style="color:var(--muted)">Nothing falling off today.</p>';
+      fallWrap.classList.add("hidden");
       return;
     }
+    fallWrap.classList.remove("hidden");
     fallEl.innerHTML = rows
       .map(function (s) {
         return (
           '<div class="fall-row" style="--bcolor:#' +
           esc(s.color) +
           '"><span>' +
-          esc(s.bucket) +
-          " · " +
           esc(s.title) +
           "</span><span>" +
-          fmtHrs(s.hours) +
-          "h · " +
-          esc(s.reason) +
+          fmtDuration(s.hours) +
           "</span></div>"
         );
       })
@@ -439,7 +343,7 @@
         stampEl.textContent = settings.meta["Last packed"]
           ? "Packed " + settings.meta["Last packed"]
           : dateKey;
-        renderBudgets(settings);
+        renderTotals(summary, dateKey, settings);
         renderDay(plan, dateKey);
         renderFall(summary, dateKey);
       })

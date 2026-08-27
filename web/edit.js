@@ -1,18 +1,14 @@
 (function () {
   var cfg = window.TIMELORD_CONFIG || {};
   var TABS = [
-    { id: "hours", label: "Hours & colors" },
+    { id: "day", label: "Day" },
     { id: "personal", label: "Personal" },
-    { id: "scheduled", label: "Scheduled" },
-    { id: "rotate", label: "Rotate" },
-    { id: "current", label: "Current" },
-    { id: "oneoffs", label: "One-offs" }
+    { id: "items", label: "Items" }
   ];
   var SLOTS = ["morning", "midday", "evening"];
-  var MODES = [
-    { value: "scheduled", label: "Scheduled" },
-    { value: "rotate", label: "Rotate" },
-    { value: "current", label: "Current" }
+  var KINDS = [
+    { value: "recurring", label: "Recurring" },
+    { value: "hourly", label: "Hourly" }
   ];
   var FALLBACK_BUCKETS = ["Work", "Fitness", "Food", "House", "Garden", "Projects"];
   var panel = document.getElementById("panel");
@@ -22,14 +18,14 @@
   var stampEl = document.getElementById("edit-stamp");
   var saveBtn = document.getElementById("btn-save-page");
   var catalog = null;
-  var tab = normalizeTab((location.hash || "#hours").replace(/^#/, "") || "hours");
+  var tab = normalizeTab((location.hash || "#day").replace(/^#/, "") || "day");
 
   function normalizeTab(id) {
-    if (id === "templates") return "scheduled";
-    if (id === "tasks") return "oneoffs";
-    if (id === "work" || id === "projects") return "current";
-    if (id === "fitness") return "rotate";
-    return id || "hours";
+    if (id === "hours" || id === "colors") return "day";
+    if (id === "templates" || id === "scheduled" || id === "rotate" || id === "current" || id === "fitness" || id === "work" || id === "projects" || id === "tasks" || id === "oneoffs") {
+      return "items";
+    }
+    return id || "day";
   }
 
   function esc(s) {
@@ -38,11 +34,10 @@
     });
   }
 
-  function fmt(n) {
-    var x = Number(n);
-    if (isNaN(x)) return "0";
-    if (Math.abs(x - Math.round(x)) < 1e-6) return String(Math.round(x));
-    return x.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  function splitHm(hours) {
+    var mins = Math.round(Number(hours) * 60) || 0;
+    if (mins < 0) mins = 0;
+    return { h: Math.floor(mins / 60), m: mins % 60 };
   }
 
   function jsonp(action, params) {
@@ -130,15 +125,11 @@
     );
   }
 
-  function num(name, value, extra) {
+  function durFields(hours) {
+    var hm = splitHm(hours);
     return (
-      '<input name="' +
-      esc(name) +
-      '" type="number" step="0.25" min="0" value="' +
-      esc(fmt(value)) +
-      '" ' +
-      (extra || "") +
-      " />"
+      field("Hours", '<input name="hoursPart" type="number" min="0" step="1" value="' + hm.h + '" />') +
+      field("Minutes", '<input name="minsPart" type="number" min="0" max="59" step="1" value="' + hm.m + '" />')
     );
   }
 
@@ -184,30 +175,24 @@
     }).join("");
   }
 
-  function bucketDays(name) {
-    return name === "Work" ? 6 : catalog.settings && catalog.settings.daysPerWeek ? catalog.settings.daysPerWeek : 7;
+  function colorFor(name) {
+    var list = (catalog.settings && catalog.settings.buckets) || [];
+    var i;
+    for (i = 0; i < list.length; i++) {
+      if (list[i].name === name) return list[i].color;
+    }
+    return "94a3b8";
   }
 
-  function renderHours() {
+  function renderDay() {
     var s = catalog.settings || {};
-    var days = s.daysPerWeek || 7;
     var html =
-      '<div class="totals">' +
-      card("Day", fmt(s.dayHours) + "h", "length of a packed day") +
-      card("Gross", fmt(s.gross) + "h/wk", fmt(s.dayHours) + " × " + days) +
-      card("Personal", fmt(s.personal) + "h/wk", "locked") +
-      card("Assignable", fmt(s.assignable) + "h/wk", "after personal") +
-      card("Allocated", fmt(s.allocated) + "h/wk", "in buckets") +
-      card("Unallocated", fmt(s.unallocated) + "h/wk", "raise buckets from here") +
-      "</div>";
-    html +=
       '<div class="edit-card meta-form" data-kind="meta"><div class="fields">' +
-      field("Day hours", '<input name="hours" type="number" step="0.25" min="1" value="' + esc(fmt(s.dayHours)) + '" />') +
+      field("Day hours", '<input name="hours" type="number" step="0.25" min="1" value="' + esc(s.dayHours || 12) + '" />') +
       field("Days / week", '<input name="days" type="number" step="1" min="1" max="7" value="' + esc(s.daysPerWeek || 7) + '" />') +
       field("Buffer minutes", '<input name="minutes" type="number" step="1" min="0" value="' + esc(s.bufferMinutes || 15) + '" />') +
       "</div></div>";
-    html +=
-      '<p class="hint">Each bucket gets one slot per day. Work skips Sundays. Raising hours takes Unallocated, then steals from lower-priority buckets down to their minimum. Personal never moves. Change anything below, then <strong>Save this page</strong>.</p>';
+    html += '<p class="hint">Buckets are only color and time of day. Item hours live on Items.</p>';
     html += '<div class="bucket-forms">';
     (s.buckets || []).forEach(function (b) {
       html +=
@@ -217,86 +202,22 @@
         esc(b.color) +
         '"><div class="bucket-head"><strong>' +
         esc(b.name) +
-        "</strong><span>left " +
-        fmt(b.remaining) +
-        "h this week · marked " +
-        fmt(b.marked) +
-        "h</span></div><div class=\"fields\">" +
+        "</strong></div><div class=\"fields\">" +
         field("Color", '<input name="color" type="color" value="#' + esc(b.color) + '" />') +
         field("Slot", '<select name="slot">' + optionHtml(SLOTS, b.slot) + "</select>") +
-        field("Daily hours", num("daily", b.daily)) +
-        field("Min / week", num("min", b.min)) +
-        '</div><div class="budget-pick"><button type="button" data-bump="-0.25">− 0.25h/day</button>' +
-        '<button type="button" data-bump="0.25">+ 0.25h/day</button></div>' +
-        '<div class="sub">Weekly ' +
-        fmt(b.weekly) +
-        "h (" +
-        fmt(b.daily) +
-        " × " +
-        bucketDays(b.name) +
-        ")</div></div>";
+        "</div></div>";
     });
     html += "</div>";
     panel.innerHTML = html;
   }
 
-  function card(k, v, sub) {
-    return (
-      '<div class="total-card"><span>' +
-      esc(k) +
-      "</span><b>" +
-      esc(v) +
-      "</b><em>" +
-      esc(sub || "") +
-      "</em></div>"
-    );
-  }
-
-  function chosenMap() {
-    return (catalog && catalog.settings && catalog.settings.chosen) || {};
-  }
-
-  function isCurrent(bucket, title) {
-    return chosenMap()[bucket] === title;
-  }
-
-  function currentCheck(bucket, title) {
-    return (
-      '<label class="check"><input type="checkbox" data-current="' +
-      esc(bucket) +
-      '" value="' +
-      esc(title) +
-      '"' +
-      (isCurrent(bucket, title) ? " checked" : "") +
-      " /> Current</label>"
-    );
-  }
-
-  function addBar(kind, fieldsHtml, extra) {
-    return (
-      '<div class="edit-card add-card" data-kind="' +
-      esc(kind) +
-      '" data-add="1"' +
-      (extra || "") +
-      '><div class="fields">' +
-      fieldsHtml +
-      '</div><p class="sub">Filled rows are created when you save this page.</p></div>'
-    );
-  }
-
-  function acts(kind) {
-    return (
-      '<div class="edit-acts"><button type="button" class="danger" data-del>Delete</button></div>'
-    );
-  }
-
   function renderPersonal() {
     var html =
-      '<p class="hint">Locked life blocks (shower, lunch, dinner). Other buckets cannot steal these hours.</p>' +
+      '<p class="hint">Locked life blocks. They always keep their time.</p>' +
       addBar(
         "personal",
         field("Title", text("title", "", 'placeholder="Dinner with husband"')) +
-          field("Hours", num("hours", 1)) +
+          durFields(1) +
           field("Slot", '<select name="slot">' + optionHtml(SLOTS, "evening") + "</select>") +
           field("Days", '<input name="days" list="cadence-list" value="daily" />')
       );
@@ -306,192 +227,77 @@
         r.row +
         '"><div class="fields">' +
         field("Title", text("title", r.title)) +
-        field("Hours", num("hours", r.hours)) +
+        durFields(r.hours) +
         field("Slot", '<select name="slot">' + optionHtml(SLOTS, r.slot) + "</select>") +
         field("Days", '<input name="days" list="cadence-list" value="' + esc(r.cadence) + '" />') +
         check("active", r.active, "Active") +
-        "</div>" +
-        acts("personal") +
-        "</div>";
+        '</div><div class="edit-acts"><button type="button" class="danger" data-del>Delete</button></div></div>';
     });
     panel.innerHTML = html;
   }
 
-  function templateCard(r) {
+  function itemFields(r, isAdd) {
+    var kind = r.kind || "recurring";
+    var cadenceShow = kind === "recurring" ? "" : " hidden";
+    var hourlyShow = kind === "hourly" ? "" : " hidden";
     return (
-      '<div class="edit-card" data-kind="template" data-row="' +
-      r.row +
-      '" style="--bcolor:#' +
-      esc(colorFor(r.bucket)) +
-      '"><div class="fields">' +
-      field("Title", text("title", r.title)) +
-      '<input type="hidden" name="bucket" value="' +
-      esc(r.bucket) +
-      '" />' +
-      field("Cadence", '<input name="cadence" list="cadence-list" value="' + esc(r.cadence) + '" />') +
-      field("How", '<select name="mode">' + optionHtml(MODES, r.mode || "scheduled") + "</select>") +
-      check("thisWeek", r.thisWeek, "This week") +
-      check("active", r.active, "Active") +
+      field("Title", text("title", r.title || "", 'placeholder="Laundry"')) +
+      (isAdd
+        ? field("Bucket", '<select name="bucket">' + optionHtml(buckets(), r.bucket || "House") + "</select>")
+        : '<input type="hidden" name="bucket" value="' + esc(r.bucket) + '" />') +
+      durFields(r.hours || 1) +
+      field("Kind", '<select name="kind" data-kind-select>' + optionHtml(KINDS, kind) + "</select>") +
+      '<div class="kind-recurring' +
+      cadenceShow +
+      '">' +
+      field("Cadence", '<input name="cadence" list="cadence-list" value="' + esc(r.cadence || "daily") + '" />') +
       "</div>" +
-      acts("template") +
-      "</div>"
+      '<div class="kind-hourly' +
+      hourlyShow +
+      '">' +
+      field("Due", '<input name="due" type="date" value="' + esc(r.due || "") + '" />') +
+      check("current", r.current, "Current") +
+      "</div>" +
+      field("Slot", '<select name="slot">' + optionHtml(SLOTS, r.slot || "morning") + "</select>") +
+      (isAdd ? "" : check("active", r.active !== false, "Active"))
     );
   }
 
-  function groupedTemplates(mode) {
+  function addBar(kind, fieldsHtml) {
+    return (
+      '<div class="edit-card add-card" data-kind="' +
+      esc(kind) +
+      '" data-add="1"><div class="fields">' +
+      fieldsHtml +
+      '</div><p class="sub">Filled rows are created when you save this page.</p></div>'
+    );
+  }
+
+  function renderItems() {
+    var html =
+      '<p class="hint">Recurring items show on matching days. Hourly items need Current or a due date, and use the hours/minutes you bid.</p>' +
+      addBar("item", itemFields({ kind: "recurring", hours: 1, bucket: "House", slot: "morning" }, true));
     var grouped = {};
-    (catalog.templates || []).forEach(function (r) {
-      if ((r.mode || "scheduled") !== mode) return;
+    (catalog.items || []).forEach(function (r) {
       if (!grouped[r.bucket]) grouped[r.bucket] = [];
       grouped[r.bucket].push(r);
     });
-    var html = "";
     buckets().forEach(function (b) {
       var rows = grouped[b] || [];
       if (!rows.length) return;
       html += '<h3 class="group-h" style="--bcolor:#' + esc(colorFor(b)) + '">' + esc(b) + "</h3>";
       rows.forEach(function (r) {
-        html += templateCard(r);
+        html +=
+          '<div class="edit-card" data-kind="item" data-row="' +
+          r.row +
+          '" style="--bcolor:#' +
+          esc(colorFor(r.bucket)) +
+          '"><div class="fields">' +
+          itemFields(r, false) +
+          '</div><div class="edit-acts"><button type="button" class="danger" data-del>Delete</button></div></div>';
       });
     });
-    Object.keys(grouped).forEach(function (b) {
-      if (buckets().indexOf(b) >= 0) return;
-      (grouped[b] || []).forEach(function (r) {
-        html += templateCard(r);
-      });
-    });
-    return html;
-  }
-
-  function renderScheduled() {
-    panel.innerHTML =
-      '<p class="hint">Classic recurring. On matching days this owns the bucket’s slot (laundry on Saturday, cooking daily). More specific cadences beat daily. A due-dated one-off still wins that day.</p>' +
-      addBar(
-        "template",
-        field("Bucket", '<select name="bucket">' + optionHtml(buckets(), "House") + "</select>") +
-          field("Title", text("title", "", 'placeholder="Laundry"')) +
-          field("Cadence", '<input name="cadence" list="cadence-list" value="weekly:Sat" />') +
-          '<input type="hidden" name="mode" value="scheduled" />' +
-          check("thisWeek", true, "This week")
-      ) +
-      groupedTemplates("scheduled");
-  }
-
-  function renderRotate() {
-    panel.innerHTML =
-      '<p class="hint">These take turns in the bucket’s slot. Cadence is how often the rotation advances (daily dishes, every other day for fitness). Fitness sessions live here.</p>' +
-      addBar(
-        "template",
-        field("Bucket", '<select name="bucket">' + optionHtml(buckets(), "Fitness") + "</select>") +
-          field("Title", text("title", "", 'placeholder="Strength — lower"')) +
-          field("Cadence", '<input name="cadence" list="cadence-list" value="eod" />') +
-          '<input type="hidden" name="mode" value="rotate" />' +
-          check("thisWeek", true, "This week")
-      ) +
-      groupedTemplates("rotate");
-  }
-
-  function renderCurrent() {
-    var w = catalog.work || {};
-    var h = w.highlights || [];
-    var html =
-      '<p class="hint">No due date. Check <strong>Current</strong> on the thing you are in — it stays until you change it. Work highlights and Projects live here.</p>' +
-      '<div class="edit-card" data-kind="work" style="--bcolor:#f0c14a"><h3 class="group-h" style="--bcolor:#f0c14a">Work</h3><div class="fields stack">' +
-      field("Week start", '<input name="weekStart" type="date" value="' + esc(w.weekStart) + '" />') +
-      field("Theme", text("theme", w.theme || "")) +
-      field("Highlight 1", text("h1", h[0] || "")) +
-      field("Highlight 2", text("h2", h[1] || "")) +
-      field("Highlight 3", text("h3", h[2] || "")) +
-      '</div><div class="task-picks">' +
-      [0, 1, 2]
-        .map(function (i) {
-          var t = h[i];
-          if (!t) return "";
-          return (
-            '<label class="check"><input type="checkbox" data-current="Work" data-h="h' +
-            (i + 1) +
-            '" value="' +
-            esc(t) +
-            '"' +
-            (chosenMap().Work === t ? " checked" : "") +
-            " /> Current</label>"
-          );
-        })
-        .join("") +
-      "</div></div>";
-    html += '<h3 class="group-h" style="--bcolor:#' + esc(colorFor("Projects")) + '">Projects</h3>';
-    html += addBar("project", field("Name", text("name", "")) + check("active", true, "Active"));
-    (catalog.projects || []).forEach(function (r) {
-      html +=
-        '<div class="edit-card" data-kind="project" data-row="' +
-        r.row +
-        '" style="--bcolor:#' +
-        esc(colorFor("Projects")) +
-        '"><div class="fields">' +
-        field("Name", text("name", r.name)) +
-        check("active", r.active, "Active") +
-        currentCheck("Projects", r.name) +
-        "</div>" +
-        acts("project") +
-        "</div>";
-    });
-    html += '<h3 class="group-h">Other current lists</h3>';
-    html += addBar(
-      "template",
-      field("Bucket", '<select name="bucket">' + optionHtml(buckets(), "House") + "</select>") +
-        field("Title", text("title", "", 'placeholder="Kitchen reset"')) +
-        '<input type="hidden" name="mode" value="current" />' +
-        check("thisWeek", true, "This week")
-    );
-    html += groupedTemplates("current");
     panel.innerHTML = html;
-    Array.prototype.forEach.call(panel.querySelectorAll('[data-kind="template"][data-row]'), function (cardEl) {
-      var v = cardVals(cardEl);
-      if (v.mode !== "current") return;
-      var titleInput = cardEl.querySelector('input[name="title"]');
-      var bucketInput = cardEl.querySelector('input[name="bucket"]');
-      var fieldsEl = cardEl.querySelector(".fields");
-      if (!titleInput || !bucketInput || !fieldsEl || cardEl.querySelector("[data-current]")) return;
-      var wrap = document.createElement("div");
-      wrap.innerHTML = currentCheck(bucketInput.value, titleInput.value);
-      fieldsEl.appendChild(wrap.firstChild);
-    });
-  }
-
-  function renderOneoffs() {
-    var html =
-      '<p class="hint">A due date fills that bucket’s slot on that day (overdue ones land on today). Hours come from the bucket.</p>' +
-      addBar(
-        "task",
-        field("Name", text("name", "")) +
-          field("Due", '<input name="due" type="date" />') +
-          field("Bucket", '<select name="bucket">' + optionHtml(buckets(), "Work") + "</select>") +
-          check("thisWeek", true, "This week")
-      );
-    (catalog.tasks || []).forEach(function (r) {
-      html +=
-        '<div class="edit-card" data-kind="task" data-row="' +
-        r.row +
-        '"><div class="fields">' +
-        field("Name", text("name", r.title)) +
-        field("Due", '<input name="due" type="date" value="' + esc(r.due) + '" />') +
-        field("Bucket", '<select name="bucket">' + optionHtml(buckets(), r.bucket) + "</select>") +
-        check("thisWeek", r.thisWeek, "This week") +
-        check("active", r.active, "Active") +
-        "</div>" +
-        acts("task") +
-        "</div>";
-    });
-    panel.innerHTML = html;
-  }
-
-  function colorFor(name) {
-    var list = (catalog.settings && catalog.settings.buckets) || [];
-    var i;
-    for (i = 0; i < list.length; i++) {
-      if (list[i].name === name) return list[i].color;
-    }
-    return "94a3b8";
   }
 
   function render() {
@@ -502,46 +308,13 @@
     }
     var s = catalog.settings || {};
     stampEl.textContent = s.lastPacked ? "Packed " + s.lastPacked : "";
-    if (tab === "hours") renderHours();
+    if (tab === "day") renderDay();
     else if (tab === "personal") renderPersonal();
-    else if (tab === "scheduled") renderScheduled();
-    else if (tab === "rotate") renderRotate();
-    else if (tab === "current") renderCurrent();
-    else if (tab === "oneoffs") renderOneoffs();
-    else renderHours();
-  }
-
-  function collectCurrent() {
-    var current = {};
-    var seen = {};
-    Array.prototype.forEach.call(panel.querySelectorAll("[data-current]"), function (el) {
-      var b = el.getAttribute("data-current");
-      seen[b] = true;
-      if (!el.checked) return;
-      var card = el.closest("[data-kind]");
-      var href = el.getAttribute("data-h");
-      if (href && card) {
-        var live = card.querySelector('[name="' + href + '"]');
-        current[b] = live ? live.value : el.value;
-        return;
-      }
-      if (card) {
-        var named = card.querySelector('input[name="name"], input[name="title"]');
-        if (named && named.value) {
-          current[b] = named.value;
-          return;
-        }
-      }
-      current[b] = el.value;
-    });
-    Object.keys(seen).forEach(function (b) {
-      if (!Object.prototype.hasOwnProperty.call(current, b)) current[b] = "";
-    });
-    return current;
+    else renderItems();
   }
 
   function collectPayload() {
-    var payload = { tab: tab, rows: [], adds: [], buckets: [], current: collectCurrent() };
+    var payload = { tab: tab, rows: [], adds: [], buckets: [] };
     var meta = panel.querySelector('[data-kind="meta"]');
     if (meta) payload.meta = cardVals(meta);
     Array.prototype.forEach.call(panel.querySelectorAll('[data-kind="bucket"]'), function (el) {
@@ -549,44 +322,19 @@
       payload.buckets.push({
         name: el.getAttribute("data-bucket"),
         color: String(v.color || "").replace(/^#/, ""),
-        slot: v.slot,
-        min: v.min,
-        daily: v.daily
+        slot: v.slot
       });
     });
-    var work = panel.querySelector('[data-kind="work"]');
-    if (work) {
-      var wv = cardVals(work);
-      wv.dailyHours = (catalog.work && catalog.work.dailyHours) || 3;
-      payload.work = wv;
-    }
     Array.prototype.forEach.call(panel.querySelectorAll("[data-kind][data-row]"), function (el) {
       var v = cardVals(el);
-      v.kind = el.getAttribute("data-kind");
+      v.kind = el.getAttribute("data-kind") === "item" ? v.kind : el.getAttribute("data-kind");
       v.row = el.getAttribute("data-row");
-      if (v.kind === "template") {
-        var prev;
-        (catalog.templates || []).some(function (t) {
-          if (String(t.row) === String(v.row)) {
-            prev = t;
-            return true;
-          }
-          return false;
-        });
-        if (prev) {
-          v.hours = prev.hours;
-          v.slot = v.slot || prev.slot;
-          v.options = prev.options;
-        }
-      }
-      if (v.kind === "task") v.hours = v.hours || "0";
-      if (v.kind === "project") v.hours = v.hours || "1";
       payload.rows.push(v);
     });
     Array.prototype.forEach.call(panel.querySelectorAll("[data-add]"), function (el) {
       var v = cardVals(el);
-      v.kind = el.getAttribute("data-kind");
-      var title = String(v.title || v.name || "").trim();
+      v.kind = el.getAttribute("data-kind") === "item" ? v.kind : el.getAttribute("data-kind");
+      var title = String(v.title || "").trim();
       if (!title) return;
       payload.adds.push(v);
     });
@@ -627,50 +375,41 @@
   function onDelete(card) {
     var kind = card.getAttribute("data-kind");
     var row = card.getAttribute("data-row");
-    var map = {
-      personal: "deletePersonal",
-      template: "deleteTemplate",
-      task: "deleteTask",
-      project: "deleteProject",
-      fitness: "deleteFitness"
-    };
-    var action = map[kind];
+    var action = kind === "personal" ? "deletePersonal" : kind === "item" ? "deleteItem" : "";
     if (!action || !row) return;
     if (!window.confirm("Delete this " + kind + "?")) return;
     return run(action, { row: row }, "Deleted.");
   }
 
-  panel.addEventListener("submit", function (e) {
-    e.preventDefault();
-    savePage();
+  function syncKindFields(select) {
+    var card = select.closest("[data-kind]");
+    if (!card) return;
+    var rec = card.querySelector(".kind-recurring");
+    var hour = card.querySelector(".kind-hourly");
+    var hourly = select.value === "hourly";
+    if (rec) rec.classList.toggle("hidden", hourly);
+    if (hour) hour.classList.toggle("hidden", !hourly);
+  }
+
+  panel.addEventListener("change", function (e) {
+    if (e.target && e.target.getAttribute("data-kind-select") != null) {
+      syncKindFields(e.target);
+    }
+    if (e.target && e.target.name === "current" && e.target.checked) {
+      var card = e.target.closest("[data-kind]");
+      var bucket = card && (cardVals(card).bucket || card.querySelector('[name="bucket"]'));
+      var b = typeof bucket === "string" ? bucket : bucket && bucket.value;
+      if (!b) return;
+      Array.prototype.forEach.call(panel.querySelectorAll('[data-kind="item"]'), function (el) {
+        var v = cardVals(el);
+        if (v.bucket !== b) return;
+        var box = el.querySelector('[name="current"]');
+        if (box && box !== e.target) box.checked = false;
+      });
+    }
   });
 
   panel.addEventListener("click", function (e) {
-    var cur = e.target.closest("[data-current]");
-    if (cur && cur.type === "checkbox") {
-      if (cur.checked) {
-        var bucket = cur.getAttribute("data-current");
-        Array.prototype.forEach.call(panel.querySelectorAll('[data-current="' + bucket + '"]'), function (el) {
-          if (el !== cur) el.checked = false;
-        });
-      }
-      return;
-    }
-    var bump = e.target.closest("[data-bump]");
-    if (bump) {
-      e.preventDefault();
-      var card = bump.closest('[data-kind="bucket"]');
-      if (!card) return;
-      var input = card.querySelector('input[name="daily"]');
-      if (!input) return;
-      var next = Math.max(0, (Number(input.value) || 0) + Number(bump.getAttribute("data-bump")));
-      input.value = fmt(next);
-      var sub = card.querySelector(".sub");
-      var name = card.getAttribute("data-bucket");
-      var d = bucketDays(name);
-      if (sub) sub.textContent = "Weekly " + fmt(next * d) + "h (" + fmt(next) + " × " + d + ")";
-      return;
-    }
     var del = e.target.closest("[data-del]");
     if (del) {
       e.preventDefault();
@@ -678,18 +417,13 @@
     }
   });
 
-  if (saveBtn) {
-    saveBtn.onclick = function () {
-      savePage();
-    };
-  }
-
+  if (saveBtn) saveBtn.onclick = savePage;
   document.getElementById("btn-rebuild").onclick = function () {
     run("rebuild", {}, "Rebuilt today + 3 weeks.");
   };
 
   window.addEventListener("hashchange", function () {
-    tab = normalizeTab((location.hash || "#hours").replace(/^#/, "") || "hours");
+    tab = normalizeTab((location.hash || "#day").replace(/^#/, "") || "day");
     if (location.hash.replace(/^#/, "") !== tab) {
       location.hash = tab;
       return;
