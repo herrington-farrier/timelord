@@ -438,7 +438,6 @@ function refreshBucketDropdowns_() {
 function readBuckets_() {
   ensureSettingsBucketLayout_();
   var sh = sheet_(SHEET.SETTINGS);
-  var days = daysPerWeek_();
   var rows = sh.getRange(SETTINGS_BUCKET_HEADER_ROW + 1, 1, 7, 9).getValues();
   var out = [];
   var i;
@@ -447,6 +446,7 @@ function readBuckets_() {
     if (!name) {
       continue;
     }
+    var days = bucketDays_(name);
     var weekly = toHours_(rows[i][5]);
     var remaining = toHours_(rows[i][8]);
     out.push({
@@ -472,13 +472,12 @@ function readBuckets_() {
 
 function writeBucketHours_(name, weekly) {
   var buckets = readBuckets_();
-  var days = daysPerWeek_();
   var i;
   for (i = 0; i < buckets.length; i++) {
     if (buckets[i].name === name) {
       var sh = sheet_(SHEET.SETTINGS);
       var w = roundHours_(weekly);
-      sh.getRange(buckets[i].row, 5).setValue(roundHours_(w / days));
+      sh.getRange(buckets[i].row, 5).setValue(roundHours_(w / bucketDays_(name)));
       sh.getRange(buckets[i].row, 6).setValue(w);
       return;
     }

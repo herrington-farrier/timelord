@@ -111,7 +111,7 @@ function refreshBudgetNumbers_() {
     allocated += buckets[i].weekly;
     var u = used[buckets[i].name] || 0;
     var remaining = roundHours_(buckets[i].weekly - u);
-    sh.getRange(buckets[i].row, 5).setValue(roundHours_(buckets[i].weekly / daysPerWeek));
+    sh.getRange(buckets[i].row, 5).setValue(roundHours_(buckets[i].weekly / bucketDays_(buckets[i].name)));
     sh.getRange(buckets[i].row, 8, 1, 2).setValues([[roundHours_(u), remaining]]);
   }
   allocated = roundHours_(allocated);
@@ -302,8 +302,7 @@ function bumpWeeklyHours(bucketName, delta) {
 }
 
 function setDailyHours(bucketName, dailyHours) {
-  var days = daysPerWeek_();
-  return setWeeklyHours(bucketName, Number(dailyHours) * days);
+  return setWeeklyHours(bucketName, Number(dailyHours) * bucketDays_(bucketName));
 }
 
 function bumpDailyHours(bucketName, delta) {

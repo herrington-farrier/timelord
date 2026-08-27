@@ -355,6 +355,9 @@ function setCurrentTask_(bucket, chosen) {
     if (r.status !== 'pending') {
       continue;
     }
+    if (r.date !== today && bucketHasScheduledTask_(name, r.date)) {
+      continue;
+    }
     sheet_(SHEET.PLAN).getRange(r.row, 4).setValue(title);
     sheet_(SHEET.PLAN).getRange(r.row, 10).setValue(val);
     n++;

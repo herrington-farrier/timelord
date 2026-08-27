@@ -59,6 +59,21 @@ function weekdayName_(key) {
   return names[ymdToDate_(p.y, p.mo, p.d).getDay()];
 }
 
+/** Work is Mon–Sat. Other buckets use Settings days/week. */
+function bucketDays_(name) {
+  if (String(name || '').trim() === 'Work') {
+    return 6;
+  }
+  return daysPerWeek_();
+}
+
+function bucketHitsDate_(name, dateKey) {
+  if (String(name || '').trim() === 'Work' && weekdayName_(dateKey) === 'Sun') {
+    return false;
+  }
+  return true;
+}
+
 function weekStartKey_(key) {
   var p = parseYmd_(key);
   var dt = ymdToDate_(p.y, p.mo, p.d);

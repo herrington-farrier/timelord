@@ -322,7 +322,7 @@ function collectCandidates_(ctx, dateKey) {
   }
   for (i = 0; i < ctx.tasks.length; i++) {
     var task = ctx.tasks[i];
-    if (!task.active || !task.thisWeek) {
+    if (!task.active) {
       continue;
     }
     pushTitle(task.bucket, task.title);
@@ -342,14 +342,16 @@ function collectCandidates_(ctx, dateKey) {
   }
 
   var by = {};
+  var today = todayKey_();
   for (i = 0; i < ctx.buckets.length; i++) {
     var bucket = ctx.buckets[i];
-    if (bucket.daily <= 0) {
+    if (bucket.daily <= 0 || !bucketHitsDate_(bucket.name, dateKey)) {
       by[bucket.name] = [];
       continue;
     }
     var titles = (lists[bucket.name] || []).slice();
-    var chosen = getChosen_(bucket.name);
+    var scheduled = scheduledTitlesForBucket_(ctx.tasks, bucket.name, dateKey, today);
+    var chosen = scheduled[0] || getChosen_(bucket.name);
     if (!chosen) {
       if (bucket.name === 'Fitness') {
         var sess = fitnessSessionForDay_(ctx.fitness, dateKey);
@@ -363,8 +365,19 @@ function collectCandidates_(ctx, dateKey) {
         }
       }
     }
-    if (chosen && titles.indexOf(chosen) === -1) {
-      titles.unshift(chosen);
+    var extra = scheduled.slice();
+    if (chosen && extra.indexOf(chosen) === -1 && scheduled.length) {
+      extra.unshift(chosen);
+    }
+    var merged = extra.slice();
+    var t;
+    for (t = 0; t < titles.length; t++) {
+      if (merged.indexOf(titles[t]) === -1) {
+        merged.push(titles[t]);
+      }
+    }
+    if (chosen && merged.indexOf(chosen) === -1) {
+      merged.unshift(chosen);
     }
     by[bucket.name] = [
       {
@@ -372,12 +385,35 @@ function collectCandidates_(ctx, dateKey) {
         hours: bucket.daily,
         slot: bucket.slot,
         source: 'bucket',
-        options: titles.join('; '),
-        chosen: chosen || ''
+        options: merged.join('; '),
+        chosen: chosen || '',
+        scheduled: scheduled.length > 0
       }
     ];
   }
   return by;
+}
+
+function scheduledTitlesForBucket_(tasks, bucket, dateKey, today) {
+  var due = [];
+  var overdue = [];
+  var i;
+  for (i = 0; i < tasks.length; i++) {
+    var task = tasks[i];
+    if (!task.active || task.bucket !== bucket || !task.due) {
+      continue;
+    }
+    if (task.due === dateKey) {
+      due.push(task.title);
+    } else if (task.due < dateKey && dateKey === today) {
+      overdue.push(task.title);
+    }
+  }
+  return due.length ? due : overdue;
+}
+
+function bucketHasScheduledTask_(bucket, dateKey) {
+  return scheduledTitlesForBucket_(readTasks_(), bucket, dateKey, todayKey_()).length > 0;
 }
 
 function slotForBucket_(buckets, name) {

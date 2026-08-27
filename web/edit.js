@@ -190,7 +190,7 @@
       field("Days / week", '<input name="days" type="number" step="1" min="1" max="7" value="' + esc(s.daysPerWeek || 7) + '" />') +
       field("Buffer minutes", '<input name="minutes" type="number" step="1" min="0" value="' + esc(s.bufferMinutes || 15) + '" />') +
       '</div><div class="edit-acts"><button type="submit" class="primary">Save day settings</button></div></form>';
-    html += '<p class="hint">Each bucket gets one time slot per day (these hours). Tasks are a checklist — pick Current on Edit or Today. Raising daily hours takes Unallocated, then steals from lower-priority buckets down to their minimum. Personal never moves.</p>';
+    html += '<p class="hint">Each bucket gets one time slot per day (these hours). Work skips Sundays (Mon–Sat). Tasks are a checklist — pick Current on Edit or Today. Raising daily hours takes Unallocated, then steals from lower-priority buckets down to their minimum. Personal never moves.</p>';
     html += '<div class="bucket-forms">';
     (s.buckets || []).forEach(function (b) {
       html +=
@@ -349,7 +349,7 @@
 
   function renderTasks() {
     var html =
-      '<p class="hint">One-offs that can fill a bucket’s time slot. Check Current to make one the pick until you change it. Hours come from the bucket, not the task.</p>' +
+      '<p class="hint">One-offs. Set a due date and Rebuild — that task fills the bucket’s time slot on that day (overdue ones land on today). Check Current for the default on days with no due task. Hours come from the bucket.</p>' +
       addBar(
         "task",
         field("Name", text("name", "")) +
