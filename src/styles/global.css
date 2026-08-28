@@ -254,8 +254,10 @@ button.skip:hover:not(:disabled) {
 }
 @media (max-width: 860px) {
   .cal-layout { grid-template-columns: 1fr; }
-  .title-row { grid-template-columns: 1fr; }
-  .title-heading { justify-self: start; }
+  .cal-list { max-height: 50vh; }
+  .title-row { grid-template-columns: 1fr; gap: 10px; }
+  .title-heading { justify-self: center; }
+  .title-left, .title-right { justify-content: center; }
 }
 .cal-list {
   background: var(--panel);
@@ -474,12 +476,13 @@ button.skip:hover:not(:disabled) {
 .kind-hourly.hidden, .kind-recurring.hidden { display: none; }
 .toast-region {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 8px;
   z-index: 20;
+  max-width: calc(100vw - 32px);
 }
 .toast {
   background: var(--panel);
@@ -532,6 +535,88 @@ button.skip:hover:not(:disabled) {
 .sign-in .primary { margin-top: 16px; min-width: 10rem; }
 .eta { color: var(--gold); font-variant-numeric: tabular-nums; font-size: 0.8rem; }
 @media (max-width: 700px) {
-  .title-row { grid-template-columns: 1fr; }
-  .title-heading { justify-self: start; }
+  .title-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding-bottom: 14px;
+  }
+  .title-left {
+    order: 1;
+    justify-content: center;
+  }
+  .title-heading {
+    order: 0;
+    justify-self: center;
+    font-size: 1.3rem;
+  }
+  .title-right {
+    order: 2;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .chrome-btn, .tab {
+    min-height: 2.6rem;
+    padding: 0.55em 1em;
+  }
+  .day-acts {
+    flex-direction: column;
+  }
+  .day-acts button {
+    width: 100%;
+  }
+  .tabs {
+    justify-content: center;
+  }
+  .cal-cell {
+    min-height: 80px;
+    padding: 4px;
+  }
+  .cal-cell-num {
+    font-size: 0.8rem;
+  }
+  .cal-chip {
+    font-size: 0.65rem;
+    padding: 2px 4px;
+  }
+  .toast-region {
+    left: 16px;
+    right: 16px;
+    bottom: max(16px, env(safe-area-inset-bottom));
+  }
+  .toast {
+    min-width: 0;
+    width: 100%;
+  }
+  .fields {
+    flex-direction: column;
+  }
+  .field {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .edit-card {
+    padding: 10px 12px;
+  }
+  .bucket-forms {
+    grid-template-columns: 1fr;
+  }
+  .item-acts {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .item-acts button {
+    width: 100%;
+  }
+  .fall-row {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .fall-row .item-acts {
+    width: 100%;
+    flex-direction: row;
+  }
+  .fall-row .item-acts button {
+    flex: 1;
+  }
 }
