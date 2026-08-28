@@ -21,13 +21,10 @@ export function useAuth(): AuthContextValue {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(!auth);
 
   useEffect(() => {
-    if (!auth) {
-      setReady(true);
-      return;
-    }
+    if (!auth) return;
     return onAuthStateChanged(auth, async (next) => {
       setUser(next);
       if (next) {
