@@ -25,6 +25,30 @@ function chicagoNow_() {
   return Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd'T'HH:mm:ss");
 }
 
+function chicagoTimeNow_() {
+  return Utilities.formatDate(new Date(), TZ, 'HH:mm');
+}
+
+function addMinutesToTime_(timeStr, minutes) {
+  var parts = String(timeStr || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!parts) {
+    return timeStr;
+  }
+  var h = Number(parts[1]);
+  var m = Number(parts[2]) + Math.round(minutes);
+  while (m >= 60) {
+    m -= 60;
+    h += 1;
+  }
+  while (m < 0) {
+    m += 60;
+    h -= 1;
+  }
+  if (h >= 24) h = h % 24;
+  if (h < 0) h = 24 + h;
+  return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+}
+
 function todayKey_() {
   return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
 }

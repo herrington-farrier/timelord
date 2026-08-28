@@ -415,6 +415,10 @@ html, body {
 }
 .kind-hourly, .kind-recurring { display: contents; }
 .kind-hourly.hidden, .kind-recurring.hidden { display: none; }
+.cadence-eod { display: contents; }
+.cadence-eod.hidden { display: none; }
+.item-time { color: var(--gold); font-weight: 600; }
+.buffer-time { color: var(--head); }
 @media (max-width: 700px) {
   .title-row { grid-template-columns: 1fr; }
   .title-heading { justify-self: start; }

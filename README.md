@@ -203,10 +203,14 @@ On Templates and Personal **Days** / **Cadence**:
 |-------|---------|
 | `daily` | Every day |
 | `weekdays` / `weekends` | Mon–Fri / Sat–Sun |
-| `eod` | Every other day from 2026-01-01 |
+| `eod` | Every other day from a configurable start date (defaults to 2026-01-01 if not set) |
 | `weekly:Sat` | That weekday. Comma lists work: `weekly:Tue,Fri` |
 | `every_3_4_days` | Tuesday and Friday (~2×/week) |
 | `every_2_months` | 1st of even months |
+
+### Start date for every-other-day items
+
+Items with the `eod` cadence can have a custom **Start** date. This date determines which days the item appears on (the item shows on the start date, then every other day after that). Set the start date in the Edit UI when cadence is `eod`. If no start date is set, the default anchor of 2026-01-01 is used.
 
 ## Pages board
 

@@ -238,8 +238,10 @@
 
   function itemFields(r, isAdd) {
     var kind = r.kind || "recurring";
+    var cadence = String(r.cadence || "daily").toLowerCase();
     var cadenceShow = kind === "recurring" ? "" : " hidden";
     var hourlyShow = kind === "hourly" ? "" : " hidden";
+    var eodShow = cadence === "eod" ? "" : " hidden";
     return (
       field("Title", text("title", r.title || "", 'placeholder="Laundry"')) +
       (isAdd
@@ -250,7 +252,10 @@
       '<div class="kind-recurring' +
       cadenceShow +
       '">' +
-      field("Cadence", '<input name="cadence" list="cadence-list" value="' + esc(r.cadence || "daily") + '" />') +
+      field("Cadence", '<input name="cadence" list="cadence-list" data-cadence-input value="' + esc(r.cadence || "daily") + '" />') +
+      '<div class="cadence-eod' + eodShow + '">' +
+      field("Start (eod)", '<input name="start" type="date" value="' + esc(r.start || "") + '" />') +
+      "</div>" +
       "</div>" +
       '<div class="kind-hourly' +
       hourlyShow +
@@ -389,11 +394,26 @@
     var hourly = select.value === "hourly";
     if (rec) rec.classList.toggle("hidden", hourly);
     if (hour) hour.classList.toggle("hidden", !hourly);
+    if (!hourly) {
+      var cadenceInput = card.querySelector('[name="cadence"]');
+      if (cadenceInput) syncCadenceFields(cadenceInput);
+    }
+  }
+
+  function syncCadenceFields(input) {
+    var card = input.closest("[data-kind]");
+    if (!card) return;
+    var eodDiv = card.querySelector(".cadence-eod");
+    var isEod = String(input.value || "").toLowerCase() === "eod";
+    if (eodDiv) eodDiv.classList.toggle("hidden", !isEod);
   }
 
   panel.addEventListener("change", function (e) {
     if (e.target && e.target.getAttribute("data-kind-select") != null) {
       syncKindFields(e.target);
+    }
+    if (e.target && e.target.getAttribute("data-cadence-input") != null) {
+      syncCadenceFields(e.target);
     }
     if (e.target && e.target.name === "current" && e.target.checked) {
       var card = e.target.closest("[data-kind]");

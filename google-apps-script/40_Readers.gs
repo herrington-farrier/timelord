@@ -33,7 +33,7 @@ function normalizeKind_(v) {
 
 function readItems_() {
   ensureItemsReady_();
-  var rows = dataRows_(sheet_(SHEET.ITEMS), 9);
+  var rows = dataRows_(sheet_(SHEET.ITEMS), 10);
   var out = [];
   var i;
   for (i = 0; i < rows.length; i++) {
@@ -42,7 +42,8 @@ function readItems_() {
     if (!title || !bucket) {
       continue;
     }
-    var due = parseYmd_(rows[i][5]);
+    var start = parseYmd_(rows[i][5]);
+    var due = parseYmd_(rows[i][6]);
     out.push({
       row: i + 2,
       bucket: bucket,
@@ -50,10 +51,11 @@ function readItems_() {
       hours: toHours_(rows[i][2]),
       kind: normalizeKind_(rows[i][3]),
       cadence: String(rows[i][4] || '').trim(),
+      start: start ? start.key : '',
       due: due ? due.key : '',
-      current: toBool_(rows[i][6]),
-      active: toBool_(rows[i][7] === '' ? true : rows[i][7]),
-      slot: String(rows[i][8] || '').trim() || slotForName_(bucket)
+      current: toBool_(rows[i][7]),
+      active: toBool_(rows[i][8] === '' ? true : rows[i][8]),
+      slot: String(rows[i][9] || '').trim() || slotForName_(bucket)
     });
   }
   return out;
@@ -93,7 +95,7 @@ function readPlanRows_() {
   if (!sh) {
     return [];
   }
-  var rows = dataRows_(sh, 13);
+  var rows = dataRows_(sh, 15);
   var out = [];
   var i;
   for (i = 0; i < rows.length; i++) {
@@ -116,7 +118,9 @@ function readPlanRows_() {
       chosen: String(rows[i][9] || '').trim(),
       color: hexColor_(rows[i][10]),
       sort: Number(rows[i][11]) || 0,
-      countsWeek: toBool_(rows[i][12])
+      countsWeek: toBool_(rows[i][12]),
+      startTime: String(rows[i][13] || '').trim(),
+      endTime: String(rows[i][14] || '').trim()
     });
   }
   return out;

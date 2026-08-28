@@ -42,7 +42,7 @@ function parseWeeklyDays_(cadence) {
     .filter(Boolean);
 }
 
-function cadenceHitsDate_(cadence, dateKey) {
+function cadenceHitsDate_(cadence, dateKey, startDate) {
   var c = String(cadence || 'daily').trim();
   var cl = c.toLowerCase();
   var wd = weekdayName_(dateKey);
@@ -57,7 +57,8 @@ function cadenceHitsDate_(cadence, dateKey) {
   }
   if (cl === 'eod') {
     var p = parseYmd_(dateKey);
-    var epoch = ymdToDate_(2026, 1, 1);
+    var epochDate = startDate ? parseYmd_(startDate) : null;
+    var epoch = epochDate ? ymdToDate_(epochDate.y, epochDate.mo, epochDate.d) : ymdToDate_(2026, 1, 1);
     var dt = ymdToDate_(p.y, p.mo, p.d);
     var diff = Math.round((dt.getTime() - epoch.getTime()) / 86400000);
     return diff % 2 === 0;
