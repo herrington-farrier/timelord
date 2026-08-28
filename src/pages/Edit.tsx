@@ -349,25 +349,26 @@ function ItemFields({
 }) {
   const dur = splitMinutes(item?.durationMinutes || 30);
   const [kind, setKind] = useState(item?.type || 'recurring');
+  const [cadenceKind, setCadenceKind] = useState(item?.cadence.kind || 'daily');
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         const type = String(fd.get('type'));
-        const cadenceKind = String(fd.get('cadenceKind'));
+        const cadKind = String(fd.get('cadenceKind'));
         let cadence: Cadence = { kind: 'daily' };
-        if (cadenceKind === 'weekdays' || cadenceKind === 'weekends' || cadenceKind === 'daily') {
-          cadence = { kind: cadenceKind };
-        } else if (cadenceKind === 'weekly') {
+        if (cadKind === 'weekdays' || cadKind === 'weekends' || cadKind === 'daily') {
+          cadence = { kind: cadKind };
+        } else if (cadKind === 'weekly') {
           cadence = { kind: 'weekly', days: fd.getAll('weeklyDays') as typeof WEEKDAYS };
-        } else if (cadenceKind === 'everyNDays') {
+        } else if (cadKind === 'everyNDays') {
           cadence = {
             kind: 'everyNDays',
             n: Number(fd.get('everyN')) || 2,
             startWeekday: String(fd.get('startWeekday') || 'Mon') as (typeof WEEKDAYS)[number],
           };
-        } else if (cadenceKind === 'monthly') {
+        } else if (cadKind === 'monthly') {
           cadence = { kind: 'monthly', dayOfMonth: Number(fd.get('monthDay')) || 1 };
         }
         onSubmit({
@@ -401,7 +402,7 @@ function ItemFields({
           </select>
         </FormField>
         <FormField label="Cadence">
-          <select name="cadenceKind" defaultValue={item?.cadence.kind || 'daily'}>
+          <select name="cadenceKind" defaultValue={cadenceKind} onChange={(e) => setCadenceKind(e.target.value as Cadence['kind'])}>
             <option value="daily">Daily</option>
             <option value="weekdays">Weekdays</option>
             <option value="weekends">Weekends</option>
@@ -415,19 +416,45 @@ function ItemFields({
             <input name="dueAt" type="date" defaultValue={item?.dueAt || ''} />
           </FormField>
         ) : null}
-        <FormField label="Every N days">
-          <input name="everyN" type="number" min={2} defaultValue={item?.cadence.kind === 'everyNDays' ? item.cadence.n : 2} />
-        </FormField>
-        <FormField label="Start weekday">
-          <select name="startWeekday" defaultValue={item?.cadence.kind === 'everyNDays' ? item.cadence.startWeekday : 'Tue'}>
-            {WEEKDAYS.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </FormField>
       </div>
+      {cadenceKind === 'weekly' ? (
+        <div className="fields" style={{ marginTop: '10px' }}>
+          {WEEKDAYS.map((d) => (
+            <label key={d} className="check">
+              <input
+                name="weeklyDays"
+                type="checkbox"
+                value={d}
+                defaultChecked={item?.cadence.kind === 'weekly' ? item.cadence.days.includes(d) : false}
+              />
+              {d}
+            </label>
+          ))}
+        </div>
+      ) : null}
+      {cadenceKind === 'everyNDays' ? (
+        <div className="fields" style={{ marginTop: '10px' }}>
+          <FormField label="Every N days">
+            <input name="everyN" type="number" min={2} defaultValue={item?.cadence.kind === 'everyNDays' ? item.cadence.n : 2} />
+          </FormField>
+          <FormField label="Start weekday">
+            <select name="startWeekday" defaultValue={item?.cadence.kind === 'everyNDays' ? item.cadence.startWeekday : 'Mon'}>
+              {WEEKDAYS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        </div>
+      ) : null}
+      {cadenceKind === 'monthly' ? (
+        <div className="fields" style={{ marginTop: '10px' }}>
+          <FormField label="Day of month">
+            <input name="monthDay" type="number" min={1} max={31} defaultValue={item?.cadence.kind === 'monthly' ? item.cadence.dayOfMonth : 1} />
+          </FormField>
+        </div>
+      ) : null}
       <div className="edit-acts">
         <button type="submit" className="primary">
           Save
