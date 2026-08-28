@@ -265,7 +265,7 @@ export function packDay(input: PackDayInput): PackDayResult {
       dropBucket(bucket, hitting);
       return gaps;
     }
-    let open = gaps.map((g) => ({ ...g }));
+    const open = gaps.map((g) => ({ ...g }));
     const leftover: ListItem[] = [];
     for (const item of hitting) {
       const need = item.durationMinutes;
