@@ -237,12 +237,60 @@ function setPlanStatus_(id, status) {
   if (row.bucket === 'Buffer') {
     throw new Error('Buffers cannot be completed.');
   }
-  sheet_(SHEET.PLAN).getRange(row.row, 7).setValue(status);
+  var sh = sheet_(SHEET.PLAN);
+  sh.getRange(row.row, 7).setValue(status);
   appendLog_(status, row);
   if (status === 'complete' && row.source === 'due') {
     deactivateItemByTitle_(row.bucket, row.title);
   }
+  if (status === 'complete') {
+    assignTimesAfterComplete_(row);
+  }
   return { ok: true, id: id, status: status };
+}
+
+function assignTimesAfterComplete_(completedRow) {
+  var sh = sheet_(SHEET.PLAN);
+  var now = chicagoTimeNow_();
+  var bufferMinutes = getSettingNum_(readSettingsMap_(), SETTINGS_KEYS.BUFFER_MINUTES, 15);
+  
+  sh.getRange(completedRow.row, 15).setValue(now);
+  
+  var plan = readPlanRows_().filter(function (r) {
+    return r.date === completedRow.date;
+  });
+  plan.sort(function (a, b) {
+    return a.sort - b.sort;
+  });
+  
+  var foundCompleted = false;
+  var currentTime = now;
+  var i;
+  for (i = 0; i < plan.length; i++) {
+    var item = plan[i];
+    if (item.id === completedRow.id) {
+      foundCompleted = true;
+      continue;
+    }
+    if (!foundCompleted) {
+      continue;
+    }
+    if (item.status === 'complete' || item.status === 'skipped') {
+      continue;
+    }
+    
+    var startTime = currentTime;
+    var durationMinutes = Math.round(item.hours * 60);
+    var endTime = addMinutesToTime_(startTime, durationMinutes);
+    
+    sh.getRange(item.row, 14).setValue(startTime);
+    sh.getRange(item.row, 15).setValue(endTime);
+    
+    currentTime = endTime;
+    if (item.bucket !== 'Buffer' && item.source !== 'buffer') {
+      currentTime = addMinutesToTime_(currentTime, bufferMinutes);
+    }
+  }
 }
 
 function deactivateItemByTitle_(bucket, title) {

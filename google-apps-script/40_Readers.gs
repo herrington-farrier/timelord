@@ -95,7 +95,7 @@ function readPlanRows_() {
   if (!sh) {
     return [];
   }
-  var rows = dataRows_(sh, 13);
+  var rows = dataRows_(sh, 15);
   var out = [];
   var i;
   for (i = 0; i < rows.length; i++) {
@@ -118,7 +118,9 @@ function readPlanRows_() {
       chosen: String(rows[i][9] || '').trim(),
       color: hexColor_(rows[i][10]),
       sort: Number(rows[i][11]) || 0,
-      countsWeek: toBool_(rows[i][12])
+      countsWeek: toBool_(rows[i][12]),
+      startTime: String(rows[i][13] || '').trim(),
+      endTime: String(rows[i][14] || '').trim()
     });
   }
   return out;

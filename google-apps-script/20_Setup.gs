@@ -162,7 +162,7 @@ function setupBusy_(ss) {
 function setupPlan_(ss) {
   var sh = ensureSheet_(SHEET.PLAN);
   setTabColor_(sh, TAB_COLORS.Plan);
-  trimSheet_(sh, 800, 13);
+  trimSheet_(sh, 800, 15);
   writeHeader_(sh, HEADERS.PLAN);
   sh.getRange(2, 2, 799, 1).setNumberFormat('yyyy-mm-dd');
   sh.getRange(2, 5, 799, 1).setNumberFormat('0.###');

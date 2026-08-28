@@ -124,7 +124,9 @@ var HEADERS = {
     'Chosen',
     'Color',
     'Sort',
-    'Counts week'
+    'Counts week',
+    'StartTime',
+    'EndTime'
   ],
   SUMMARY: ['Kind', 'Date', 'Bucket', 'Title', 'Hours', 'Reason', 'Color'],
   LOG: ['Timestamp', 'Date', 'Id', 'Action', 'Bucket', 'Title', 'Hours']

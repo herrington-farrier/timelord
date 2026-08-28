@@ -107,7 +107,9 @@ function packOneDay_(ctx) {
       chosen: raw.title,
       color: raw.color,
       sort: raw.sort,
-      countsWeek: !!raw.countsWeek
+      countsWeek: !!raw.countsWeek,
+      startTime: prevRow && prevRow.startTime ? prevRow.startTime : '',
+      endTime: prevRow && prevRow.endTime ? prevRow.endTime : ''
     };
     items.push(row);
     return row;
@@ -203,23 +205,31 @@ function packOneDay_(ctx) {
   for (i = 0; i < items.length; i++) {
     withBuffers.push(items[i]);
     if (i < items.length - 1) {
-      remaining = roundHours_(remaining - ctx.bufferHours);
-      stats.buffers = roundHours_(stats.buffers + ctx.bufferHours);
-      withBuffers.push({
-        id: newId_(),
-        date: dateKey,
-        bucket: 'Buffer',
-        title: Math.round(ctx.bufferHours * 60) + 'm',
-        hours: ctx.bufferHours,
-        slot: items[i].slot,
-        status: 'pending',
-        source: 'buffer',
-        options: '',
-        chosen: '',
-        color: BUFFER_COLOR,
-        sort: items[i].sort + 0.001,
-        countsWeek: false
-      });
+      var curr = items[i];
+      var next = items[i + 1];
+      var skipBuffer = (curr.status === 'complete' || curr.status === 'skipped') &&
+                       (next.status === 'complete' || next.status === 'skipped');
+      if (!skipBuffer) {
+        remaining = roundHours_(remaining - ctx.bufferHours);
+        stats.buffers = roundHours_(stats.buffers + ctx.bufferHours);
+        withBuffers.push({
+          id: newId_(),
+          date: dateKey,
+          bucket: 'Buffer',
+          title: Math.round(ctx.bufferHours * 60) + 'm',
+          hours: ctx.bufferHours,
+          slot: curr.slot,
+          status: 'pending',
+          source: 'buffer',
+          options: '',
+          chosen: '',
+          color: BUFFER_COLOR,
+          sort: curr.sort + 0.001,
+          countsWeek: false,
+          startTime: '',
+          endTime: ''
+        });
+      }
     }
   }
 
@@ -324,7 +334,9 @@ function writePlan_(rows) {
       r.chosen,
       r.color,
       r.sort,
-      r.countsWeek
+      r.countsWeek,
+      r.startTime || '',
+      r.endTime || ''
     ];
   });
   sh.getRange(2, 1, values.length, HEADERS.PLAN.length).setValues(values);

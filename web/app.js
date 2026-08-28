@@ -146,7 +146,9 @@
         options: String(r[8] || "").trim(),
         chosen: String(r[9] || "").trim(),
         color: String(r[10] || "94a3b8").replace(/^#/, ""),
-        sort: num(r[11])
+        sort: num(r[11]),
+        startTime: String(r[13] || "").trim(),
+        endTime: String(r[14] || "").trim()
       });
     }
     out.sort(function (a, b) {
@@ -259,10 +261,12 @@
       })
       .forEach(function (r) {
         if (r.bucket === "Buffer" || r.source === "buffer") {
-          html += '<div class="buffer">' + esc(r.title) + "</div>";
+          var bufferTime = r.startTime ? '<span class="buffer-time">' + esc(r.startTime) + "</span> " : "";
+          html += '<div class="buffer">' + bufferTime + esc(r.title) + "</div>";
           return;
         }
         var cls = r.status === "complete" ? " complete" : r.status === "skipped" ? " skipped" : "";
+        var timeDisplay = r.startTime ? esc(r.startTime) + (r.endTime ? "–" + esc(r.endTime) : "") : "";
         html +=
           '<div class="item' +
           cls +
@@ -271,6 +275,7 @@
           '"><div class="item-top"><div class="item-title">' +
           esc(r.title) +
           '</div><div class="item-hours">' +
+          (timeDisplay ? '<span class="item-time">' + timeDisplay + "</span> · " : "") +
           fmtDuration(r.hours) +
           '</div></div><div class="item-meta">' +
           esc(r.bucket) +
