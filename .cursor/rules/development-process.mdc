@@ -1,0 +1,13 @@
+---
+description: Hybrid TDD — agree on test logics first, code and tests ship together
+alwaysApply: true
+---
+
+# Development process
+
+1. List the behaviors that need coverage before writing feature code.
+2. Domain (cadence, budget, packer, ETAs): failing tests first, then code.
+3. UI and callables: tests in the same PR as the code.
+4. The suite must be green to commit. No known-failing tests.
+5. Bug fixes ship with a regression test named after the bug.
+6. Update docs in the same PR.

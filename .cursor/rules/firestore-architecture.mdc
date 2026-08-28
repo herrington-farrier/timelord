@@ -1,0 +1,11 @@
+---
+description: Clients listen; only callables write
+globs: functions/src/**/*.ts,src/services/**/*.ts
+alwaysApply: false
+---
+
+# Firestore
+
+- Live documents under `tenants/{uid}/...`.
+- Clients never write Firestore. Mutations go through HTTPS callables.
+- Append-only `logs/{id}` — never overwrite a log row.

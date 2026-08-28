@@ -1,0 +1,15 @@
+---
+description: Vitest patterns — behavior-narrow assertions, no snapshots, no smoke tests
+globs: src/test/**/*
+alwaysApply: false
+---
+
+# Tests
+
+Stack: Vitest + Testing Library. Tests live in `src/test/` mirroring source names.
+
+- One observable behavior per `it`. Names describe the behavior.
+- Ban `toEqual({...full object...})` for objects with five or more fields. Use `toMatchObject` or per-field expects.
+- No snapshot tests. No smoke tests.
+- Domain tests use factories, not copy-pasted literals.
+- Fake timers for clock/ETA tests.

@@ -1,0 +1,8 @@
+{
+  "name": "Timelord",
+  "short_name": "Timelord",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070a12",
+  "theme_color": "#070a12"
+}

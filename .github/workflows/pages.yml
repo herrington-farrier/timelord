@@ -1,10 +1,10 @@
-name: Deploy Timelord Pages
+name: Redirect Pages to Firebase
 
 on:
   push:
     branches: [main]
     paths:
-      - "web/**"
+      - "pages/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -22,12 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Cache-bust CSS and JS
-        run: sed -i "s/CACHEBUST/${GITHUB_SHA}/g" web/*.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web
+          path: pages
 
   deploy:
     needs: build

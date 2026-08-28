@@ -1,0 +1,12 @@
+---
+description: Callables throw HttpsError, stamp audit, never silent return
+globs: functions/src/**/*.ts
+alwaysApply: false
+---
+
+# Functions
+
+- Always throw `HttpsError` with a human-readable message.
+- Stamp `created_*` / `last_updated_*` on every live write.
+- Live update and log row commit in the same transaction.
+- Tenant id is the signed-in uid.

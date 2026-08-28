@@ -1,0 +1,15 @@
+---
+description: Core Timelord rules — communication, code principles, docs sync
+alwaysApply: true
+---
+
+# Core (Timelord)
+
+- Direct and concise. Skip apologies, thanks, and enthusiasm.
+- One recommendation at a time.
+- Ask when unsure.
+- Less code is better. No fallback mechanisms — they hide real failures.
+- DRY: extract a token, helper, or component if you'd hardcode twice.
+- Dark-mode-only. Colors come from tokens in `src/styles/global.css`. No hex in components.
+- Every Firestore write goes through a Cloud Function callable and stamps actor identity.
+- If a change alters behavior, data shape, UI, or auth, update `docs/` in the same PR.

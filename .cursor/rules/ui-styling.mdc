@@ -1,0 +1,12 @@
+---
+description: Dark tokens only, Title Case buttons max two words
+globs: src/**/*.{tsx,css}
+alwaysApply: false
+---
+
+# UI
+
+- Dark only. Tokens in `src/styles/global.css`. No hex in components.
+- Buttons: Title Case, max two words. Add actions `Add New`.
+- Every editable field uses `FormField`.
+- Toasts on every user-initiated mutation via `formatActionError`.

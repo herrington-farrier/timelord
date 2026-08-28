@@ -1,0 +1,10 @@
+---
+description: Git commit message length and format
+alwaysApply: true
+---
+
+# Git commit messages
+
+- One short sentence only. No body.
+- Aim for ≤72 characters.
+- Imperative or declarative (`Add …`, `Fix …`).

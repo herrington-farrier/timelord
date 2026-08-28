@@ -1,3 +1,14 @@
-.clasp.json
 .DS_Store
 node_modules/
+dist/
+functions/lib/
+functions/node_modules/
+.env
+.env.local
+*.log
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.vite/
+.firebase/
+*.tsbuildinfo
