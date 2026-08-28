@@ -283,7 +283,7 @@ function collectHittingItems_(lifeItems, buckets, dateKey) {
 
 function itemHitsDate_(it, dateKey, today) {
   if (it.kind === ITEM_KIND.RECURRING) {
-    return cadenceHitsDate_(it.cadence || 'daily', dateKey) ? 'recurring' : '';
+    return cadenceHitsDate_(it.cadence || 'daily', dateKey, it.start) ? 'recurring' : '';
   }
   if (it.due) {
     if (it.due === dateKey) {
@@ -298,7 +298,7 @@ function itemHitsDate_(it, dateKey, today) {
     return '';
   }
   var cadence = it.cadence || (it.bucket === 'Work' ? 'weekdays' : 'daily');
-  return cadenceHitsDate_(cadence, dateKey) ? 'current' : '';
+  return cadenceHitsDate_(cadence, dateKey, it.start) ? 'current' : '';
 }
 
 function writePlan_(rows) {

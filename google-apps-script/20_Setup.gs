@@ -123,16 +123,17 @@ function setupPersonal_(ss) {
 function setupItems_(ss) {
   var sh = ensureSheet_(SHEET.ITEMS);
   setTabColor_(sh, TAB_COLORS.Items);
-  trimSheet_(sh, 120, 9);
+  trimSheet_(sh, 120, 10);
   writeHeader_(sh, HEADERS.ITEMS);
   applyItemValidations_(sh);
 }
 
 function applyItemValidations_(sh) {
-  checkboxCol_(sh, 7, 2, 120);
   checkboxCol_(sh, 8, 2, 120);
+  checkboxCol_(sh, 9, 2, 120);
   sh.getRange(2, 3, 119, 1).setNumberFormat('0.###');
   sh.getRange(2, 6, 119, 1).setNumberFormat('yyyy-mm-dd');
+  sh.getRange(2, 7, 119, 1).setNumberFormat('yyyy-mm-dd');
   var bucketRule = SpreadsheetApp.newDataValidation().requireValueInList(BUCKET_ORDER, true).build();
   sh.getRange(2, 1, 119, 1).setDataValidation(bucketRule);
   var kindRule = SpreadsheetApp.newDataValidation()
@@ -142,7 +143,7 @@ function applyItemValidations_(sh) {
   var slotRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['morning', 'midday', 'evening'], true)
     .build();
-  sh.getRange(2, 9, 119, 1).setDataValidation(slotRule);
+  sh.getRange(2, 10, 119, 1).setDataValidation(slotRule);
   sh.setColumnWidth(1, 110);
   sh.setColumnWidth(2, 280);
   sh.setColumnWidth(5, 150);
@@ -345,6 +346,7 @@ function migrateItemsFromLegacy_() {
       toHours_(hours) || 0.5,
       kind,
       cadence || '',
+      '',
       due || '',
       !!isCurrent,
       true,
@@ -389,12 +391,12 @@ function migrateItemsFromLegacy_() {
     }
   } catch (ignore5) {}
   if (!rows.length) {
-    sh.getRange(2, 1, SEED_ITEMS.length, 9).setValues(SEED_ITEMS);
+    sh.getRange(2, 1, SEED_ITEMS.length, 10).setValues(SEED_ITEMS);
     applyItemValidations_(sh);
     return;
   }
   var start = nextEmptyRow_(sh, 2);
-  sh.getRange(start, 1, rows.length, 9).setValues(rows);
+  sh.getRange(start, 1, rows.length, 10).setValues(rows);
   applyItemValidations_(sh);
 }
 
@@ -403,7 +405,7 @@ function readItemsRaw_() {
   if (!sh || sh.getLastRow() < 2) {
     return [];
   }
-  var data = dataRows_(sh, 9);
+  var data = dataRows_(sh, 10);
   var out = [];
   var i;
   for (i = 0; i < data.length; i++) {
