@@ -574,7 +574,7 @@ function ListsForm({
                 const row = rows.find((r) => r.id === id);
                 if (!row) return null;
                 return (
-                  <div className="edit-card">
+                  <div className="edit-card" style={{ ['--bcolor' as string]: `#${b.color}` }}>
                     <ItemFields
                       buckets={buckets}
                       item={row}
