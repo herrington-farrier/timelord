@@ -14,13 +14,12 @@ describe('weekly budget', () => {
     expect(assignableWeekMinutes(settings())).toBe(14 * 60 * 7 - personal);
   });
 
-  it('sends leftover weekly minutes to Work', () => {
+  it('does not dump leftover weekly minutes into Work', () => {
     const house = bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 8 * 60 });
     const work = workBucket({ weeklyMinutes: 10 * 60 });
     const assigned = assignWeeklyBudgets(settings(), [work, house]);
     const workOut = assigned.find((b) => b.id === 'work');
-    const leftover = assignableWeekMinutes(settings()) - 10 * 60 - 8 * 60;
-    expect(workOut?.weeklyMinutes).toBe(10 * 60 + leftover);
+    expect(workOut?.weeklyMinutes).toBe(10 * 60);
   });
 
   it('throws when assignments exceed assignable hours', () => {

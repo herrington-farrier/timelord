@@ -16,9 +16,10 @@ export function TodayPage() {
   const day = useDay(user?.uid, date);
   const { showToast } = useToast();
   const started = Boolean(day?.startedAt) && !day?.endedAt;
-  const blocks = started && day
+  const packed = started && day
     ? recomputeEtas(day.blocks || [], nowMinutes(settings?.timezone), settings?.transitionMinutes || 10)
     : day?.blocks || [];
+  const blocks = packed.filter((b) => !b.id.endsWith(':end-day'));
 
   async function act(label: string, fn: () => Promise<unknown>) {
     try {
@@ -41,7 +42,7 @@ export function TodayPage() {
             className="chrome-btn"
             onClick={() => act('Rebuilt.', () => api.rebuildRange({ start: date, days: 21 }))}
           >
-            Rebuild
+            Pack
           </button>
           <button type="button" className="chrome-btn" onClick={() => logOut()}>
             Sign Out
@@ -62,14 +63,6 @@ export function TodayPage() {
         >
           Start Day
         </button>
-        <button
-          type="button"
-          className="danger"
-          disabled={!day?.startedAt || Boolean(day?.endedAt)}
-          onClick={() => act('Day ended.', () => api.endDay({ date }))}
-        >
-          End Day
-        </button>
       </div>
       <div className="day">
         {blocks.map((b) => (
@@ -81,7 +74,17 @@ export function TodayPage() {
             onSkip={() => act('Skipped.', () => api.skipBlock({ date, id: b.id }))}
           />
         ))}
-        {!day ? <p className="err">No packed day. Tap Rebuild.</p> : null}
+        {!day ? <p className="err">No packed day. Tap Pack.</p> : null}
+      </div>
+      <div className="day-acts day-acts--end">
+        <button
+          type="button"
+          className="danger"
+          disabled={!day?.startedAt || Boolean(day?.endedAt)}
+          onClick={() => act('Day ended.', () => api.endDay({ date }))}
+        >
+          End Day
+        </button>
       </div>
       {(day?.dropped?.length || 0) > 0 ? (
         <section className="fall-wrap">
@@ -130,16 +133,22 @@ function BlockCard({
   if (block.kind === 'transition') {
     return <div className="buffer">{block.title}</div>;
   }
-  const cls = block.status === 'complete' ? ' complete' : block.status === 'skipped' ? ' skipped' : '';
+  const appt = block.kind === 'appointment';
+  const cls = `${appt ? ' item--appt' : ''}${block.status === 'complete' ? ' complete' : block.status === 'skipped' ? ' skipped' : ''}`;
   return (
     <div className={`item${cls}`} style={{ ['--bcolor' as string]: `#${block.color}` }}>
       <div className="item-top">
-        <div className="item-title">{block.title}</div>
+        <div className="item-title">
+          {appt ? <span className="item-tag">Appt</span> : null}
+          {block.title}
+        </div>
         <div className="item-hours">{formatDuration(block.durationMinutes)}</div>
       </div>
       <div className="item-meta">
-        {showEta ? <span className="eta">{formatClock(block.startMinutes)}–{formatClock(block.endMinutes)} · </span> : null}
-        {block.status !== 'pending' ? block.status : ''}
+        {showEta || appt ? (
+          <span className="eta">{formatClock(block.startMinutes)}–{formatClock(block.endMinutes)} · </span>
+        ) : null}
+        {block.status !== 'pending' ? block.status : appt ? 'locked' : ''}
       </div>
       {block.status === 'pending' && block.kind !== 'personal' ? (
         <div className="item-acts">

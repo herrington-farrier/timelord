@@ -23,12 +23,12 @@ Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; onl
 
 ## appointments/{id}
 
-- `title`, `date`, `startMinutes`, `durationMinutes`
+- `title`, `date`, `startMinutes`, `durationMinutes`, `color`
 
 ## days/{yyyy-mm-dd}
 
 - `blocks[]`, `dropped[]`, `droppedBuckets[]`, `startedAt`, `endedAt`, `packedAt`
-- Rebuild restamps `color` on packed and dropped rows from the current buckets.
+- Pack restamps `color` on packed and dropped rows from the current buckets and appointments. Unstarted days are packed fresh from current weights; started or ended days keep Complete / Skip.
 
 ## logs/{id}
 

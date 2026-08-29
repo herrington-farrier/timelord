@@ -21,10 +21,27 @@ export function formatDuration(totalMinutes: number): string {
 }
 
 export function formatClock(dayMinutesFromMidnight: number): string {
-  const mins = ((Math.round(dayMinutesFromMidnight) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const mins = clockMinutes(dayMinutesFromMidnight);
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   const hour12 = h % 12 === 0 ? 12 : h % 12;
   const ampm = h < 12 ? 'am' : 'pm';
   return `${hour12}:${String(m).padStart(2, '0')}${ampm}`;
+}
+
+export function formatTimeInput(dayMinutesFromMidnight: number): string {
+  const mins = clockMinutes(dayMinutesFromMidnight);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+export function parseTimeInput(value: unknown): number {
+  if (typeof value !== 'string' || !value.includes(':')) return 0;
+  const [h, m] = value.split(':');
+  return hoursToMinutes(h, m);
+}
+
+function clockMinutes(dayMinutesFromMidnight: number): number {
+  return ((Math.round(dayMinutesFromMidnight) % (24 * 60)) + 24 * 60) % (24 * 60);
 }

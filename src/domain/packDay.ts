@@ -83,13 +83,16 @@ function blockId(date: string, suffix: string): string {
   return `${date}:${suffix}`;
 }
 
+const BREAK_SPLIT_MINUTES = 3 * 60;
+
 export function packDay(input: PackDayInput): PackDayResult {
   const { date, settings, items, appointments } = input;
   const skipPushes = input.skipPushes || [];
   const previous = input.previous || [];
   const buckets = assignWeeklyBudgets(settings, input.buckets);
-  const work = buckets.find((b) => b.kind === 'work' && !b.archived);
-  if (!work) throw new Error('Work bucket is required.');
+  const foundWork = buckets.find((b) => b.kind === 'work' && !b.archived);
+  if (!foundWork) throw new Error('Work bucket is required.');
+  const work = foundWork;
   const personal = buckets.find((b) => b.kind === 'personal' || b.id === PERSONAL_ID);
 
   const dayStart = settings.dayStartMinutes;
@@ -168,69 +171,15 @@ export function packDay(input: PackDayInput): PackDayResult {
   const midStart = morningEnd;
   const midEnd = eveningStart;
   const midPoint = Math.floor((midStart + midEnd) / 2);
-  let breakStart = midPoint - Math.floor(settings.breakMinutes / 2);
-  if (breakStart < midStart) breakStart = midStart;
-  if (breakStart + settings.breakMinutes > midEnd) breakStart = midEnd - settings.breakMinutes;
-  const breakEnd = breakStart + settings.breakMinutes;
-
-  pushBlock({
-    id: blockId(date, 'break'),
-    bucketId: PERSONAL_ID,
-    title: 'Break',
-    kind: 'personal',
-    startMinutes: breakStart,
-    durationMinutes: settings.breakMinutes,
-    status: 'pending',
-    color: personalColor,
-    flexible: true,
-  });
+  let defaultBreakStart = midPoint - Math.floor(settings.breakMinutes / 2);
+  if (defaultBreakStart < midStart) defaultBreakStart = midStart;
+  if (defaultBreakStart + settings.breakMinutes > midEnd) defaultBreakStart = midEnd - settings.breakMinutes;
+  const defaultBreakEnd = defaultBreakStart + settings.breakMinutes;
 
   const workToday = dailyBudgetFor(work, date);
   const workHalf1 = Math.floor(workToday / 2);
-  const workHalf2 = workToday - workHalf1;
-
+  const workStart = workHalf1 > 0 ? Math.max(midStart, defaultBreakStart - workHalf1) : defaultBreakStart;
   const workColor = work.color;
-  if (workHalf1 > 0) {
-    const work1End = breakStart;
-    const work1Start = Math.max(midStart, work1End - workHalf1);
-    pushBlock({
-      id: blockId(date, 'work-1'),
-      bucketId: WORK_ID,
-      title: work.name,
-      kind: 'work',
-      startMinutes: work1Start,
-      durationMinutes: work1End - work1Start,
-      status: 'pending',
-      color: workColor,
-      flexible: true,
-    });
-  }
-  if (workHalf2 > 0) {
-    const work2Start = breakEnd;
-    const work2End = Math.min(midEnd, work2Start + workHalf2);
-    pushBlock({
-      id: blockId(date, 'work-2'),
-      bucketId: WORK_ID,
-      title: work.name,
-      kind: 'work',
-      startMinutes: work2Start,
-      durationMinutes: work2End - work2Start,
-      status: 'pending',
-      color: workColor,
-      flexible: true,
-    });
-  }
-
-  const work1Block = blocks.find((b) => b.id === blockId(date, 'work-1'));
-  const work2Block = blocks.find((b) => b.id === blockId(date, 'work-2'));
-  const morningWindow: Interval = {
-    start: morningEnd,
-    end: work1Block ? work1Block.startMinutes : breakStart,
-  };
-  const afterWorkWindow: Interval = {
-    start: work2Block ? work2Block.endMinutes : breakEnd,
-    end: eveningStart,
-  };
 
   const remainingBudget: Record<string, number> = {};
   for (const b of buckets) remainingBudget[b.id] = dailyBudgetFor(b, date);
@@ -340,64 +289,112 @@ export function packDay(input: PackDayInput): PackDayResult {
     );
   }
 
+  function pushWorkBlock(start: number, need: number, item: ListItem | null): void {
+    if (need <= 0) return;
+    pushBlock({
+      id: blockId(date, item ? `item-${item.id}-${start}` : `work-${start}`),
+      bucketId: WORK_ID,
+      ...(item ? { itemId: item.id } : {}),
+      title: item?.title || work.name,
+      kind: 'work',
+      startMinutes: start,
+      durationMinutes: need,
+      status: 'pending',
+      color: workColor,
+      flexible: true,
+    });
+  }
+
+  function firstFit(from: number, need: number): number | null {
+    if (need <= 0) return from;
+    const gaps = subtractBusy({ start: Math.max(from, midStart), end: midEnd }, busy);
+    for (const gap of gaps) {
+      if (gap.end - gap.start >= need) return gap.start;
+    }
+    return null;
+  }
+
+  function placeBreak(at: number): number {
+    if (settings.breakMinutes <= 0) return at;
+    const start = Math.min(Math.max(at, midStart), Math.max(midStart, midEnd - settings.breakMinutes));
+    pushBlock({
+      id: blockId(date, 'break'),
+      bucketId: PERSONAL_ID,
+      title: 'Break',
+      kind: 'personal',
+      startMinutes: start,
+      durationMinutes: settings.breakMinutes,
+      status: 'pending',
+      color: personalColor,
+      flexible: true,
+    });
+    return start + settings.breakMinutes;
+  }
+
+  const pieces: { item: ListItem | null; need: number }[] = [];
+  for (const it of hittingFor(work)) {
+    const need = it.durationMinutes;
+    if (need <= 0 || need > (remainingBudget[work.id] ?? 0)) {
+      dropItem(it, work);
+      continue;
+    }
+    pieces.push({ item: it, need });
+    remainingBudget[work.id] = (remainingBudget[work.id] ?? 0) - need;
+  }
+  const remWork = remainingBudget[work.id] ?? 0;
+  if (remWork > 0) pieces.push({ item: null, need: remWork });
+  remainingBudget[work.id] = 0;
+
+  let cursor = workStart;
+  let breakPlaced = false;
+  for (const piece of pieces) {
+    if (!breakPlaced && cursor >= defaultBreakStart) {
+      cursor = placeBreak(defaultBreakStart);
+      breakPlaced = true;
+    }
+    const start = firstFit(cursor, piece.need);
+    if (start == null) {
+      if (piece.item) dropItem(piece.item, work);
+      continue;
+    }
+    const crossesBreak =
+      !breakPlaced && settings.breakMinutes > 0 && start < defaultBreakEnd && start + piece.need > defaultBreakStart;
+    if (crossesBreak && piece.need <= BREAK_SPLIT_MINUTES) {
+      pushWorkBlock(start, piece.need, piece.item);
+      cursor = placeBreak(start + piece.need);
+      breakPlaced = true;
+      continue;
+    }
+    if (crossesBreak && piece.need > BREAK_SPLIT_MINUTES) {
+      const firstLen = Math.max(0, defaultBreakStart - start);
+      pushWorkBlock(start, firstLen, piece.item);
+      cursor = placeBreak(defaultBreakStart);
+      breakPlaced = true;
+      const rest = piece.need - firstLen;
+      const restStart = firstFit(cursor, rest);
+      if (restStart != null) {
+        pushWorkBlock(restStart, rest, piece.item);
+        cursor = restStart + rest;
+      }
+      continue;
+    }
+    pushWorkBlock(start, piece.need, piece.item);
+    cursor = start + piece.need;
+  }
+  if (!breakPlaced) placeBreak(defaultBreakStart);
+
+  const workContent = blocks.filter((b) => b.kind === 'work');
+  const firstWorkStart = workContent.length ? Math.min(...workContent.map((b) => b.startMinutes)) : defaultBreakStart;
+  const lastWorkEnd = workContent.length ? Math.max(...workContent.map((b) => b.endMinutes)) : defaultBreakEnd;
+  const morningWindow: Interval = { start: morningEnd, end: firstWorkStart };
+  const afterWorkWindow: Interval = { start: lastWorkEnd, end: eveningStart };
+
   const morningBuckets = buckets
     .filter((b) => !b.archived && b.kind === 'weighted' && b.slot === 'morning' && (remainingBudget[b.id] || 0) > 0)
     .sort((a, b) => a.weight - b.weight);
   let morningGaps = subtractBusy(morningWindow, busy);
   for (const b of morningBuckets) {
     morningGaps = placeItemsInGaps(morningGaps, b, hittingFor(b), 'weighted');
-  }
-
-  if (work1Block && workHalf1 > 0) {
-    const workGaps = subtractBusy(
-      { start: work1Block.startMinutes, end: work1Block.endMinutes },
-      busy.filter((iv) => iv.start !== work1Block.startMinutes || iv.end !== work1Block.endMinutes)
-    );
-    const workItems = hittingFor(work);
-    const half = Math.ceil(workItems.length / 2) || workItems.length;
-    placeItemsInGaps(workGaps, work, workItems.slice(0, half), 'work');
-  }
-  if (work2Block && workHalf2 > 0) {
-    const workGaps = subtractBusy(
-      { start: work2Block.startMinutes, end: work2Block.endMinutes },
-      busy.filter((iv) => iv.start !== work2Block.startMinutes || iv.end !== work2Block.endMinutes)
-    );
-    const workItems = hittingFor(work).filter((it) => !blocks.some((b) => b.itemId === it.id) && !dropped.some((d) => d.itemId === it.id));
-    placeItemsInGaps(workGaps, work, workItems, 'work');
-  } else {
-    for (const it of hittingFor(work)) {
-      if (!blocks.some((b) => b.itemId === it.id)) dropItem(it, work);
-    }
-  }
-
-  // If work items exist, remove generic work blocks and only show remaining time
-  const workItemBlocks = blocks.filter((b) => b.kind === 'work' && b.itemId);
-  if (workItemBlocks.length > 0) {
-    const work1Idx = blocks.findIndex((b) => b.id === blockId(date, 'work-1'));
-    if (work1Idx >= 0) blocks.splice(work1Idx, 1);
-    const work2Idx = blocks.findIndex((b) => b.id === blockId(date, 'work-2'));
-    if (work2Idx >= 0) blocks.splice(work2Idx, 1);
-    
-    // Calculate remaining work budget after items
-    const workItemMinutes = workItemBlocks.reduce((s, b) => s + b.durationMinutes, 0);
-    const remainingWork = workToday - workItemMinutes;
-    
-    // Add a single "Work" block for remaining unaccounted time
-    if (remainingWork > 0) {
-      const lastWorkItem = workItemBlocks.sort((a, b) => b.endMinutes - a.endMinutes)[0];
-      const workStart = lastWorkItem ? lastWorkItem.endMinutes : breakEnd;
-      pushBlock({
-        id: blockId(date, 'work-remaining'),
-        bucketId: WORK_ID,
-        title: work.name,
-        kind: 'work',
-        startMinutes: workStart,
-        durationMinutes: remainingWork,
-        status: 'pending',
-        color: workColor,
-        flexible: true,
-      });
-    }
   }
 
   const middayBuckets = buckets
@@ -428,10 +425,10 @@ export function packDay(input: PackDayInput): PackDayResult {
   const allGaps = subtractBusy({ start: morningEnd, end: eveningStart }, busy);
   if (gapMinutes(allGaps) > 0 && dropped.length > 0) {
     const sortedBuckets = buckets
-      .filter((b) => !b.archived && b.kind === 'weighted')
+      .filter((b) => !b.archived && (b.kind === 'weighted' || b.kind === 'work'))
       .sort((a, b) => a.weight - b.weight);
     
-    let fillGaps = allGaps.map((g) => ({ ...g }));
+    const fillGaps = allGaps.map((g) => ({ ...g }));
     for (const bucket of sortedBuckets) {
       const droppedForBucket = dropped.filter((d) => d.bucketId === bucket.id);
       for (const droppedBlock of droppedForBucket) {
@@ -448,7 +445,7 @@ export function packDay(input: PackDayInput): PackDayResult {
             bucketId: bucket.id,
             itemId: item.id,
             title: item.title,
-            kind: 'weighted',
+            kind: bucket.kind === 'work' ? 'work' : 'weighted',
             startMinutes: start,
             durationMinutes: need,
             status: 'pending',

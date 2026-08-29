@@ -23,6 +23,53 @@ describe('packDay', () => {
     expect(morning?.startMinutes).toBe(7 * 60);
   });
 
+  it('places work items first and generic Work last', () => {
+    const result = packDay({
+      ...base(),
+      buckets: [workBucket({ weeklyMinutes: 35 * 60, hoursMinutes: 35 * 60, days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] })],
+      items: [
+        item({ id: 'standup', bucketId: 'work', title: 'Standup', weight: 1, durationMinutes: 10 }),
+        item({ id: 'deep', bucketId: 'work', title: 'Deep work', weight: 2, durationMinutes: 4 * 60 }),
+      ],
+    });
+    const workBlocks = result.blocks.filter((b) => b.kind === 'work');
+    const standup = workBlocks.find((b) => b.itemId === 'standup');
+    const deep = workBlocks.filter((b) => b.itemId === 'deep');
+    const generic = workBlocks.filter((b) => !b.itemId);
+    const genericMinutes = generic.reduce((s, b) => s + b.durationMinutes, 0);
+    const lastItemEnd = Math.max(standup?.endMinutes ?? 0, ...deep.map((b) => b.endMinutes));
+    expect(standup).toBeDefined();
+    expect(deep.reduce((s, b) => s + b.durationMinutes, 0)).toBe(4 * 60);
+    expect(result.dropped.some((d) => d.itemId === 'deep')).toBe(false);
+    expect(genericMinutes).toBe(2 * 60 + 50);
+    expect(generic.every((b) => b.startMinutes >= lastItemEnd)).toBe(true);
+  });
+
+  it('puts Break after a work item of 3h or less instead of splitting it', () => {
+    const result = packDay({
+      ...base(),
+      buckets: [workBucket({ weeklyMinutes: 3 * 60, hoursMinutes: 3 * 60, days: ['Mon'] })],
+      items: [item({ id: 'review', bucketId: 'work', title: 'Review', weight: 1, durationMinutes: 2 * 60 })],
+    });
+    const review = result.blocks.filter((b) => b.itemId === 'review');
+    const brk = result.blocks.find((b) => b.title === 'Break');
+    expect(review).toHaveLength(1);
+    expect(review[0].durationMinutes).toBe(2 * 60);
+    expect(brk?.startMinutes).toBe(review[0].endMinutes);
+  });
+
+  it('generic Work blocks omit itemId so Firestore can write them', () => {
+    const result = packDay({
+      ...base(),
+      buckets: [workBucket({ weeklyMinutes: 7 * 60, days: ['Mon'] })],
+    });
+    const generic = result.blocks.filter((b) => b.kind === 'work' && !b.itemId);
+    expect(generic.length).toBeGreaterThan(0);
+    for (const block of generic) {
+      expect(block).not.toHaveProperty('itemId');
+    }
+  });
+
   it('splits Work around Break', () => {
     const result = packDay({
       ...base(),
@@ -135,6 +182,33 @@ describe('packDay', () => {
       const overlaps = block.startMinutes < meeting!.endMinutes && block.endMinutes > meeting!.startMinutes;
       expect(overlaps).toBe(false);
     }
+  });
+
+  it('uses the saved appointment color', () => {
+    const result = packDay({
+      ...base(),
+      appointments: [{ id: 'meeting', title: 'Meeting', date: monday, startMinutes: 12 * 60, durationMinutes: 60, color: '22c55e' }],
+    });
+    expect(result.blocks.find((b) => b.appointmentId === 'meeting')?.color).toBe('22c55e');
+  });
+
+  it('reorders pending items when weights change even if previous times exist', () => {
+    const house = bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 60, days: ['Mon'] });
+    const result = packDay({
+      ...base(),
+      buckets: [workBucket({ weeklyMinutes: 0, days: ['Tue'] }), house],
+      items: [
+        item({ id: 'a', bucketId: 'house', title: 'A', weight: 2, durationMinutes: 20 }),
+        item({ id: 'b', bucketId: 'house', title: 'B', weight: 1, durationMinutes: 20 }),
+      ],
+      previous: [
+        { itemId: 'a', status: 'pending', startMinutes: 8 * 60, endMinutes: 8 * 60 + 20 },
+        { itemId: 'b', status: 'pending', startMinutes: 8 * 60 + 30, endMinutes: 8 * 60 + 50 },
+      ],
+    });
+    const a = result.blocks.find((b) => b.itemId === 'a');
+    const b = result.blocks.find((b) => b.itemId === 'b');
+    expect(b?.startMinutes).toBeLessThan(a?.startMinutes ?? Infinity);
   });
 
   it('preserves complete status on rebuild for the same item', () => {

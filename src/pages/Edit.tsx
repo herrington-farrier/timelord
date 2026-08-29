@@ -15,7 +15,7 @@ import {
   weekBudgetSummary,
   type WeekBudgetSummary,
 } from '../domain/budget';
-import { formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
+import { formatDuration, formatTimeInput, hoursToMinutes, parseTimeInput, splitMinutes } from '../domain/duration';
 import { canDeleteBucket, canRenameBucket, listableBuckets, splitEditBuckets } from '../domain/seed';
 import {
   WEEKDAYS,
@@ -202,20 +202,18 @@ function DurationFields({
   label,
   h,
   m,
-  clock,
 }: {
   name: string;
   label: string;
   h: number;
   m: number;
-  clock?: boolean;
 }) {
   return (
     <div className="duration-fields">
       <span className="duration-fields__name">{label}</span>
       <div className="duration-fields__inputs">
-        <FormField label={clock ? 'Hour' : 'Hrs'}>
-          <input name={`${name}H`} type="number" min={0} max={clock ? 23 : undefined} defaultValue={h} />
+        <FormField label="Hrs">
+          <input name={`${name}H`} type="number" min={0} defaultValue={h} />
         </FormField>
         <FormField label="Min">
           <input name={`${name}M`} type="number" min={0} max={59} defaultValue={m} />
@@ -750,13 +748,12 @@ function ApptForm({
         <ApptFields onSubmit={(payload) => onSave(payload)} />
       </div>
       {appointments.map((a) => {
-        const start = splitMinutes(a.startMinutes);
         const dur = splitMinutes(a.durationMinutes);
         return (
           <div key={a.id} className="edit-card" style={{ ['--bcolor' as string]: `#${a.color || 'f87171'}` }}>
             <ApptFields
               appointment={a}
-              start={start}
+              startMinutes={a.startMinutes}
               dur={dur}
               onSubmit={(payload) => onSave({ id: a.id, ...payload })}
             />
@@ -774,12 +771,12 @@ function ApptForm({
 
 function ApptFields({
   appointment,
-  start,
+  startMinutes,
   dur,
   onSubmit,
 }: {
   appointment?: { title: string; date: string; color?: string };
-  start?: { hours: number; minutes: number };
+  startMinutes?: number;
   dur?: { hours: number; minutes: number };
   onSubmit: (payload: Record<string, unknown>) => void;
 }) {
@@ -791,7 +788,7 @@ function ApptFields({
         onSubmit({
           title: fd.get('title'),
           date: fd.get('date'),
-          startMinutes: hoursToMinutes(fd.get('sH'), fd.get('sM')),
+          startMinutes: parseTimeInput(fd.get('startTime')),
           durationMinutes: hoursToMinutes(fd.get('dH'), fd.get('dM')),
           color: String(fd.get('color') || '').replace('#', ''),
         });
@@ -804,7 +801,9 @@ function ApptFields({
         <FormField label="Date">
           <input name="date" type="date" defaultValue={appointment?.date || ''} required />
         </FormField>
-        <DurationFields name="s" label="Starts At" h={start?.hours || 10} m={start?.minutes || 0} clock />
+        <FormField label="Start Time">
+          <input name="startTime" type="time" defaultValue={formatTimeInput(startMinutes ?? 10 * 60)} required />
+        </FormField>
         <DurationFields name="d" label="Duration" h={dur?.hours || 1} m={dur?.minutes || 0} />
         <FormField label="Color">
           <input name="color" type="color" defaultValue={`#${appointment?.color || 'f87171'}`} />

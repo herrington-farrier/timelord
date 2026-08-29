@@ -155,6 +155,10 @@ button.skip:hover:not(:disabled) {
   gap: 10px;
   margin-bottom: 14px;
 }
+.day-acts--end {
+  margin-top: 6px;
+  margin-bottom: 0;
+}
 .day-acts button {
   min-width: 8rem;
   min-height: 2.6rem;
@@ -201,8 +205,26 @@ button.skip:hover:not(:disabled) {
 }
 .item.complete { opacity: 0.5; }
 .item.skipped { opacity: 0.45; text-decoration: line-through; }
+.item--appt {
+  border-left-width: 6px;
+  background: color-mix(in srgb, var(--bcolor) 18%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bcolor) 40%, transparent);
+}
 .item-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
-.item-title { font-weight: 650; }
+.item-title { font-weight: 650; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.item-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15em 0.5em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bcolor) 28%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--bcolor) 70%, var(--border));
+  color: var(--text);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .item-hours { color: var(--muted); font-variant-numeric: tabular-nums; }
 .item-meta { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
 .item-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -307,8 +329,25 @@ button.skip:hover:not(:disabled) {
   overflow: hidden;
 }
 .cal-cell.is-today { background: var(--gold-bg); }
-.cal-cell-num { font-weight: 700; color: var(--muted); font-size: 0.9rem; }
+.cal-cell-num {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px;
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
 .cal-cell.is-today .cal-cell-num { color: var(--gold); }
+.cal-hrs {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.68rem;
+}
+.cal-day-h .cal-hrs { font-size: 0.78rem; }
+.cal-hrs--ok { color: var(--ok); }
+.cal-hrs--mid { color: var(--gold); }
+.cal-hrs--hot { color: var(--danger); }
 .cal-chip {
   margin-top: 4px;
   padding: 2px 6px;
@@ -322,6 +361,12 @@ button.skip:hover:not(:disabled) {
 }
 .cal-chip.overflow { opacity: 0.45; }
 .cal-chip.buffer { color: var(--muted); border-left-color: #64748b; }
+.cal-chip--appt {
+  font-weight: 750;
+  border-left-width: 5px;
+  background: color-mix(in srgb, var(--bcolor) 32%, var(--panel));
+  color: var(--text);
+}
 
 .ok {
   color: var(--ok);
@@ -793,5 +838,42 @@ button.skip:hover:not(:disabled) {
   }
   .fall-row .item-acts button {
     flex: 1;
+  }
+  .bucket-line,
+  .personal-grid {
+    flex-wrap: wrap;
+  }
+  .bucket-line > .field:has(input[name="name"]) {
+    flex: 1 1 100%;
+  }
+  .bucket-line > .field:has(select[name="slot"]) {
+    flex: 1 1 7rem;
+  }
+  .hours-mode {
+    flex: 0 0 100%;
+    justify-content: flex-start;
+  }
+  .bucket-days {
+    gap: 4px 12px;
+  }
+  .duration-fields {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+  .duration-fields__inputs {
+    grid-template-columns: 1fr 1fr;
+  }
+  .personal-hit {
+    flex: 1 1 auto;
+    min-width: 7rem;
+  }
+  .compact-hours {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+  }
+  .compact-hours input {
+    flex: 1;
+    min-width: 3rem;
+    width: auto;
   }
 }

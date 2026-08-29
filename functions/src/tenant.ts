@@ -13,8 +13,9 @@ export function tenantRef(uid: string) {
 export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
   const ref = tenantRef(uid);
   const snap = await ref.get();
+  const stamp = await stampCreated(uid, nowIso);
+
   if (!snap.exists) {
-    const stamp = await stampCreated(uid, nowIso);
     const batch = getFirestore().batch();
     batch.set(ref, { ...stamp });
     batch.set(ref.collection('settings').doc('current'), { ...DEFAULT_SETTINGS, ...stamp });
@@ -28,25 +29,38 @@ export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
     return;
   }
 
-  const bucketsSnap = await ref.collection('buckets').get();
+  const [settingsSnap, bucketsSnap] = await Promise.all([
+    ref.collection('settings').doc('current').get(),
+    ref.collection('buckets').get(),
+  ]);
+
+  const batch = getFirestore().batch();
+  let needsCommit = false;
+
+  if (!settingsSnap.exists) {
+    batch.set(ref.collection('settings').doc('current'), { ...DEFAULT_SETTINGS, ...stamp });
+    needsCommit = true;
+  }
+
   const existing = bucketsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Bucket[];
   const missing = bucketsToBackfill(existing);
-  if (!missing.length) return;
 
-  const stamp = await stampCreated(uid, nowIso);
-  const batch = getFirestore().batch();
   for (const bucket of missing) {
     batch.set(ref.collection('buckets').doc(bucket.id), { ...bucket, archived: false, ...stamp }, { merge: true });
+    needsCommit = true;
   }
+
   if (existing.filter((b) => !b.archived).length === 0) {
     const itemsSnap = await ref.collection('items').get();
     if (itemsSnap.empty) {
       for (const item of SEED_ITEMS) {
         batch.set(ref.collection('items').doc(item.id), { ...item, ...stamp });
+        needsCommit = true;
       }
     }
   }
-  await batch.commit();
+
+  if (needsCommit) await batch.commit();
 }
 
 export async function loadTenant(uid: string) {

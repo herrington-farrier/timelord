@@ -75,8 +75,8 @@ export function activeDays(bucket: Bucket): Weekday[] {
 }
 
 /**
- * Apply leftover assignable minutes to Work. Throws if user assignments
- * exceed assignable time. Work's returned weeklyMinutes includes remainder.
+ * Stamp derived weeklyMinutes. Throws if user assignments exceed assignable time.
+ * Leftover week minutes stay unassigned so the packer can fill them with dropped items.
  */
 export function assignWeeklyBudgets(settings: DaySettings, buckets: Bucket[]): Bucket[] {
   const work = buckets.find((b) => !b.archived && (b.kind === 'work' || b.id === WORK_ID));
@@ -90,14 +90,7 @@ export function assignWeeklyBudgets(settings: DaySettings, buckets: Bucket[]): B
       `Bucket weekly hours (${formatDuration(userSum)}) exceed the ${formatDuration(assignable)} left after Personal.`
     );
   }
-  const remainder = assignable - userSum;
-  return buckets.map((b) => {
-    const assigned = bucketAssignedMinutes(b);
-    if (b.id === work.id) {
-      return { ...b, weeklyMinutes: assigned + remainder };
-    }
-    return { ...b, weeklyMinutes: assigned };
-  });
+  return buckets.map((b) => ({ ...b, weeklyMinutes: bucketAssignedMinutes(b) }));
 }
 
 export function dailyBudgetFor(bucket: Bucket, dateKey: string): number {

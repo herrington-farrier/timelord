@@ -30,4 +30,5 @@ export const api = {
   skipBlock: call<{ date: string; id: string }, { ok: boolean }>('skipBlock'),
   startDay: call<{ date: string }, { ok: boolean }>('startDay'),
   endDay: call<{ date: string }, { ok: boolean }>('endDay'),
+  wipeAccount: call<Record<string, never>, { ok: boolean }>('wipeAccount'),
 };

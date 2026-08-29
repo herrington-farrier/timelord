@@ -81,7 +81,8 @@ async function writePackedRange(uid: string, start: string, days: number): Promi
   for (const row of packed) {
     const prevSnap = await daysCol.doc(row.date).get();
     const prev = prevSnap.exists ? (prevSnap.data() as { blocks?: PackedBlock[]; startedAt?: string; endedAt?: string }) : null;
-    const result = prev?.blocks
+    const reusePrevious = Boolean(prev?.blocks && (prev.startedAt || prev.endedAt));
+    const result = reusePrevious && prev?.blocks
       ? domainCall(() => packDay(asPackInput(loaded, row.date, prev.blocks)))
       : row.result;
     batch.set(daysCol.doc(row.date), {
@@ -98,6 +99,21 @@ async function writePackedRange(uid: string, start: string, days: number): Promi
 export const bootstrap = onCall(async (request) => {
   const uid = requireUid(request);
   await ensureTenant(uid, nowIso());
+  return { ok: true };
+});
+
+export const wipeAccount = onCall(async (request) => {
+  const uid = requireUid(request);
+  const db = getFirestore();
+  const tenant = tenantRef(uid);
+  const collections = ['settings', 'buckets', 'items', 'appointments', 'days', 'skipPushes', 'logs'];
+  for (const col of collections) {
+    const snap = await tenant.collection(col).listDocuments();
+    const batch = db.batch();
+    for (const doc of snap) batch.delete(doc);
+    if (snap.length) await batch.commit();
+  }
+  await writeLog(uid, { type: 'wipe_account', date: todayKey() });
   return { ok: true };
 });
 
@@ -242,6 +258,7 @@ export const reorderBuckets = onCall(async (request) => {
     batch.set(col.doc(id), { weight: i + 2, ...stamp }, { merge: true });
   });
   await batch.commit();
+  await writePackedRange(uid, todayKey(), 21);
   return { ok: true };
 });
 
@@ -285,6 +302,7 @@ export const reorderItems = onCall(async (request) => {
     batch.set(col.doc(id), { weight: i + 1, ...stamp }, { merge: true });
   });
   await batch.commit();
+  await writePackedRange(uid, todayKey(), 21);
   return { ok: true };
 });
 
@@ -330,6 +348,7 @@ export const upsertAppointment = onCall(async (request) => {
     date: asString(data.date, 'Date'),
     startMinutes: asNumber(data.startMinutes, 'Start'),
     durationMinutes: asNumber(data.durationMinutes, 'Duration'),
+    color: asString(data.color || 'f87171', 'Color').replace(/^#/, ''),
   };
   if (payload.durationMinutes <= 0) {
     throw new HttpsError('invalid-argument', 'Duration must be greater than 0.');
