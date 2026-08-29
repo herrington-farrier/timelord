@@ -4,15 +4,17 @@ Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; onl
 
 ## settings/current
 
-- `dayMinutes`, `dayStartMinutes`, `transitionMinutes`, `timezone`
+- `dayMinutes`, `dayStartMinutes` (packer overlay for appointments; not a user start time), `transitionMinutes`, `timezone`
 - `morningMinutes`, `breakMinutes`, `eveningMinutes`
 - audit stamps
 
 ## buckets/{id}
 
 - `kind`: `personal | work | weighted`
-- `name`, `weight`, `weeklyMinutes`, `days[]`, `slot`, `color`, `archived`
-- Work id is `work`. Personal is not stored as a list bucket; its three blocks come from settings.
+- `name`, `weight`, `hoursMode` (`week` | `day`, default `week`), `hoursMinutes` (the hours field)
+- `weeklyMinutes`: derived week total (`hoursMinutes` in week-mode; `hoursMinutes ×` checked days in day-mode). Docs that only have `weeklyMinutes` are week-mode with that total.
+- `days[]`, `slot`, `color`, `archived`
+- Work id is `work`. Personal id is `personal` (name/color). Morning Routine, Break, and Evening Routine durations live on settings. Personal has no Week/Day toggle.
 
 ## items/{id}
 
@@ -26,6 +28,7 @@ Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; onl
 ## days/{yyyy-mm-dd}
 
 - `blocks[]`, `dropped[]`, `droppedBuckets[]`, `startedAt`, `endedAt`, `packedAt`
+- Rebuild restamps `color` on packed and dropped rows from the current buckets.
 
 ## logs/{id}
 

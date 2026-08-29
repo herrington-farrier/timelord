@@ -1,5 +1,7 @@
 export type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
 
+export type HoursMode = 'week' | 'day';
+
 export type Slot = 'morning' | 'midday' | 'evening';
 
 export type BucketKind = 'personal' | 'work' | 'weighted';
@@ -30,6 +32,8 @@ export type Bucket = {
   name: string;
   weight: number;
   weeklyMinutes: number;
+  hoursMode?: HoursMode;
+  hoursMinutes?: number;
   days: Weekday[];
   slot: Slot;
   color: string;

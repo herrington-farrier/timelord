@@ -3,15 +3,30 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { canDeleteBucket } from '../../src/domain/seed';
+import { assignWeeklyBudgets, derivedWeeklyMinutes } from '../../src/domain/budget';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
 import { packRange } from '../../src/domain/packWeek';
 import { skipPushDate } from '../../src/domain/skip';
-import type { Appointment, Bucket, DaySettings, ListItem, PackedBlock, SkipPush } from '../../src/domain/types';
+import type { Appointment, Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Weekday } from '../../src/domain/types';
 import { stampCreated, stampLastUpdated } from './actorAudit';
 import { asNumber, asString, newId, requireUid } from './http';
 import { ensureTenant, loadTenant, tenantRef } from './tenant';
 
 initializeApp();
+
+function domainCall<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    const msg = err instanceof Error ? err.message : 'Could not pack this week.';
+    throw new HttpsError('failed-precondition', msg);
+  }
+}
+
+function assertWeeklyFits(settings: DaySettings, buckets: Bucket[]): void {
+  domainCall(() => assignWeeklyBudgets(settings, buckets));
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -36,6 +51,50 @@ async function writeLog(
     });
 }
 
+function hoursModeOf(value: unknown): HoursMode {
+  return value === 'day' ? 'day' : 'week';
+}
+
+function bucketFields(data: Record<string, unknown>, resolvedKind: string, resolvedName: string, resolvedWeight: number) {
+  const hoursMode = hoursModeOf(data.hoursMode);
+  const hoursMinutes = asNumber(data.hoursMinutes ?? data.weeklyMinutes, 'Hours');
+  const days = Array.isArray(data.days) ? data.days.filter((d): d is string => typeof d === 'string') : [];
+  return {
+    kind: resolvedKind,
+    name: resolvedName,
+    weight: resolvedWeight,
+    hoursMode,
+    hoursMinutes,
+    weeklyMinutes: derivedWeeklyMinutes(hoursMode, hoursMinutes, days as Weekday[]),
+    days,
+    slot: asString(data.slot || 'morning', 'Time of day'),
+    color: asString(data.color, 'Color').replace(/^#/, ''),
+    archived: false,
+  };
+}
+
+async function writePackedRange(uid: string, start: string, days: number): Promise<void> {
+  const loaded = await loadTenant(uid);
+  const packed = domainCall(() => packRange(start, days, asPackInput(loaded, start)));
+  const batch = getFirestore().batch();
+  const daysCol = tenantRef(uid).collection('days');
+  for (const row of packed) {
+    const prevSnap = await daysCol.doc(row.date).get();
+    const prev = prevSnap.exists ? (prevSnap.data() as { blocks?: PackedBlock[]; startedAt?: string; endedAt?: string }) : null;
+    const result = prev?.blocks
+      ? domainCall(() => packDay(asPackInput(loaded, row.date, prev.blocks)))
+      : row.result;
+    batch.set(daysCol.doc(row.date), {
+      ...result,
+      startedAt: prev?.startedAt || null,
+      endedAt: prev?.endedAt || null,
+      packedAt: nowIso(),
+    });
+  }
+  await batch.commit();
+  await writeLog(uid, { type: 'rebuild', date: start });
+}
+
 export const bootstrap = onCall(async (request) => {
   const uid = requireUid(request);
   await ensureTenant(uid, nowIso());
@@ -58,6 +117,8 @@ export const saveSettings = onCall(async (request) => {
   if (patch.dayMinutes < 60) {
     throw new HttpsError('invalid-argument', 'Day length must be at least 1 hour.');
   }
+  const loaded = await loadTenant(uid);
+  assertWeeklyFits(patch, loaded.buckets as Bucket[]);
   const stamp = await stampLastUpdated(uid, nowIso());
   await tenantRef(uid).collection('settings').doc('current').set({ ...patch, ...stamp }, { merge: true });
   return { ok: true };
@@ -69,24 +130,87 @@ export const upsertBucket = onCall(async (request) => {
   const data = request.data as Record<string, unknown>;
   const id = typeof data.id === 'string' && data.id.trim() ? data.id.trim() : newId();
   const kind = asString(data.kind || 'weighted', 'Kind');
-  if (kind === 'work' && id !== 'work') {
+  let resolvedKind = kind;
+  let resolvedName = asString(data.name, 'Name');
+  let resolvedWeight = asNumber(data.weight, 'Priority');
+  if (id === 'work') {
+    resolvedKind = 'work';
+  }
+  if (id === 'personal') {
+    resolvedKind = 'personal';
+    resolvedName = 'Personal';
+    resolvedWeight = 0;
+  }
+  if (resolvedKind === 'work' && id !== 'work') {
     throw new HttpsError('invalid-argument', 'Work must keep the work id.');
   }
-  const payload = {
-    kind,
-    name: asString(data.name, 'Name'),
-    weight: asNumber(data.weight, 'Priority'),
-    weeklyMinutes: asNumber(data.weeklyMinutes, 'Weekly hours'),
-    days: Array.isArray(data.days) ? data.days : [],
-    slot: asString(data.slot || 'morning', 'Time of day'),
-    color: asString(data.color, 'Color').replace(/^#/, ''),
-    archived: false,
-  };
+  const payload = bucketFields(data, resolvedKind, resolvedName, resolvedWeight);
+  const loaded = await loadTenant(uid);
+  const nextBuckets = [
+    ...(loaded.buckets as Bucket[]).filter((b) => b.id !== id),
+    { id, ...payload } as Bucket,
+  ];
+  assertWeeklyFits(loaded.settings as DaySettings, nextBuckets);
   const ref = tenantRef(uid).collection('buckets').doc(id);
   const existing = await ref.get();
   const stamp = existing.exists ? await stampLastUpdated(uid, nowIso()) : await stampCreated(uid, nowIso());
   await ref.set({ ...payload, ...stamp }, { merge: true });
   return { ok: true, id };
+});
+
+export const saveBuckets = onCall(async (request) => {
+  const uid = requireUid(request);
+  await ensureTenant(uid, nowIso());
+  const data = request.data as Record<string, unknown>;
+  const loaded = await loadTenant(uid);
+  const settings = loaded.settings as DaySettings;
+  const personal = (data.personal || {}) as Record<string, unknown>;
+  const nextSettings: DaySettings = {
+    ...settings,
+    morningMinutes: asNumber(personal.morningMinutes ?? settings.morningMinutes, 'Morning Routine'),
+    breakMinutes: asNumber(personal.breakMinutes ?? settings.breakMinutes, 'Break'),
+    eveningMinutes: asNumber(personal.eveningMinutes ?? settings.eveningMinutes, 'Evening Routine'),
+  };
+  const rows = Array.isArray(data.buckets) ? data.buckets : [];
+  const nextBuckets: Bucket[] = [];
+  for (const raw of rows) {
+    const row = raw as Record<string, unknown>;
+    const id = typeof row.id === 'string' && row.id.trim() ? row.id.trim() : newId();
+    let resolvedKind = asString(row.kind || 'weighted', 'Kind');
+    let resolvedName = asString(row.name, 'Name');
+    let resolvedWeight = asNumber(row.weight, 'Priority');
+    if (id === 'work') resolvedKind = 'work';
+    if (id === 'personal') {
+      resolvedKind = 'personal';
+      resolvedName = 'Personal';
+      resolvedWeight = 0;
+    }
+    const payload = bucketFields(row, resolvedKind, resolvedName, resolvedWeight);
+    nextBuckets.push({ id, ...payload } as Bucket);
+  }
+  const kept = (loaded.buckets as Bucket[]).filter((b) => b.archived || !nextBuckets.some((n) => n.id === b.id));
+  assertWeeklyFits(nextSettings, [...kept.filter((b) => !b.archived), ...nextBuckets]);
+  const now = nowIso();
+  const stamp = await stampLastUpdated(uid, now);
+  const existingIds = new Set((loaded.buckets as Bucket[]).map((b) => b.id));
+  const batch = getFirestore().batch();
+  batch.set(tenantRef(uid).collection('settings').doc('current'), { ...nextSettings, ...stamp }, { merge: true });
+  if (typeof personal.color === 'string' && personal.color.trim()) {
+    batch.set(
+      tenantRef(uid).collection('buckets').doc('personal'),
+      { color: personal.color.replace(/^#/, ''), kind: 'personal', name: 'Personal', archived: false, ...stamp },
+      { merge: true }
+    );
+  }
+  for (const bucket of nextBuckets) {
+    const { id, ...payload } = bucket;
+    const ref = tenantRef(uid).collection('buckets').doc(id);
+    const rowStamp = existingIds.has(id) ? stamp : await stampCreated(uid, now);
+    batch.set(ref, { ...payload, ...rowStamp }, { merge: true });
+  }
+  await batch.commit();
+  await writePackedRange(uid, todayKey(), 21);
+  return { ok: true };
 });
 
 export const archiveBucket = onCall(async (request) => {
@@ -96,7 +220,7 @@ export const archiveBucket = onCall(async (request) => {
   if (!snap.exists) throw new HttpsError('not-found', 'Bucket not found.');
   const bucket = { id, ...(snap.data() as object) } as Bucket;
   if (!canDeleteBucket(bucket)) {
-    throw new HttpsError('failed-precondition', 'Work cannot be removed.');
+    throw new HttpsError('failed-precondition', 'This bucket cannot be removed.');
   }
   const stamp = await stampLastUpdated(uid, nowIso());
   await snap.ref.set({ archived: true, ...stamp }, { merge: true });
@@ -223,25 +347,7 @@ export const rebuildRange = onCall(async (request) => {
   await ensureTenant(uid, nowIso());
   const start = asString(request.data?.start || todayKey(), 'Start date');
   const days = Number(request.data?.days) || 21;
-  const loaded = await loadTenant(uid);
-  const packed = packRange(start, days, asPackInput(loaded, start));
-  const batch = getFirestore().batch();
-  const daysCol = tenantRef(uid).collection('days');
-  for (const row of packed) {
-    const prevSnap = await daysCol.doc(row.date).get();
-    const prev = prevSnap.exists ? (prevSnap.data() as { blocks?: PackedBlock[]; startedAt?: string; endedAt?: string }) : null;
-    const result = prev?.blocks
-      ? packDay(asPackInput(loaded, row.date, prev.blocks))
-      : row.result;
-    batch.set(daysCol.doc(row.date), {
-      ...result,
-      startedAt: prev?.startedAt || null,
-      endedAt: prev?.endedAt || null,
-      packedAt: nowIso(),
-    });
-  }
-  await batch.commit();
-  await writeLog(uid, { type: 'rebuild', date: start });
+  await writePackedRange(uid, start, days);
   return { ok: true };
 });
 
@@ -277,6 +383,17 @@ export const completeBlock = onCall(async (request) => {
   const date = asString(request.data?.date || todayKey(), 'Date');
   const id = asString(request.data?.id, 'Block');
   const { block } = await patchBlock(uid, date, id, 'complete');
+  const morning = block?.title === 'Morning Routine' || String(block?.id || '').endsWith(':morning');
+  if (morning) {
+    const dayRef = tenantRef(uid).collection('days').doc(date);
+    const snap = await dayRef.get();
+    const existing = snap.data() as { startedAt?: string | null } | undefined;
+    if (!existing?.startedAt) {
+      const stamp = await stampLastUpdated(uid, nowIso());
+      await dayRef.set({ startedAt: nowIso(), ...stamp }, { merge: true });
+      await writeLog(uid, { type: 'start_day', date });
+    }
+  }
   await writeLog(uid, {
     type: 'complete',
     date,

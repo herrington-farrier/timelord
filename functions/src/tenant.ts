@@ -1,7 +1,8 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 
-import { SEED_BUCKETS, SEED_ITEMS } from '../../src/domain/seed';
+import { bucketsToBackfill, PERSONAL_BUCKET, SEED_BUCKETS, SEED_ITEMS } from '../../src/domain/seed';
+import type { Bucket } from '../../src/domain/types';
 import { DEFAULT_SETTINGS } from '../../src/domain/types';
 import { stampCreated } from './actorAudit';
 
@@ -12,16 +13,38 @@ export function tenantRef(uid: string) {
 export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
   const ref = tenantRef(uid);
   const snap = await ref.get();
-  if (snap.exists) return;
+  if (!snap.exists) {
+    const stamp = await stampCreated(uid, nowIso);
+    const batch = getFirestore().batch();
+    batch.set(ref, { ...stamp });
+    batch.set(ref.collection('settings').doc('current'), { ...DEFAULT_SETTINGS, ...stamp });
+    for (const bucket of [PERSONAL_BUCKET, ...SEED_BUCKETS]) {
+      batch.set(ref.collection('buckets').doc(bucket.id), { ...bucket, ...stamp });
+    }
+    for (const item of SEED_ITEMS) {
+      batch.set(ref.collection('items').doc(item.id), { ...item, ...stamp });
+    }
+    await batch.commit();
+    return;
+  }
+
+  const bucketsSnap = await ref.collection('buckets').get();
+  const existing = bucketsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Bucket[];
+  const missing = bucketsToBackfill(existing);
+  if (!missing.length) return;
+
   const stamp = await stampCreated(uid, nowIso);
   const batch = getFirestore().batch();
-  batch.set(ref, { ...stamp });
-  batch.set(ref.collection('settings').doc('current'), { ...DEFAULT_SETTINGS, ...stamp });
-  for (const bucket of SEED_BUCKETS) {
-    batch.set(ref.collection('buckets').doc(bucket.id), { ...bucket, ...stamp });
+  for (const bucket of missing) {
+    batch.set(ref.collection('buckets').doc(bucket.id), { ...bucket, archived: false, ...stamp }, { merge: true });
   }
-  for (const item of SEED_ITEMS) {
-    batch.set(ref.collection('items').doc(item.id), { ...item, ...stamp });
+  if (existing.filter((b) => !b.archived).length === 0) {
+    const itemsSnap = await ref.collection('items').get();
+    if (itemsSnap.empty) {
+      for (const item of SEED_ITEMS) {
+        batch.set(ref.collection('items').doc(item.id), { ...item, ...stamp });
+      }
+    }
   }
   await batch.commit();
 }

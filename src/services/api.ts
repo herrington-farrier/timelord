@@ -16,7 +16,7 @@ function call<TReq, TRes>(name: string) {
 export const api = {
   bootstrap: call<Record<string, never>, { ok: boolean }>('bootstrap'),
   saveSettings: call<Record<string, unknown>, { ok: boolean }>('saveSettings'),
-  upsertBucket: call<Record<string, unknown>, { ok: boolean; id: string }>('upsertBucket'),
+  saveBuckets: call<Record<string, unknown>, { ok: boolean }>('saveBuckets'),
   archiveBucket: call<{ id: string }, { ok: boolean }>('archiveBucket'),
   reorderBuckets: call<{ weightedOrderIds: string[] }, { ok: boolean }>('reorderBuckets'),
   upsertItem: call<Record<string, unknown>, { ok: boolean; id: string }>('upsertItem'),

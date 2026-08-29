@@ -1,10 +1,32 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { FormField } from '../components/FormField';
 import { SortableList } from '../components/SortableList';
-import { hoursToMinutes, splitMinutes } from '../domain/duration';
-import { canDeleteBucket } from '../domain/seed';
-import { WEEKDAYS, type Bucket, type Cadence, type ListItem, type Slot } from '../domain/types';
+import { WeekBudgetBar } from '../components/WeekBudgetBar';
+import { CollapsibleBucket } from '../components/CollapsibleBucket';
+import {
+  assignedWeekMinutes,
+  derivedWeeklyMinutes,
+  formatBucketHours,
+  formatHoursField,
+  hoursMinutesOf,
+  hoursModeOf,
+  personalWeekMinutes,
+  weekBudgetSummary,
+  type WeekBudgetSummary,
+} from '../domain/budget';
+import { formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
+import { canDeleteBucket, canRenameBucket, listableBuckets, splitEditBuckets } from '../domain/seed';
+import {
+  WEEKDAYS,
+  type Bucket,
+  type Cadence,
+  type DaySettings,
+  type HoursMode,
+  type ListItem,
+  type Slot,
+  type Weekday,
+} from '../domain/types';
 import { api } from '../services/api';
 import { useAppointments, useBuckets, useItems, useSettings } from '../services/live';
 import { useAuth } from '../shared/auth';
@@ -13,6 +35,7 @@ import { useToast } from '../shared/toast';
 import { Chrome } from '../components/Chrome';
 
 const TABS = ['day', 'buckets', 'lists', 'appointments'] as const;
+const RANGE_DAYS = 21;
 
 export function EditPage() {
   const { user } = useAuth();
@@ -33,6 +56,10 @@ export function EditPage() {
     }
   }
 
+  async function rebuild() {
+    await api.rebuildRange({ days: RANGE_DAYS });
+  }
+
   return (
     <Chrome title="Edit">
       <nav className="tabs">
@@ -45,31 +72,72 @@ export function EditPage() {
       {tab === 'day' && settings ? (
         <DayForm
           settings={settings}
-          onSave={(payload) => act('Page saved.', () => api.saveSettings(payload))}
+          onSave={(payload) =>
+            act('Page saved.', async () => {
+              await api.saveSettings(payload);
+              await rebuild();
+            })
+          }
         />
       ) : null}
-      {tab === 'buckets' ? (
+      {tab === 'buckets' && settings ? (
         <BucketsForm
+          settings={settings}
           buckets={buckets}
-          onSave={(b) => act('Bucket saved.', () => api.upsertBucket(b))}
-          onReorder={(ids) => act('Order saved.', () => api.reorderBuckets({ weightedOrderIds: ids }))}
-          onRemove={(id) => act('Bucket removed.', () => api.archiveBucket({ id }))}
+          onSave={(payload) => act('Page saved.', () => api.saveBuckets(payload))}
+          onReorder={(ids) =>
+            act('Order saved.', async () => {
+              await api.reorderBuckets({ weightedOrderIds: ids });
+              await rebuild();
+            })
+          }
+          onRemove={(id) =>
+            act('Bucket removed.', async () => {
+              await api.archiveBucket({ id });
+              await rebuild();
+            })
+          }
         />
       ) : null}
       {tab === 'lists' ? (
         <ListsForm
-          buckets={buckets}
+          buckets={listableBuckets(buckets)}
           items={items}
-          onSave={(row) => act('Item saved.', () => api.upsertItem(row))}
-          onReorder={(ids) => act('Order saved.', () => api.reorderItems({ orderedIds: ids }))}
-          onRemove={(id) => act('Item removed.', () => api.archiveItem({ id }))}
+          onSave={(row) =>
+            act('Item saved.', async () => {
+              await api.upsertItem(row);
+              await rebuild();
+            })
+          }
+          onReorder={(ids) =>
+            act('Order saved.', async () => {
+              await api.reorderItems({ orderedIds: ids });
+              await rebuild();
+            })
+          }
+          onRemove={(id) =>
+            act('Item removed.', async () => {
+              await api.archiveItem({ id });
+              await rebuild();
+            })
+          }
         />
       ) : null}
       {tab === 'appointments' ? (
         <ApptForm
           appointments={appointments}
-          onSave={(row) => act('Appointment saved.', () => api.upsertAppointment(row))}
-          onRemove={(id) => act('Appointment removed.', () => api.archiveAppointment({ id }))}
+          onSave={(row) =>
+            act('Appointment saved.', async () => {
+              await api.upsertAppointment(row);
+              await rebuild();
+            })
+          }
+          onRemove={(id) =>
+            act('Appointment removed.', async () => {
+              await api.archiveAppointment({ id });
+              await rebuild();
+            })
+          }
         />
       ) : null}
     </Chrome>
@@ -92,10 +160,6 @@ function DayForm({
   onSave: (payload: Record<string, unknown>) => Promise<void>;
 }) {
   const day = splitMinutes(settings.dayMinutes);
-  const start = splitMinutes(settings.dayStartMinutes);
-  const morning = splitMinutes(settings.morningMinutes);
-  const brk = splitMinutes(settings.breakMinutes);
-  const evening = splitMinutes(settings.eveningMinutes);
   return (
     <form
       className="edit-page"
@@ -104,169 +168,365 @@ function DayForm({
         const fd = new FormData(e.currentTarget);
         onSave({
           dayMinutes: hoursToMinutes(fd.get('dayH'), fd.get('dayM')),
-          dayStartMinutes: hoursToMinutes(fd.get('startH'), fd.get('startM')),
+          dayStartMinutes: settings.dayStartMinutes,
           transitionMinutes: Number(fd.get('trans')),
           timezone: 'America/Chicago',
-          morningMinutes: hoursToMinutes(fd.get('mH'), fd.get('mM')),
-          breakMinutes: hoursToMinutes(fd.get('bH'), fd.get('bM')),
-          eveningMinutes: hoursToMinutes(fd.get('eH'), fd.get('eM')),
+          morningMinutes: settings.morningMinutes,
+          breakMinutes: settings.breakMinutes,
+          eveningMinutes: settings.eveningMinutes,
         });
       }}
     >
       <div className="edit-card meta-form">
         <div className="fields">
-          <Hm name="day" label="Day length" h={day.hours} m={day.minutes} />
-          <Hm name="start" label="Day start" h={start.hours} m={start.minutes} />
+          <DurationFields name="day" label="Day Length" h={day.hours} m={day.minutes} />
           <FormField label="Transition minutes">
             <input name="trans" type="number" min={0} defaultValue={settings.transitionMinutes} />
           </FormField>
         </div>
       </div>
-      <div className="edit-card">
-        <div className="fields">
-          <Hm name="m" label="Morning Routine" h={morning.hours} m={morning.minutes} />
-          <Hm name="b" label="Break" h={brk.hours} m={brk.minutes} />
-          <Hm name="e" label="Evening Routine" h={evening.hours} m={evening.minutes} />
-        </div>
-      </div>
       <div className="page-save">
         <button type="submit" className="primary">
-          Save this page
+          Save
         </button>
       </div>
     </form>
   );
 }
 
-function Hm({ name, label, h, m }: { name: string; label: string; h: number; m: number }) {
+function DurationFields({
+  name,
+  label,
+  h,
+  m,
+  clock,
+}: {
+  name: string;
+  label: string;
+  h: number;
+  m: number;
+  clock?: boolean;
+}) {
   return (
-    <>
-      <FormField label={`${label} hours`}>
-        <input name={`${name}H`} type="number" min={0} defaultValue={h} />
-      </FormField>
-      <FormField label="Minutes">
-        <input name={`${name}M`} type="number" min={0} max={59} defaultValue={m} />
-      </FormField>
-    </>
+    <div className="duration-fields">
+      <span className="duration-fields__name">{label}</span>
+      <div className="duration-fields__inputs">
+        <FormField label={clock ? 'Hour' : 'Hrs'}>
+          <input name={`${name}H`} type="number" min={0} max={clock ? 23 : undefined} defaultValue={h} />
+        </FormField>
+        <FormField label="Min">
+          <input name={`${name}M`} type="number" min={0} max={59} defaultValue={m} />
+        </FormField>
+      </div>
+    </div>
   );
 }
 
+function inputValue(root: ParentNode, selector: string): string | null {
+  const el = root.querySelector(selector);
+  return el instanceof HTMLInputElement ? el.value : null;
+}
+
+function durationFrom(root: ParentNode, prefix: string, fallback: number): number {
+  const h = inputValue(root, `input[name="${prefix}H"]`);
+  if (h == null) return fallback;
+  return hoursToMinutes(h, inputValue(root, `input[name="${prefix}M"]`) || '0');
+}
+
+function formHoursMode(form: HTMLFormElement): HoursMode {
+  const checked = form.querySelector('input[name="hoursMode"]:checked');
+  return checked instanceof HTMLInputElement && checked.value === 'day' ? 'day' : 'week';
+}
+
+function formDays(form: HTMLFormElement): Weekday[] {
+  return [...form.querySelectorAll('input[name="days"]:checked')].flatMap((el) =>
+    el instanceof HTMLInputElement ? [el.value as Weekday] : []
+  );
+}
+
+function liveWeekBudget(root: HTMLElement, settings: DaySettings): WeekBudgetSummary {
+  const next = {
+    ...settings,
+    morningMinutes: durationFrom(root, 'm', settings.morningMinutes),
+    breakMinutes: durationFrom(root, 'b', settings.breakMinutes),
+    eveningMinutes: durationFrom(root, 'e', settings.eveningMinutes),
+  };
+  let assigned = 0;
+  root.querySelectorAll<HTMLFormElement>('form[data-kind="work"], form[data-kind="weighted"], form[data-kind="new"]').forEach((form) => {
+    const name = inputValue(form, 'input[name="name"]')?.trim() || '';
+    if (form.dataset.kind === 'new' && !name) return;
+    assigned += derivedWeeklyMinutes(formHoursMode(form), durationFrom(form, 'w', 0), formDays(form));
+  });
+  return weekBudgetSummary(next, assigned);
+}
+
+function bucketPayloadFromForm(form: HTMLFormElement, fallback: { id?: string; kind: string; weight: number }) {
+  const fd = new FormData(form);
+  return {
+    id: fallback.id,
+    kind: fallback.kind,
+    name: String(fd.get('name') || '').trim(),
+    weight: fallback.weight,
+    hoursMode: formHoursMode(form),
+    hoursMinutes: hoursToMinutes(fd.get('wH'), fd.get('wM')),
+    days: fd.getAll('days'),
+    slot: fd.get('slot'),
+    color: String(fd.get('color') || '').replace('#', ''),
+  };
+}
+
 function BucketsForm({
+  settings,
   buckets,
   onSave,
   onReorder,
   onRemove,
 }: {
+  settings: DaySettings;
   buckets: Bucket[];
-  onSave: (b: Record<string, unknown>) => Promise<void>;
+  onSave: (payload: Record<string, unknown>) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
 }) {
-  const work = buckets.find((b) => b.kind === 'work');
-  const weighted = buckets.filter((b) => b.kind === 'weighted').sort((a, b) => a.weight - b.weight);
+  const { personal, work, weighted } = splitEditBuckets(buckets);
   const ids = weighted.map((b) => b.id);
+  const saved = useMemo(
+    () => weekBudgetSummary(settings, assignedWeekMinutes(buckets)),
+    [settings, buckets]
+  );
+  const [live, setLive] = useState<WeekBudgetSummary | null>(null);
+  useEffect(() => {
+    setLive(null);
+  }, [settings, buckets]);
+
+  function refreshLive(root: HTMLElement) {
+    setLive(liveWeekBudget(root, settings));
+  }
+
   return (
-    <div className="edit-page">
-      <p className="hint">Drag buckets to set priority. Work stays first and cannot be removed. Add or recolor freely.</p>
-      {work ? <BucketCard bucket={work} onSave={onSave} /> : null}
-      <SortableList
-        ids={ids}
-        onReorder={(next) => onReorder(next)}
-      >
+    <div
+      className="edit-page"
+      onInput={(e) => refreshLive(e.currentTarget)}
+      onChange={(e) => refreshLive(e.currentTarget)}
+    >
+      <WeekBudgetBar summary={live ?? saved} />
+      <PersonalCard settings={settings} bucket={personal} />
+      <BucketCard bucket={work} locked />
+      <SortableList ids={ids} onReorder={(next) => onReorder(next)}>
         {(id) => {
           const bucket = weighted.find((b) => b.id === id);
           if (!bucket) return null;
-          return <BucketCard bucket={bucket} onSave={onSave} onRemove={onRemove} />;
+          return <BucketCard bucket={bucket} onRemove={onRemove} />;
         }}
       </SortableList>
       <div className="edit-card add-card">
         <h3 className="group-h">Add New</h3>
-        <BucketFields
-          onSubmit={(payload) => onSave({ ...payload, kind: 'weighted', weight: weighted.length + 2 })}
-        />
+        <BucketFields kind="new" />
+      </div>
+      <div className="page-save">
+        <button
+          type="button"
+          className="primary"
+          onClick={(e) => {
+            const root = e.currentTarget.closest('.edit-page');
+            if (!(root instanceof HTMLElement)) return;
+            const personalForm = root.querySelector<HTMLFormElement>('form[data-kind="personal"]');
+            const rows: Record<string, unknown>[] = [];
+            root.querySelectorAll<HTMLFormElement>('form[data-kind="work"], form[data-kind="weighted"]').forEach((form) => {
+              const id = form.dataset.id;
+              const kind = form.dataset.kind || 'weighted';
+              const weight = Number(form.dataset.weight || 0);
+              rows.push(bucketPayloadFromForm(form, { id, kind, weight }));
+            });
+            const addForm = root.querySelector<HTMLFormElement>('form[data-kind="new"]');
+            if (addForm) {
+              const payload = bucketPayloadFromForm(addForm, { kind: 'weighted', weight: weighted.length + 2 });
+              if (payload.name) rows.push(payload);
+            }
+            const personalFd = personalForm ? new FormData(personalForm) : null;
+            onSave({
+              personal: {
+                morningMinutes: personalForm ? hoursToMinutes(personalFd?.get('mH'), personalFd?.get('mM')) : settings.morningMinutes,
+                breakMinutes: personalForm ? hoursToMinutes(personalFd?.get('bH'), personalFd?.get('bM')) : settings.breakMinutes,
+                eveningMinutes: personalForm ? hoursToMinutes(personalFd?.get('eH'), personalFd?.get('eM')) : settings.eveningMinutes,
+                color: String(personalFd?.get('color') || '').replace('#', ''),
+              },
+              buckets: rows,
+            });
+          }}
+        >
+          Save
+        </button>
       </div>
     </div>
+  );
+}
+
+function CompactHours({
+  name,
+  h,
+  m,
+}: {
+  name: string;
+  h: number;
+  m: number;
+}) {
+  return (
+    <div className="compact-hours">
+      <FormField label="Hrs">
+        <input name={`${name}H`} type="number" min={0} defaultValue={h} />
+      </FormField>
+      <FormField label="Min">
+        <input name={`${name}M`} type="number" min={0} max={59} defaultValue={m} />
+      </FormField>
+    </div>
+  );
+}
+
+function PersonalCard({ settings, bucket }: { settings: DaySettings; bucket: Bucket }) {
+  const morning = splitMinutes(settings.morningMinutes);
+  const brk = splitMinutes(settings.breakMinutes);
+  const evening = splitMinutes(settings.eveningMinutes);
+  return (
+    <CollapsibleBucket
+      title="Personal"
+      hours={formatDuration(personalWeekMinutes(settings))}
+      color={bucket.color}
+      liveHours={(root) => {
+        const form = root.querySelector('form');
+        if (!(form instanceof HTMLFormElement)) return formatDuration(personalWeekMinutes(settings));
+        return formatDuration(
+          personalWeekMinutes({
+            ...settings,
+            morningMinutes: durationFrom(form, 'm', settings.morningMinutes),
+            breakMinutes: durationFrom(form, 'b', settings.breakMinutes),
+            eveningMinutes: durationFrom(form, 'e', settings.eveningMinutes),
+          })
+        );
+      }}
+    >
+      <form
+        key={`${settings.morningMinutes}-${settings.breakMinutes}-${settings.eveningMinutes}-${bucket.color}`}
+        data-kind="personal"
+        onSubmit={(e) => {
+          e.preventDefault();
+        }}
+      >
+        <div className="personal-grid">
+          <div className="personal-hit">
+            <span className="compact-hours__label">Morning</span>
+            <CompactHours name="m" h={morning.hours} m={morning.minutes} />
+          </div>
+          <div className="personal-hit">
+            <span className="compact-hours__label">Break</span>
+            <CompactHours name="b" h={brk.hours} m={brk.minutes} />
+          </div>
+          <div className="personal-hit">
+            <span className="compact-hours__label">Evening</span>
+            <CompactHours name="e" h={evening.hours} m={evening.minutes} />
+          </div>
+          <FormField label="Color">
+            <input name="color" type="color" defaultValue={`#${bucket.color || 'e7d5c5'}`} />
+          </FormField>
+        </div>
+      </form>
+    </CollapsibleBucket>
   );
 }
 
 function BucketCard({
   bucket,
-  onSave,
   onRemove,
+  locked,
 }: {
   bucket: Bucket;
-  onSave: (b: Record<string, unknown>) => Promise<void>;
   onRemove?: (id: string) => Promise<void>;
+  locked?: boolean;
 }) {
   return (
-    <div className="edit-card bucket-card" style={{ ['--bcolor' as string]: `#${bucket.color}` }}>
+    <CollapsibleBucket
+      title={bucket.name}
+      hours={formatBucketHours(bucket)}
+      color={bucket.color}
+      liveHours={(root) => {
+        const form = root.querySelector('form');
+        if (!(form instanceof HTMLFormElement)) return formatBucketHours(bucket);
+        return formatHoursField(formHoursMode(form), durationFrom(form, 'w', 0));
+      }}
+    >
       <BucketFields
         bucket={bucket}
-        onSubmit={(payload) => onSave({ id: bucket.id, kind: bucket.kind, weight: bucket.weight, ...payload })}
+        kind={bucket.kind === 'work' ? 'work' : 'weighted'}
+        onRemove={onRemove && !locked && canDeleteBucket(bucket) ? () => onRemove(bucket.id) : undefined}
       />
-      {onRemove && canDeleteBucket(bucket) ? (
-        <div className="edit-acts">
-          <button type="button" className="danger" onClick={() => onRemove(bucket.id)}>
-            Remove
-          </button>
-        </div>
-      ) : null}
-    </div>
+    </CollapsibleBucket>
   );
 }
 
 function BucketFields({
   bucket,
-  onSubmit,
+  kind,
+  onRemove,
 }: {
   bucket?: Bucket;
-  onSubmit: (payload: Record<string, unknown>) => void;
+  kind: 'work' | 'weighted' | 'new';
+  onRemove?: () => void;
 }) {
-  const weekly = splitMinutes(bucket?.weeklyMinutes || 0);
+  const hours = splitMinutes(bucket ? hoursMinutesOf(bucket) : 0);
+  const mode = bucket ? hoursModeOf(bucket) : 'week';
+  const rename = !bucket || canRenameBucket(bucket);
   return (
     <form
+      key={`${bucket?.id || 'new'}-${mode}-${hours.hours}-${hours.minutes}-${bucket?.color || ''}`}
+      data-kind={kind}
+      data-id={bucket?.id}
+      data-weight={bucket?.weight}
       onSubmit={(e) => {
         e.preventDefault();
-        const fd = new FormData(e.currentTarget);
-        onSubmit({
-          name: fd.get('name'),
-          weeklyMinutes: hoursToMinutes(fd.get('wH'), fd.get('wM')),
-          days: fd.getAll('days'),
-          slot: fd.get('slot'),
-          color: String(fd.get('color') || '').replace('#', ''),
-        });
       }}
     >
-      <div className="fields">
-        <FormField label="Name">
-          <input name="name" defaultValue={bucket?.name || ''} required />
-        </FormField>
-        <Hm name="w" label="Weekly" h={weekly.hours} m={weekly.minutes} />
-        <FormField label="Time of day">
-          <select name="slot" defaultValue={bucket?.slot || 'morning'}>
-            {(['morning', 'midday', 'evening'] as Slot[]).map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </FormField>
-        <FormField label="Color">
-          <input name="color" type="color" defaultValue={`#${bucket?.color || '94a3b8'}`} />
-        </FormField>
-      </div>
-      <div className="fields">
-        {WEEKDAYS.map((d) => (
-          <label key={d} className="check">
-            <input name="days" type="checkbox" value={d} defaultChecked={bucket ? bucket.days.includes(d) : true} />
-            {d}
-          </label>
-        ))}
-      </div>
-      <div className="edit-acts">
-        <button type="submit" className="primary">
-          Save
-        </button>
+      <div className="bucket-grid">
+        <div className="bucket-line">
+          <FormField label="Name">
+            <input name="name" defaultValue={bucket?.name || ''} readOnly={!rename} required={kind !== 'new'} />
+          </FormField>
+          <FormField label="Color">
+            <input name="color" type="color" defaultValue={`#${bucket?.color || '94a3b8'}`} />
+          </FormField>
+          <CompactHours name="w" h={hours.hours} m={hours.minutes} />
+          <div className="hours-mode" role="group" aria-label="Hours mode">
+            <label>
+              <input name="hoursMode" type="radio" value="week" defaultChecked={mode === 'week'} />
+              Week
+            </label>
+            <label>
+              <input name="hoursMode" type="radio" value="day" defaultChecked={mode === 'day'} />
+              Day
+            </label>
+          </div>
+          <FormField label="Time of day">
+            <select name="slot" defaultValue={bucket?.slot || 'morning'}>
+              {(['morning', 'midday', 'evening'] as Slot[]).map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        </div>
+        <div className="bucket-days">
+          {WEEKDAYS.map((d) => (
+            <label key={d} className="check">
+              <input name="days" type="checkbox" value={d} defaultChecked={bucket ? bucket.days.includes(d) : true} />
+              {d}
+            </label>
+          ))}
+          {onRemove ? (
+            <button type="button" className="danger bucket-remove" onClick={onRemove}>
+              Remove
+            </button>
+          ) : null}
+        </div>
       </div>
     </form>
   );
@@ -297,7 +557,6 @@ function ListsForm({
 
   return (
     <div className="edit-page">
-      <p className="hint">Drag items inside a bucket to set priority. No numbering.</p>
       <div className="edit-card add-card">
         <h3 className="group-h">Add New</h3>
         <ItemFields buckets={buckets} onSubmit={(payload) => onSave(payload)} />
@@ -394,7 +653,7 @@ function ItemFields({
             ))}
           </select>
         </FormField>
-        <Hm name="i" label="Duration" h={dur.hours} m={dur.minutes} />
+        <DurationFields name="i" label="Duration" h={dur.hours} m={dur.minutes} />
         <FormField label="Type">
           <select name="type" defaultValue={kind} onChange={(e) => setKind(e.target.value as ListItem['type'])}>
             <option value="recurring">Recurring</option>
@@ -413,7 +672,7 @@ function ItemFields({
         </FormField>
         {kind === 'scheduled' ? (
           <FormField label="Due">
-            <input name="dueAt" type="date" defaultValue={item?.dueAt || ''} />
+            <input name="dueAt" type="date" defaultValue={item?.dueAt || ''} required />
           </FormField>
         ) : null}
       </div>
@@ -532,8 +791,8 @@ function ApptFields({
         <FormField label="Date">
           <input name="date" type="date" defaultValue={appointment?.date || ''} required />
         </FormField>
-        <Hm name="s" label="Start" h={start?.hours || 10} m={start?.minutes || 0} />
-        <Hm name="d" label="Duration" h={dur?.hours || 1} m={dur?.minutes || 0} />
+        <DurationFields name="s" label="Starts At" h={start?.hours || 10} m={start?.minutes || 0} clock />
+        <DurationFields name="d" label="Duration" h={dur?.hours || 1} m={dur?.minutes || 0} />
       </div>
       <div className="edit-acts">
         <button type="submit" className="primary">

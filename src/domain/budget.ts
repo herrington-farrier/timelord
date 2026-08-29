@@ -1,18 +1,73 @@
 import { weekdayFromKey } from './cadence';
-import { PERSONAL_ID, type Bucket, type DaySettings, type Weekday } from './types';
+import { formatDuration } from './duration';
+import { PERSONAL_ID, WORK_ID, type Bucket, type DaySettings, type HoursMode, type Weekday } from './types';
 
 export type DailyBudgetMap = Record<string, number>;
 
+function minutes(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function weeklyCapacity(settings: DaySettings): number {
-  return settings.dayMinutes * 7;
+  return minutes(settings.dayMinutes) * 7;
 }
 
 export function personalWeekMinutes(settings: DaySettings): number {
-  return (settings.morningMinutes + settings.breakMinutes + settings.eveningMinutes) * 7;
+  return (minutes(settings.morningMinutes) + minutes(settings.breakMinutes) + minutes(settings.eveningMinutes)) * 7;
 }
 
 export function assignableWeekMinutes(settings: DaySettings): number {
   return weeklyCapacity(settings) - personalWeekMinutes(settings);
+}
+
+export function assignedWeekMinutes(buckets: Bucket[]): number {
+  return buckets
+    .filter((b) => !b.archived && b.kind !== 'personal' && b.id !== PERSONAL_ID)
+    .reduce((sum, b) => sum + bucketAssignedMinutes(b), 0);
+}
+
+export function hoursModeOf(bucket: Bucket): HoursMode {
+  return bucket.hoursMode === 'day' ? 'day' : 'week';
+}
+
+export function hoursMinutesOf(bucket: Bucket): number {
+  if (bucket.hoursMinutes != null && Number.isFinite(Number(bucket.hoursMinutes))) {
+    return minutes(bucket.hoursMinutes);
+  }
+  return minutes(bucket.weeklyMinutes);
+}
+
+export function derivedWeeklyMinutes(mode: HoursMode, hoursMinutes: number, days: Weekday[]): number {
+  const hours = minutes(hoursMinutes);
+  if (mode === 'day') return hours * days.filter(Boolean).length;
+  return hours;
+}
+
+export function bucketAssignedMinutes(bucket: Bucket): number {
+  return derivedWeeklyMinutes(hoursModeOf(bucket), hoursMinutesOf(bucket), activeDays(bucket));
+}
+
+export type WeekBudgetSummary = {
+  capacityMinutes: number;
+  personalMinutes: number;
+  assignableMinutes: number;
+  assignedMinutes: number;
+  leftoverMinutes: number;
+};
+
+export function weekBudgetSummary(settings: DaySettings, assignedMinutes: number): WeekBudgetSummary {
+  const capacityMinutes = weeklyCapacity(settings);
+  const personalMinutes = personalWeekMinutes(settings);
+  const assignableMinutes = assignableWeekMinutes(settings);
+  const assigned = minutes(assignedMinutes);
+  return {
+    capacityMinutes,
+    personalMinutes,
+    assignableMinutes,
+    assignedMinutes: assigned,
+    leftoverMinutes: assignableMinutes - assigned,
+  };
 }
 
 export function activeDays(bucket: Bucket): Weekday[] {
@@ -24,23 +79,24 @@ export function activeDays(bucket: Bucket): Weekday[] {
  * exceed assignable time. Work's returned weeklyMinutes includes remainder.
  */
 export function assignWeeklyBudgets(settings: DaySettings, buckets: Bucket[]): Bucket[] {
-  const work = buckets.find((b) => b.kind === 'work' && !b.archived);
+  const work = buckets.find((b) => !b.archived && (b.kind === 'work' || b.id === WORK_ID));
   if (!work) {
     throw new Error('Work bucket is required.');
   }
   const assignable = assignableWeekMinutes(settings);
-  const userSum = buckets
-    .filter((b) => !b.archived && b.kind !== 'personal' && b.id !== PERSONAL_ID)
-    .reduce((sum, b) => sum + b.weeklyMinutes, 0);
+  const userSum = assignedWeekMinutes(buckets);
   if (userSum > assignable) {
-    throw new Error('Bucket weekly hours exceed the hours left after Personal.');
+    throw new Error(
+      `Bucket weekly hours (${formatDuration(userSum)}) exceed the ${formatDuration(assignable)} left after Personal.`
+    );
   }
   const remainder = assignable - userSum;
   return buckets.map((b) => {
+    const assigned = bucketAssignedMinutes(b);
     if (b.id === work.id) {
-      return { ...b, weeklyMinutes: b.weeklyMinutes + remainder };
+      return { ...b, weeklyMinutes: assigned + remainder };
     }
-    return { ...b };
+    return { ...b, weeklyMinutes: assigned };
   });
 }
 
@@ -49,7 +105,21 @@ export function dailyBudgetFor(bucket: Bucket, dateKey: string): number {
   const days = activeDays(bucket);
   if (!days.length) return 0;
   if (!days.includes(weekdayFromKey(dateKey))) return 0;
-  return Math.floor(bucket.weeklyMinutes / days.length);
+  if (hoursModeOf(bucket) === 'day') {
+    const assigned = bucketAssignedMinutes(bucket);
+    const extra = Math.max(0, minutes(bucket.weeklyMinutes) - assigned);
+    return hoursMinutesOf(bucket) + Math.floor(extra / days.length);
+  }
+  return Math.floor(minutes(bucket.weeklyMinutes) / days.length);
+}
+
+export function formatHoursField(mode: HoursMode, hoursMinutes: number): string {
+  const hours = formatDuration(hoursMinutes);
+  return mode === 'day' ? `${hours}/day` : `${hours}/wk`;
+}
+
+export function formatBucketHours(bucket: Bucket): string {
+  return formatHoursField(hoursModeOf(bucket), hoursMinutesOf(bucket));
 }
 
 export function dailyBudgets(buckets: Bucket[], dateKey: string): DailyBudgetMap {

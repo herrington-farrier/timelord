@@ -394,6 +394,181 @@ button.skip:hover:not(:disabled) {
   min-width: 0;
   line-height: 1.35;
 }
+.bucket-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--btn-radius);
+  min-height: 2.2rem;
+}
+.bucket-toggle:hover,
+.bucket-toggle:focus-visible {
+  background: var(--control);
+  border-color: transparent;
+}
+.bucket-hours {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.bucket-toggle::after {
+  content: "▸";
+  color: var(--muted);
+  font-weight: 500;
+}
+.bucket-card.is-open > .bucket-toggle::after { content: "▾"; }
+.bucket-body { margin-top: 10px; }
+.week-budget {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0 0 12px;
+  padding: 8px;
+  background: var(--bg-mid);
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+}
+.week-budget.is-over {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+.week-budget.is-over .total-card:nth-child(3) b,
+.week-budget.is-over .total-card:nth-child(4) b { color: var(--danger); }
+.bucket-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bucket-line,
+.personal-grid {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px 10px;
+  align-items: end;
+  min-width: 0;
+}
+.bucket-line > .field:has(input[name="name"]) {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+}
+.bucket-line > .field:has(input[type="color"]),
+.personal-grid > .field:has(input[type="color"]) {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: none;
+}
+.bucket-line > .field:has(select[name="slot"]) {
+  flex: 0 0 8rem;
+  min-width: 7.5rem;
+}
+.compact-hours {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.compact-hours > .field {
+  flex: none;
+  min-width: 0;
+}
+.compact-hours__label {
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.compact-hours input {
+  width: 3.6rem;
+  min-width: 3.6rem;
+  padding: 7px 8px;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.compact-hours input::-webkit-outer-spin-button,
+.compact-hours input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.personal-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.hours-mode {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 2.35rem;
+}
+.hours-mode label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 2.35rem;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.hours-mode input { width: auto; }
+.hours-mode label:has(input:checked) {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--control);
+}
+.bucket-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  align-items: center;
+}
+.bucket-remove {
+  margin-left: auto;
+  min-height: 2rem;
+  padding: 0.3em 0.7em;
+  font-size: 0.8rem;
+}
+.duration-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 12rem;
+  flex: 1 1 16rem;
+}
+.duration-fields__name {
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.duration-fields__inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.duration-fields .field {
+  min-width: 0;
+  flex: none;
+}
 .fields {
   display: flex;
   flex-wrap: wrap;
