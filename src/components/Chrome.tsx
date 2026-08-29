@@ -11,7 +11,7 @@ type Props = {
 
 const NAV = [
   { to: '/', label: 'Today' },
-  { to: '/calendar', label: '3-week' },
+  { to: '/calendar', label: '2-week' },
   { to: '/edit', label: 'Edit' },
   { to: '/log', label: 'Log' },
 ] as const;

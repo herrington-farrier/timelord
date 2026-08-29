@@ -1,5 +1,6 @@
 import {
   DEFAULT_SETTINGS,
+  EVENTS_ID,
   PERSONAL_ID,
   WEEKDAYS,
   WORK_ID,
@@ -34,8 +35,24 @@ export const WORK_BUCKET: Bucket = {
   color: 'f0c14a',
 };
 
+export const EVENTS_BUCKET: Bucket = {
+  id: EVENTS_ID,
+  kind: 'event',
+  name: 'Events',
+  weight: 0,
+  weeklyMinutes: 0,
+  hoursMode: 'week',
+  hoursMinutes: 0,
+  days: [...WEEKDAYS],
+  slot: 'morning',
+  color: 'c4923a',
+  startDate: '',
+  endDate: '',
+};
+
 export const SEED_BUCKETS: Bucket[] = [
   WORK_BUCKET,
+  EVENTS_BUCKET,
   {
     id: 'fitness',
     kind: 'weighted',
@@ -142,21 +159,27 @@ export function defaultSettings(): DaySettings {
 }
 
 export function canDeleteBucket(bucket: Bucket): boolean {
-  return bucket.kind === 'weighted' && bucket.id !== WORK_ID && bucket.id !== PERSONAL_ID;
+  return bucket.kind === 'weighted' && bucket.id !== WORK_ID && bucket.id !== PERSONAL_ID && bucket.id !== EVENTS_ID;
 }
 
 export function canRenameBucket(bucket: Bucket): boolean {
   return bucket.kind !== 'personal';
 }
 
-export function splitEditBuckets(buckets: Bucket[]): { personal: Bucket; work: Bucket; weighted: Bucket[] } {
+export function splitEditBuckets(buckets: Bucket[]): {
+  personal: Bucket;
+  work: Bucket;
+  events: Bucket;
+  weighted: Bucket[];
+} {
   const live = buckets.filter((b) => !b.archived);
   const personal = live.find((b) => b.kind === 'personal' || b.id === PERSONAL_ID) ?? PERSONAL_BUCKET;
   const work = live.find((b) => b.kind === 'work' || b.id === WORK_ID) ?? WORK_BUCKET;
+  const events = live.find((b) => b.kind === 'event' || b.id === EVENTS_ID) ?? EVENTS_BUCKET;
   const weighted = live
-    .filter((b) => b.kind === 'weighted' && b.id !== WORK_ID && b.id !== PERSONAL_ID)
+    .filter((b) => b.kind === 'weighted' && b.id !== WORK_ID && b.id !== PERSONAL_ID && b.id !== EVENTS_ID)
     .sort((a, b) => a.weight - b.weight);
-  return { personal, work, weighted };
+  return { personal, work, events, weighted };
 }
 
 export function listableBuckets(buckets: Bucket[]): Bucket[] {
@@ -169,5 +192,5 @@ export function bucketsToBackfill(existing: Bucket[]): Bucket[] {
   if (active.length === 0) {
     return [PERSONAL_BUCKET, ...SEED_BUCKETS];
   }
-  return [PERSONAL_BUCKET, WORK_BUCKET].filter((b) => !have.has(b.id));
+  return [PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET].filter((b) => !have.has(b.id));
 }

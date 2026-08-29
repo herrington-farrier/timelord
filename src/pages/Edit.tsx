@@ -2,11 +2,14 @@ import { useMemo, useState } from 'react';
 
 import { FormField } from '../components/FormField';
 import { SortableList } from '../components/SortableList';
+import { DaySectionsBar } from '../components/DaySectionsBar';
 import { WeekBudgetBar } from '../components/WeekBudgetBar';
 import { CollapsibleBucket } from '../components/CollapsibleBucket';
 import {
   assignedWeekMinutes,
+  collapsedSlotHours,
   derivedWeeklyMinutes,
+  eventsRangeLabel,
   formatBucketHours,
   formatHoursField,
   hoursMinutesOf,
@@ -15,10 +18,12 @@ import {
   weekBudgetSummary,
   type WeekBudgetSummary,
 } from '../domain/budget';
-import { formatDuration, formatTimeInput, hoursToMinutes, parseTimeInput, splitMinutes } from '../domain/duration';
+import { formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
 import { canDeleteBucket, canRenameBucket, listableBuckets, splitEditBuckets } from '../domain/seed';
 import {
+  EVENTS_ID,
   WEEKDAYS,
+  type Appointment,
   type Bucket,
   type Cadence,
   type DaySettings,
@@ -151,21 +156,16 @@ function DayForm({
   settings,
   onSave,
 }: {
-  settings: {
-    dayMinutes: number;
-    dayStartMinutes: number;
-    transitionMinutes: number;
-    timezone: string;
-    morningMinutes: number;
-    breakMinutes: number;
-    eveningMinutes: number;
-  };
+  settings: DaySettings;
   onSave: (payload: Record<string, unknown>) => Promise<void>;
 }) {
   const day = splitMinutes(settings.dayMinutes);
+  const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
+  const dayMinutes = liveMinutes ?? settings.dayMinutes;
   return (
     <form
       className="edit-page"
+      onInput={(e) => setLiveMinutes(durationFrom(e.currentTarget, 'day', settings.dayMinutes))}
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
@@ -177,15 +177,26 @@ function DayForm({
           morningMinutes: settings.morningMinutes,
           breakMinutes: settings.breakMinutes,
           eveningMinutes: settings.eveningMinutes,
+          timerSound: fd.get('timerSound') === 'on',
+          timerVibrate: fd.get('timerVibrate') === 'on',
         });
       }}
     >
+      <DaySectionsBar dayMinutes={dayMinutes} />
       <div className="edit-card meta-form">
         <div className="fields">
           <DurationFields name="day" label="Day Length" h={day.hours} m={day.minutes} />
           <FormField label="Transition minutes">
             <input name="trans" type="number" min={0} defaultValue={settings.transitionMinutes} />
           </FormField>
+          <label className="check">
+            <input name="timerSound" type="checkbox" defaultChecked={settings.timerSound !== false} />
+            Timer sound
+          </label>
+          <label className="check">
+            <input name="timerVibrate" type="checkbox" defaultChecked={settings.timerVibrate === true} />
+            Timer vibrate
+          </label>
         </div>
       </div>
       <div className="page-save">
@@ -225,7 +236,7 @@ function DurationFields({
 
 function inputValue(root: ParentNode, selector: string): string | null {
   const el = root.querySelector(selector);
-  return el instanceof HTMLInputElement ? el.value : null;
+  return el instanceof HTMLInputElement || el instanceof HTMLSelectElement ? el.value : null;
 }
 
 function durationFrom(root: ParentNode, prefix: string, fallback: number): number {
@@ -291,7 +302,7 @@ function BucketsForm({
   onRemove: (id: string) => Promise<void>;
   onReset: (id: string) => Promise<void>;
 }) {
-  const { personal, work, weighted } = splitEditBuckets(buckets);
+  const { personal, work, events, weighted } = splitEditBuckets(buckets);
   const ids = weighted.map((b) => b.id);
   const saved = useMemo(
     () => weekBudgetSummary(settings, assignedWeekMinutes(buckets)),
@@ -314,6 +325,7 @@ function BucketsForm({
       <WeekBudgetBar summary={live ?? saved} />
       <PersonalCard settings={settings} bucket={personal} />
       <BucketCard bucket={work} onReset={onReset} />
+      <EventsCard bucket={events} />
       <SortableList ids={ids} onReorder={(next) => onReorder(next)}>
         {(id) => {
           const bucket = weighted.find((b) => b.id === id);
@@ -340,6 +352,23 @@ function BucketsForm({
               const weight = Number(form.dataset.weight || 0);
               rows.push(bucketPayloadFromForm(form, { id, kind, weight }));
             });
+            const eventsForm = root.querySelector<HTMLFormElement>('form[data-kind="event"]');
+            if (eventsForm) {
+              const fd = new FormData(eventsForm);
+              rows.push({
+                id: EVENTS_ID,
+                kind: 'event',
+                name: 'Events',
+                weight: 0,
+                hoursMode: 'week',
+                hoursMinutes: 0,
+                days: WEEKDAYS,
+                slot: 'morning',
+                color: String(fd.get('color') || '').replace('#', ''),
+                startDate: String(fd.get('startDate') || ''),
+                endDate: String(fd.get('endDate') || ''),
+              });
+            }
             const addForm = root.querySelector<HTMLFormElement>('form[data-kind="new"]');
             if (addForm) {
               const payload = bucketPayloadFromForm(addForm, { kind: 'weighted', weight: weighted.length + 2 });
@@ -448,12 +477,13 @@ function BucketCard({
   return (
     <CollapsibleBucket
       title={bucket.name}
-      hours={formatBucketHours(bucket)}
+      hours={collapsedSlotHours(bucket.slot, formatBucketHours(bucket))}
       color={bucket.color}
       liveHours={(root) => {
         const form = root.querySelector('form');
-        if (!(form instanceof HTMLFormElement)) return formatBucketHours(bucket);
-        return formatHoursField(formHoursMode(form), durationFrom(form, 'w', 0));
+        if (!(form instanceof HTMLFormElement)) return collapsedSlotHours(bucket.slot, formatBucketHours(bucket));
+        const slot = (inputValue(form, 'select[name="slot"]') || bucket.slot) as Slot;
+        return collapsedSlotHours(slot, formatHoursField(formHoursMode(form), durationFrom(form, 'w', 0)));
       }}
     >
       <BucketFields
@@ -462,6 +492,42 @@ function BucketCard({
         onRemove={onRemove && canDeleteBucket(bucket) ? () => onRemove(bucket.id) : undefined}
         onReset={onReset ? () => onReset(bucket.id) : undefined}
       />
+    </CollapsibleBucket>
+  );
+}
+
+function EventsCard({ bucket }: { bucket: Bucket }) {
+  return (
+    <CollapsibleBucket
+      title="Events"
+      hours={eventsRangeLabel(bucket.startDate, bucket.endDate)}
+      color={bucket.color}
+      liveHours={(root) => {
+        const form = root.querySelector('form');
+        if (!(form instanceof HTMLFormElement)) return eventsRangeLabel(bucket.startDate, bucket.endDate);
+        return eventsRangeLabel(inputValue(form, 'input[name="startDate"]') || '', inputValue(form, 'input[name="endDate"]') || '');
+      }}
+    >
+      <form
+        key={`${bucket.startDate || ''}-${bucket.endDate || ''}-${bucket.color}`}
+        data-kind="event"
+        data-id={EVENTS_ID}
+        onSubmit={(e) => {
+          e.preventDefault();
+        }}
+      >
+        <div className="fields">
+          <FormField label="Start date">
+            <input name="startDate" type="date" defaultValue={bucket.startDate || ''} />
+          </FormField>
+          <FormField label="End date">
+            <input name="endDate" type="date" defaultValue={bucket.endDate || ''} />
+          </FormField>
+          <FormField label="Color">
+            <input name="color" type="color" defaultValue={`#${bucket.color || 'c4923a'}`} />
+          </FormField>
+        </div>
+      </form>
     </CollapsibleBucket>
   );
 }
@@ -589,7 +655,7 @@ function ListsForm({
                     <ItemFields
                       buckets={buckets}
                       item={row}
-                      onSubmit={(payload) => onSave({ id: row.id, weight: row.weight, ...payload })}
+                      onSubmit={(payload) => onSave({ id: row.id, ...payload })}
                     />
                     <div className="edit-acts">
                       <button type="button" className="danger" onClick={() => onRemove(row.id)}>
@@ -738,7 +804,7 @@ function ApptForm({
   onSave,
   onRemove,
 }: {
-  appointments: { id: string; title: string; date: string; startMinutes: number; durationMinutes: number; color?: string }[];
+  appointments: Appointment[];
   onSave: (row: Record<string, unknown>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
 }) {
@@ -753,7 +819,6 @@ function ApptForm({
           <div key={a.id} className="edit-card" style={{ ['--bcolor' as string]: `#${a.color || 'f87171'}` }}>
             <ApptFields
               appointment={a}
-              startMinutes={a.startMinutes}
               dur={dur}
               onSubmit={(payload) => onSave({ id: a.id, ...payload })}
             />
@@ -771,12 +836,10 @@ function ApptForm({
 
 function ApptFields({
   appointment,
-  startMinutes,
   dur,
   onSubmit,
 }: {
   appointment?: { title: string; date: string; color?: string };
-  startMinutes?: number;
   dur?: { hours: number; minutes: number };
   onSubmit: (payload: Record<string, unknown>) => void;
 }) {
@@ -788,7 +851,6 @@ function ApptFields({
         onSubmit({
           title: fd.get('title'),
           date: fd.get('date'),
-          startMinutes: parseTimeInput(fd.get('startTime')),
           durationMinutes: hoursToMinutes(fd.get('dH'), fd.get('dM')),
           color: String(fd.get('color') || '').replace('#', ''),
         });
@@ -800,9 +862,6 @@ function ApptFields({
         </FormField>
         <FormField label="Date">
           <input name="date" type="date" defaultValue={appointment?.date || ''} required />
-        </FormField>
-        <FormField label="Start Time">
-          <input name="startTime" type="time" defaultValue={formatTimeInput(startMinutes ?? 10 * 60)} required />
         </FormField>
         <DurationFields name="d" label="Duration" h={dur?.hours || 1} m={dur?.minutes || 0} />
         <FormField label="Color">

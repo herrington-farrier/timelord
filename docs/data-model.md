@@ -4,35 +4,41 @@ Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; onl
 
 ## settings/current
 
-- `dayMinutes`, `dayStartMinutes` (packer overlay for appointments; not a user start time), `transitionMinutes`, `timezone`
-- `morningMinutes`, `breakMinutes`, `eveningMinutes`
+- `dayMinutes` (productive time; split into three packer sections), `dayStartMinutes` (unused by the packer), `transitionMinutes`, `timezone`
+- `morningMinutes`, `breakMinutes`, `eveningMinutes` (Personal pause lengths; not in weekly capacity)
+- `timerSound`, `timerVibrate` (section timers and event stopwatch)
 - audit stamps
 
 ## buckets/{id}
 
-- `kind`: `personal | work | weighted`
+- `kind`: `personal | work | weighted | event`
 - `name`, `weight`, `hoursMode` (`week` | `day`, default `week`), `hoursMinutes` (the hours field)
-- `weeklyMinutes`: derived week total (`hoursMinutes` in week-mode; `hoursMinutes ×` checked days in day-mode). Docs that only have `weeklyMinutes` are week-mode with that total.
+- `weeklyMinutes`: derived week total (`hoursMinutes` in week-mode; `hoursMinutes ×` checked days in day-mode)
 - `days[]`, `slot`, `color`, `archived`
-- Work id is `work`. Personal id is `personal` (name/color). Morning Routine, Break, and Evening Routine durations live on settings. Personal has no Week/Day toggle.
+- Events: `startDate`, `endDate` (inclusive). No slot, no week hours.
+- Work id is `work` (weight 1). Personal id is `personal`. Events id is `events`. Morning Routine, Break, and Evening Routine durations live on settings.
 
 ## items/{id}
 
-- `bucketId`, `title`, `type` (`recurring` | `scheduled`), `weight`, `durationMinutes`
+- `bucketId`, `title`, `type` (`recurring` | `scheduled`), `weight`, `durationMinutes` (0 is a reminder; never dropped)
 - `cadence` object, optional `dueAt`, `archived`
 
 ## appointments/{id}
 
-- `title`, `date`, `startMinutes`, `durationMinutes`, `color`
+- `title`, `date`, `durationMinutes`, `color`
+- No start time. Today counts elapsed time up; stop subtracts from section capacity.
 
 ## days/{yyyy-mm-dd}
 
-- `blocks[]`, `dropped[]`, `droppedBuckets[]`, `startedAt`, `endedAt`, `packedAt`
-- Pack restamps `color` on packed and dropped rows from the current buckets and appointments. Unstarted days are packed fresh from current weights; started or ended days keep Complete / Skip.
+- `blocks[]` (each block may have `slot`), `dropped[]`, `droppedBuckets[]`, `startedAt`, `endedAt`, `packedAt`
+- `section` (`morning` | `midday` | `evening` | `event`), `sectionStartedAt`, `sectionRemainingMinutes`, `pausedAt`
+- `sectionExtra`, `sectionUsed` (leftover carry and appointment eat)
+- `eventStartedAt`, `appointmentRuns` (`{ startedAt?, elapsedMinutes? }` keyed by appointment id)
+- Pack restamps `color` from current buckets and appointments. Unstarted days pack fresh; started or ended days keep Complete / Skip.
 
 ## logs/{id}
 
-Append-only: `type`, `at`, `date`, `itemId`, `bucketId`, `minutes`. Never overwritten.
+Append-only: `type`, `at`, `date`, `itemId`, `bucketId`, `minutes`. Never overwritten. Event days log `event_hours`.
 
 ## skipPushes/{id}
 

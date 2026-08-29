@@ -10,10 +10,6 @@ export function WeekBudgetBar({ summary }: { summary: WeekBudgetSummary }) {
         <b>{formatDuration(summary.capacityMinutes)}</b>
       </div>
       <div className="total-card">
-        <span>Personal</span>
-        <b>{formatDuration(summary.personalMinutes)}</b>
-      </div>
-      <div className="total-card">
         <span>Assigned</span>
         <b>{formatDuration(summary.assignedMinutes)}</b>
       </div>

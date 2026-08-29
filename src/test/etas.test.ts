@@ -71,4 +71,27 @@ describe('recomputeEtas', () => {
     const updated = recomputeEtas(packed, 8 * 60 + 12, 10);
     expect(updated.find((b) => b.id === 'appt')?.startMinutes).toBe(10 * 60);
   });
+
+  it('keeps packed durations when the day starts late', () => {
+    const packed = [
+      block({ id: 'morning', title: 'Morning Routine', startMinutes: 7 * 60, durationMinutes: 60, bucketId: 'personal', kind: 'personal' }),
+      block({ id: 'chores', title: 'Floors', startMinutes: 8 * 60, durationMinutes: 40 }),
+      block({
+        id: 'appt',
+        title: 'Dentist',
+        startMinutes: 15 * 60,
+        durationMinutes: 60,
+        kind: 'appointment',
+        bucketId: 'appointment',
+        appointmentId: 'dentist',
+        flexible: false,
+        color: 'f87171',
+      }),
+    ];
+    const updated = recomputeEtas(packed, 13 * 60, 10);
+    expect(updated.find((b) => b.id === 'morning')?.durationMinutes).toBe(60);
+    expect(updated.find((b) => b.id === 'chores')?.durationMinutes).toBe(40);
+    expect(updated.find((b) => b.id === 'morning')?.startMinutes).toBe(13 * 60);
+    expect(updated.find((b) => b.id === 'appt')?.startMinutes).toBe(15 * 60);
+  });
 });

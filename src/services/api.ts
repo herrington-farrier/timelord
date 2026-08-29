@@ -29,6 +29,11 @@ export const api = {
   completeBlock: call<{ date: string; id: string }, { ok: boolean }>('completeBlock'),
   skipBlock: call<{ date: string; id: string }, { ok: boolean }>('skipBlock'),
   startDay: call<{ date: string }, { ok: boolean }>('startDay'),
+  startNext: call<{ date: string }, { ok: boolean }>('startNext'),
+  startBreak: call<{ date: string }, { ok: boolean }>('startBreak'),
+  endBreak: call<{ date: string }, { ok: boolean }>('endBreak'),
+  startAppointment: call<{ date: string; id: string }, { ok: boolean }>('startAppointment'),
+  stopAppointment: call<{ date: string; id: string }, { ok: boolean }>('stopAppointment'),
   endDay: call<{ date: string }, { ok: boolean }>('endDay'),
   wipeAccount: call<Record<string, never>, { ok: boolean }>('wipeAccount'),
 };

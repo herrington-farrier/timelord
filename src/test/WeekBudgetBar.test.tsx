@@ -12,8 +12,8 @@ describe('WeekBudgetBar', () => {
   });
 
   it('shows overage when assigned hours exceed the cap', () => {
-    render(<WeekBudgetBar summary={weekBudgetSummary(settings(), 91 * 60 + 30)} />);
+    render(<WeekBudgetBar summary={weekBudgetSummary(settings(), 110 * 60)} />);
     expect(screen.getByText('Over')).toBeInTheDocument();
-    expect(screen.getByText('18h')).toBeInTheDocument();
+    expect(screen.getByText('12h')).toBeInTheDocument();
   });
 });

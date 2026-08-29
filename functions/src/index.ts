@@ -6,8 +6,12 @@ import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes } from '../../src/domain/budget';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
 import { packRange } from '../../src/domain/packWeek';
+import { eatFromSections, isEventDay, nextSlot, sectionCapacity, usedFromEat } from '../../src/domain/sections';
 import { skipPushDate } from '../../src/domain/skip';
-import type { Appointment, Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Weekday } from '../../src/domain/types';
+import { elapsedSince, sectionRemainingNow } from '../../src/domain/timer';
+import { nextItemWeight } from '../../src/domain/order';
+import type { Appointment, Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Slot, Weekday } from '../../src/domain/types';
+import { EVENTS_ID } from '../../src/domain/types';
 import { stampCreated, stampLastUpdated } from './actorAudit';
 import { asNumber, asString, newId, requireUid } from './http';
 import { ensureTenant, loadTenant, tenantRef } from './tenant';
@@ -70,8 +74,24 @@ function bucketFields(data: Record<string, unknown>, resolvedKind: string, resol
     slot: asString(data.slot || 'morning', 'Time of day'),
     color: asString(data.color, 'Color').replace(/^#/, ''),
     archived: false,
+    startDate: typeof data.startDate === 'string' ? data.startDate : '',
+    endDate: typeof data.endDate === 'string' ? data.endDate : '',
   };
 }
+
+type DayState = {
+  blocks?: PackedBlock[];
+  startedAt?: string;
+  endedAt?: string;
+  section?: Slot | 'event' | null;
+  sectionStartedAt?: string | null;
+  sectionRemainingMinutes?: number | null;
+  pausedAt?: string | null;
+  sectionExtra?: Partial<Record<Slot, number>>;
+  sectionUsed?: Partial<Record<Slot, number>>;
+  eventStartedAt?: string | null;
+  appointmentRuns?: Record<string, { startedAt?: string; elapsedMinutes?: number }>;
+};
 
 async function writePackedRange(uid: string, start: string, days: number): Promise<void> {
   const loaded = await loadTenant(uid);
@@ -80,16 +100,26 @@ async function writePackedRange(uid: string, start: string, days: number): Promi
   const daysCol = tenantRef(uid).collection('days');
   for (const row of packed) {
     const prevSnap = await daysCol.doc(row.date).get();
-    const prev = prevSnap.exists ? (prevSnap.data() as { blocks?: PackedBlock[]; startedAt?: string; endedAt?: string }) : null;
+    const prev = prevSnap.exists ? (prevSnap.data() as DayState) : null;
     const reusePrevious = Boolean(prev?.blocks && (prev.startedAt || prev.endedAt));
+    const extra = prev?.sectionExtra;
+    const used = prev?.sectionUsed;
     const result = reusePrevious && prev?.blocks
-      ? domainCall(() => packDay(asPackInput(loaded, row.date, prev.blocks)))
-      : row.result;
+      ? domainCall(() => packDay(asPackInput(loaded, row.date, prev.blocks, extra, used)))
+      : domainCall(() => packDay(asPackInput(loaded, row.date, undefined, extra, used)));
     batch.set(daysCol.doc(row.date), {
       ...result,
       startedAt: prev?.startedAt || null,
       endedAt: prev?.endedAt || null,
       packedAt: nowIso(),
+      section: prev?.section ?? null,
+      sectionStartedAt: prev?.sectionStartedAt ?? null,
+      sectionRemainingMinutes: prev?.sectionRemainingMinutes ?? null,
+      pausedAt: prev?.pausedAt ?? null,
+      sectionExtra: extra || {},
+      sectionUsed: used || {},
+      eventStartedAt: prev?.eventStartedAt ?? null,
+      appointmentRuns: prev?.appointmentRuns || {},
     });
   }
   await batch.commit();
@@ -129,6 +159,8 @@ export const saveSettings = onCall(async (request) => {
     morningMinutes: asNumber(data.morningMinutes, 'Morning Routine'),
     breakMinutes: asNumber(data.breakMinutes, 'Break'),
     eveningMinutes: asNumber(data.eveningMinutes, 'Evening Routine'),
+    timerSound: data.timerSound !== false,
+    timerVibrate: data.timerVibrate === true,
   };
   if (patch.dayMinutes < 60) {
     throw new HttpsError('invalid-argument', 'Day length must be at least 1 hour.');
@@ -151,6 +183,10 @@ export const upsertBucket = onCall(async (request) => {
   let resolvedWeight = asNumber(data.weight, 'Priority');
   if (id === 'work') {
     resolvedKind = 'work';
+  }
+  if (id === EVENTS_ID) {
+    resolvedKind = 'event';
+    resolvedWeight = 0;
   }
   if (id === 'personal') {
     resolvedKind = 'personal';
@@ -195,7 +231,14 @@ export const saveBuckets = onCall(async (request) => {
     let resolvedKind = asString(row.kind || 'weighted', 'Kind');
     let resolvedName = asString(row.name, 'Name');
     let resolvedWeight = asNumber(row.weight, 'Priority');
-    if (id === 'work') resolvedKind = 'work';
+    if (id === 'work') {
+      resolvedKind = 'work';
+      resolvedWeight = 1;
+    }
+    if (id === EVENTS_ID) {
+      resolvedKind = 'event';
+      resolvedWeight = 0;
+    }
     if (id === 'personal') {
       resolvedKind = 'personal';
       resolvedName = 'Personal';
@@ -267,24 +310,31 @@ export const upsertItem = onCall(async (request) => {
   await ensureTenant(uid, nowIso());
   const data = request.data as Record<string, unknown>;
   const id = typeof data.id === 'string' && data.id.trim() ? data.id.trim() : newId();
-  const durationMinutes = asNumber(data.durationMinutes, 'Duration');
-  if (durationMinutes <= 0) {
-    throw new HttpsError('invalid-argument', 'Duration must be greater than 0.');
+  const durationMinutes = asNumber(data.durationMinutes ?? 0, 'Duration');
+  if (durationMinutes < 0) {
+    throw new HttpsError('invalid-argument', 'Duration cannot be negative.');
   }
+  const ref = tenantRef(uid).collection('items').doc(id);
+  const existing = await ref.get();
+  const storedWeight = existing.exists ? Number((existing.data() as { weight?: unknown }).weight) : NaN;
+  const weight = existing.exists
+    ? Number.isFinite(storedWeight)
+      ? storedWeight
+      : 1
+    : nextItemWeight((await loadTenant(uid)).items as ListItem[], asString(data.bucketId, 'Bucket'));
   const payload = {
     bucketId: asString(data.bucketId, 'Bucket'),
     title: asString(data.title, 'Title'),
     type: asString(data.type, 'Type'),
-    weight: asNumber(data.weight ?? 1, 'Priority'),
+    weight,
     durationMinutes,
     cadence: data.cadence || { kind: 'daily' },
     dueAt: typeof data.dueAt === 'string' ? data.dueAt : '',
     archived: false,
   };
-  const ref = tenantRef(uid).collection('items').doc(id);
-  const existing = await ref.get();
   const stamp = existing.exists ? await stampLastUpdated(uid, nowIso()) : await stampCreated(uid, nowIso());
   await ref.set({ ...payload, ...stamp }, { merge: true });
+  await writePackedRange(uid, todayKey(), 21);
   return { ok: true, id };
 });
 
@@ -311,6 +361,7 @@ export const archiveItem = onCall(async (request) => {
   const id = asString(request.data?.id, 'Item');
   const stamp = await stampLastUpdated(uid, nowIso());
   await tenantRef(uid).collection('items').doc(id).set({ archived: true, ...stamp }, { merge: true });
+  await writePackedRange(uid, todayKey(), 21);
   return { ok: true };
 });
 
@@ -346,7 +397,6 @@ export const upsertAppointment = onCall(async (request) => {
   const payload = {
     title: asString(data.title, 'Title'),
     date: asString(data.date, 'Date'),
-    startMinutes: asNumber(data.startMinutes, 'Start'),
     durationMinutes: asNumber(data.durationMinutes, 'Duration'),
     color: asString(data.color || 'f87171', 'Color').replace(/^#/, ''),
   };
@@ -367,7 +417,13 @@ export const archiveAppointment = onCall(async (request) => {
   return { ok: true };
 });
 
-function asPackInput(loaded: Awaited<ReturnType<typeof loadTenant>>, date: string, previous?: PackedBlock[]) {
+function asPackInput(
+  loaded: Awaited<ReturnType<typeof loadTenant>>,
+  date: string,
+  previous?: PackedBlock[],
+  extra?: Partial<Record<Slot, number>>,
+  used?: Partial<Record<Slot, number>>
+) {
   return {
     date,
     settings: loaded.settings as DaySettings,
@@ -375,6 +431,8 @@ function asPackInput(loaded: Awaited<ReturnType<typeof loadTenant>>, date: strin
     items: loaded.items as ListItem[],
     appointments: loaded.appointments as Appointment[],
     skipPushes: loaded.skipPushes as SkipPush[],
+    sectionExtra: extra,
+    sectionUsed: used,
     previous: previous?.map((b) => ({
       itemId: b.itemId,
       appointmentId: b.appointmentId,
@@ -428,14 +486,10 @@ export const completeBlock = onCall(async (request) => {
   const { block } = await patchBlock(uid, date, id, 'complete');
   const morning = block?.title === 'Morning Routine' || String(block?.id || '').endsWith(':morning');
   if (morning) {
-    const dayRef = tenantRef(uid).collection('days').doc(date);
-    const snap = await dayRef.get();
-    const existing = snap.data() as { startedAt?: string | null } | undefined;
-    if (!existing?.startedAt) {
-      const stamp = await stampLastUpdated(uid, nowIso());
-      await dayRef.set({ startedAt: nowIso(), ...stamp }, { merge: true });
-      await writeLog(uid, { type: 'start_day', date });
-    }
+    const loaded = await loadTenant(uid);
+    const events = (loaded.buckets as Bucket[]).find((b) => b.id === EVENTS_ID || b.kind === 'event');
+    await beginSection(uid, date, isEventDay(events, date) ? 'event' : 'morning');
+    await writeLog(uid, { type: 'start_day', date });
   }
   await writeLog(uid, {
     type: 'complete',
@@ -476,17 +530,213 @@ export const skipBlock = onCall(async (request) => {
   return { ok: true };
 });
 
+async function beginSection(uid: string, date: string, section: Slot | 'event'): Promise<void> {
+  const loaded = await loadTenant(uid);
+  const settings = loaded.settings as DaySettings;
+  const stamp = await stampLastUpdated(uid, nowIso());
+  const dayRef = tenantRef(uid).collection('days').doc(date);
+  const snap = await dayRef.get();
+  const prev = (snap.exists ? snap.data() : {}) as DayState;
+  if (section === 'event') {
+    await dayRef.set(
+      {
+        startedAt: prev.startedAt || nowIso(),
+        endedAt: null,
+        section: 'event',
+        eventStartedAt: nowIso(),
+        sectionStartedAt: nowIso(),
+        sectionRemainingMinutes: 0,
+        pausedAt: null,
+        ...stamp,
+      },
+      { merge: true }
+    );
+    return;
+  }
+  const extra = prev.sectionExtra || {};
+  const used = prev.sectionUsed || {};
+  const caps = sectionCapacity(settings, extra, used);
+  const blocks = (prev.blocks || []).map((b) =>
+    b.title === 'Morning Routine' || String(b.id || '').endsWith(':morning') ? { ...b, status: 'complete' as const } : b
+  );
+  await dayRef.set(
+    {
+      startedAt: prev.startedAt || nowIso(),
+      endedAt: null,
+      section,
+      sectionStartedAt: nowIso(),
+      sectionRemainingMinutes: caps[section],
+      pausedAt: null,
+      ...(blocks.length ? { blocks } : {}),
+      ...stamp,
+    },
+    { merge: true }
+  );
+}
+
 export const startDay = onCall(async (request) => {
   const uid = requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
-  const stamp = await stampLastUpdated(uid, nowIso());
-  await tenantRef(uid)
-    .collection('days')
-    .doc(date)
-    .set({ startedAt: nowIso(), ...stamp }, { merge: true });
+  const loaded = await loadTenant(uid);
+  const events = (loaded.buckets as Bucket[]).find((b) => b.id === EVENTS_ID || b.kind === 'event');
+  await beginSection(uid, date, isEventDay(events, date) ? 'event' : 'morning');
   await writeLog(uid, { type: 'start_day', date });
   return { ok: true };
 });
+
+export const startNext = onCall(async (request) => {
+  const uid = requireUid(request);
+  const date = asString(request.data?.date || todayKey(), 'Date');
+  const dayRef = tenantRef(uid).collection('days').doc(date);
+  const snap = await dayRef.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
+  const data = snap.data() as DayState & { blocks: PackedBlock[]; dropped: PackedBlock[] };
+  const section = data.section;
+  if (!section || section === 'event') throw new HttpsError('failed-precondition', 'No section to leave.');
+  const leftover = Math.round(
+    sectionRemainingNow(data.sectionRemainingMinutes || 0, data.sectionStartedAt, data.pausedAt, Date.now())
+  );
+  const next = nextSlot(section);
+  const stamp = await stampLastUpdated(uid, nowIso());
+  const mark = (rows: PackedBlock[]) =>
+    rows.map((b) => {
+      if (b.slot === section && b.itemId && (b.status === 'pending' || b.status === 'dropped')) {
+        return { ...b, status: 'skipped' as const };
+      }
+      return b;
+    });
+  const blocks = mark(data.blocks || []);
+  const dropped = mark(data.dropped || []);
+  const loaded = await loadTenant(uid);
+  const pushes = collectEndDaySkipPushes(
+    date,
+    blocks.filter((b) => b.slot === section),
+    dropped.filter((b) => b.slot === section),
+    loaded.items as ListItem[],
+    loaded.buckets as Bucket[]
+  );
+  const extra = { ...(data.sectionExtra || {}) };
+  if (next) extra[next] = (extra[next] || 0) + leftover;
+  const used = data.sectionUsed || {};
+  const caps = sectionCapacity(loaded.settings as DaySettings, extra, used);
+  if (!next || caps[next] <= 0) {
+    await dayRef.set({ blocks, dropped, endedAt: nowIso(), pausedAt: null, section: null, ...stamp }, { merge: true });
+    await writeSkipPushes(uid, date, pushes);
+    await writeLog(uid, { type: 'end_day', date });
+    return { ok: true };
+  }
+  const result = domainCall(() => packDay(asPackInput(loaded, date, blocks, extra, used)));
+  const merged = result.blocks.map((b) => {
+    const prev = blocks.find((p) => p.itemId && p.itemId === b.itemId);
+    return prev && (prev.status === 'complete' || prev.status === 'skipped') ? { ...b, status: prev.status } : b;
+  });
+  await dayRef.set(
+    {
+      ...result,
+      blocks: merged,
+      startedAt: data.startedAt,
+      section: next,
+      sectionExtra: extra,
+      sectionUsed: used,
+      sectionStartedAt: nowIso(),
+      sectionRemainingMinutes: caps[next],
+      pausedAt: null,
+      packedAt: nowIso(),
+      ...stamp,
+    },
+    { merge: true }
+  );
+  await writeSkipPushes(uid, date, pushes);
+  await writeLog(uid, { type: 'start_next', date });
+  return { ok: true };
+});
+
+export const startBreak = onCall(async (request) => {
+  const uid = requireUid(request);
+  const date = asString(request.data?.date || todayKey(), 'Date');
+  const dayRef = tenantRef(uid).collection('days').doc(date);
+  const snap = await dayRef.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
+  const data = snap.data() as DayState;
+  const remaining = sectionRemainingNow(data.sectionRemainingMinutes || 0, data.sectionStartedAt, data.pausedAt, Date.now());
+  const stamp = await stampLastUpdated(uid, nowIso());
+  await dayRef.set({ pausedAt: nowIso(), sectionRemainingMinutes: remaining, ...stamp }, { merge: true });
+  await writeLog(uid, { type: 'start_break', date });
+  return { ok: true };
+});
+
+export const endBreak = onCall(async (request) => {
+  const uid = requireUid(request);
+  const date = asString(request.data?.date || todayKey(), 'Date');
+  const stamp = await stampLastUpdated(uid, nowIso());
+  await tenantRef(uid).collection('days').doc(date).set({ pausedAt: null, sectionStartedAt: nowIso(), ...stamp }, { merge: true });
+  await writeLog(uid, { type: 'end_break', date });
+  return { ok: true };
+});
+
+export const startAppointment = onCall(async (request) => {
+  const uid = requireUid(request);
+  const date = asString(request.data?.date || todayKey(), 'Date');
+  const id = asString(request.data?.id, 'Appointment');
+  const dayRef = tenantRef(uid).collection('days').doc(date);
+  const snap = await dayRef.get();
+  const data = (snap.exists ? snap.data() : {}) as DayState;
+  const runs = { ...(data.appointmentRuns || {}) };
+  runs[id] = { ...runs[id], startedAt: nowIso() };
+  const stamp = await stampLastUpdated(uid, nowIso());
+  await dayRef.set({ appointmentRuns: runs, ...stamp }, { merge: true });
+  return { ok: true };
+});
+
+export const stopAppointment = onCall(async (request) => {
+  const uid = requireUid(request);
+  const date = asString(request.data?.date || todayKey(), 'Date');
+  const id = asString(request.data?.id, 'Appointment');
+  const dayRef = tenantRef(uid).collection('days').doc(date);
+  const snap = await dayRef.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
+  const data = snap.data() as DayState & { blocks: PackedBlock[] };
+  const run = data.appointmentRuns?.[id];
+  if (!run?.startedAt) throw new HttpsError('failed-precondition', 'That appointment is not running.');
+  const elapsed = Math.round((run.elapsedMinutes || 0) + elapsedSince(run.startedAt, Date.now()));
+  const section = data.section && data.section !== 'event' ? data.section : 'morning';
+  const loaded = await loadTenant(uid);
+  const settings = loaded.settings as DaySettings;
+  const extra = data.sectionExtra || {};
+  const remainingCaps = sectionCapacity(settings, extra, data.sectionUsed);
+  const after = eatFromSections(remainingCaps, section, elapsed);
+  const used = usedFromEat(sectionCapacity(settings, extra, {}), after);
+  const eatenHere = remainingCaps[section] - after[section];
+  const nowRemain = sectionRemainingNow(data.sectionRemainingMinutes || 0, data.sectionStartedAt, data.pausedAt, Date.now());
+  const result = domainCall(() => packDay(asPackInput(loaded, date, data.blocks, extra, used)));
+  const stamp = await stampLastUpdated(uid, nowIso());
+  const runs = { ...(data.appointmentRuns || {}) };
+  runs[id] = { elapsedMinutes: elapsed };
+  await dayRef.set(
+    {
+      ...result,
+      sectionUsed: used,
+      sectionRemainingMinutes: Math.max(0, nowRemain - eatenHere),
+      sectionStartedAt: data.pausedAt ? data.sectionStartedAt : nowIso(),
+      appointmentRuns: runs,
+      packedAt: nowIso(),
+      ...stamp,
+    },
+    { merge: true }
+  );
+  await writeLog(uid, { type: 'appointment_stop', date, minutes: elapsed });
+  return { ok: true };
+});
+
+async function writeSkipPushes(uid: string, date: string, pushes: SkipPush[]): Promise<void> {
+  if (!pushes.length) return;
+  const stamp = await stampCreated(uid, nowIso());
+  const batch = getFirestore().batch();
+  for (const push of pushes) {
+    batch.set(tenantRef(uid).collection('skipPushes').doc(newId()), { ...push, fromDate: date, ...stamp });
+  }
+  await batch.commit();
+}
 
 export const endDay = onCall(async (request) => {
   const uid = requireUid(request);
@@ -494,7 +744,7 @@ export const endDay = onCall(async (request) => {
   const dayRef = tenantRef(uid).collection('days').doc(date);
   const snap = await dayRef.get();
   if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
-  const data = snap.data() as { blocks: PackedBlock[]; dropped: PackedBlock[] };
+  const data = snap.data() as DayState & { blocks: PackedBlock[]; dropped: PackedBlock[] };
   const loaded = await loadTenant(uid);
   const pushes = collectEndDaySkipPushes(
     date,
@@ -506,29 +756,32 @@ export const endDay = onCall(async (request) => {
   const stamp = await stampLastUpdated(uid, nowIso());
   const mark = (rows: PackedBlock[]) =>
     rows.map((b) => {
-      if (b.itemId && b.status === 'pending') {
-        return { ...b, status: 'skipped' as const };
-      }
-      if (b.itemId && b.status === 'dropped') {
+      if (b.itemId && (b.status === 'pending' || b.status === 'dropped')) {
         return { ...b, status: 'skipped' as const };
       }
       return b;
     });
+  const evening = (data.blocks || []).map((b) =>
+    b.title === 'Evening Routine' || String(b.id || '').endsWith(':evening') ? { ...b, status: 'complete' as const } : b
+  );
+  const eventMinutes =
+    data.section === 'event' && data.eventStartedAt ? Math.round(elapsedSince(data.eventStartedAt, Date.now())) : 0;
   await dayRef.set(
     {
-      blocks: mark(data.blocks || []),
+      blocks: mark(evening),
       dropped: mark(data.dropped || []),
       endedAt: nowIso(),
+      pausedAt: null,
+      section: null,
+      sectionStartedAt: null,
+      sectionRemainingMinutes: null,
+      eventStartedAt: null,
       ...stamp,
     },
     { merge: true }
   );
-  const batch = getFirestore().batch();
-  for (const push of pushes) {
-    const ref = tenantRef(uid).collection('skipPushes').doc(newId());
-    batch.set(ref, { ...push, fromDate: date, ...(await stampCreated(uid, nowIso())) });
-  }
-  if (pushes.length) await batch.commit();
+  await writeSkipPushes(uid, date, pushes);
+  if (eventMinutes) await writeLog(uid, { type: 'event_hours', date, minutes: eventMinutes });
   await writeLog(uid, { type: 'end_day', date });
   return { ok: true };
 });

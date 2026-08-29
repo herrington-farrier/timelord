@@ -23,3 +23,8 @@ export function applyBucketOrder(buckets: Bucket[], weightedOrderIds: string[]):
 export function sortByWeight<T extends { weight: number; id: string }>(rows: T[]): T[] {
   return rows.slice().sort((a, b) => a.weight - b.weight || a.id.localeCompare(b.id));
 }
+
+export function nextItemWeight(items: ListItem[], bucketId: string): number {
+  const weights = items.filter((i) => i.bucketId === bucketId && !i.archived).map((i) => i.weight);
+  return weights.length ? Math.max(...weights) + 1 : 1;
+}

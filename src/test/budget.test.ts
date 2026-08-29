@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assignWeeklyBudgets, assignableWeekMinutes, assignedWeekMinutes, dailyBudgetFor, formatBucketHours, weekBudgetSummary, weeklyCapacity } from '../domain/budget';
+import { assignWeeklyBudgets, assignableWeekMinutes, assignedWeekMinutes, collapsedSlotHours, dailyBudgetFor, eventsRangeLabel, formatBucketHours, weekBudgetSummary, weeklyCapacity } from '../domain/budget';
 import { PERSONAL_BUCKET, SEED_BUCKETS } from '../domain/seed';
 import { bucket, settings, workBucket } from './fixtures';
 
@@ -9,9 +9,8 @@ describe('weekly budget', () => {
     expect(weeklyCapacity(settings({ dayMinutes: 14 * 60 }))).toBe(14 * 60 * 7);
   });
 
-  it('reserves Personal 1h + 30m + 2h before weighted assignment', () => {
-    const personal = (60 + 30 + 120) * 7;
-    expect(assignableWeekMinutes(settings())).toBe(14 * 60 * 7 - personal);
+  it('uses the full week as assignable time without subtracting Personal', () => {
+    expect(assignableWeekMinutes(settings())).toBe(14 * 60 * 7);
   });
 
   it('does not dump leftover weekly minutes into Work', () => {
@@ -23,7 +22,7 @@ describe('weekly budget', () => {
   });
 
   it('throws when assignments exceed assignable hours', () => {
-    const work = workBucket({ weeklyMinutes: 80 * 60 });
+    const work = workBucket({ weeklyMinutes: 100 * 60 });
     expect(() => assignWeeklyBudgets(settings(), [work])).toThrow(/exceed/);
   });
 
@@ -33,7 +32,7 @@ describe('weekly budget', () => {
     expect(() => assignWeeklyBudgets(settings(), [work, house])).not.toThrow();
   });
 
-  it('packs seed weekly hours under a 14h day after Personal', () => {
+  it('packs seed weekly hours under a 14h week', () => {
     expect(() => assignWeeklyBudgets(settings(), [PERSONAL_BUCKET, ...SEED_BUCKETS])).not.toThrow();
   });
 
@@ -47,9 +46,9 @@ describe('weekly budget', () => {
   });
 
   it('reports a negative leftover when assigned hours exceed the cap', () => {
-    const summary = weekBudgetSummary(settings(), 91 * 60 + 30);
-    expect(summary.assignableMinutes).toBe(73 * 60 + 30);
-    expect(summary.leftoverMinutes).toBe(-18 * 60);
+    const summary = weekBudgetSummary(settings(), 110 * 60);
+    expect(summary.assignableMinutes).toBe(98 * 60);
+    expect(summary.leftoverMinutes).toBe(-12 * 60);
   });
 
   it('gives a Mon/Wed/Fri bucket zero budget on Tuesday', () => {
@@ -119,5 +118,14 @@ describe('weekly budget', () => {
         })
       )
     ).toBe('2h/day');
+  });
+
+  it('puts slot next to hours on collapsed Work and weighted rows', () => {
+    expect(collapsedSlotHours('morning', '8h/wk')).toBe('morning · 8h/wk');
+  });
+
+  it('labels an Events range or off', () => {
+    expect(eventsRangeLabel('2026-08-29', '2026-09-02')).toBe('2026-08-29–2026-09-02');
+    expect(eventsRangeLabel('', '')).toBe('off');
   });
 });

@@ -1,36 +1,53 @@
 # Logic map
 
-Timelord packs a day from Personal anchors, appointments, then buckets by **weight** (lower number = higher priority). Extra weekly hours stay open for dropped items. Overflow **buckets** drop as a unit when they do not fit remaining slot time; overflow **items** inside a placed bucket drop by item weight. Remaining gaps after pack are filled with dropped items, higher-priority buckets first.
+Timelord packs **productive** time only. `dayMinutes` splits into three equal sections (`floor(dayMinutes / 3)`, remainder on evening). Personal (Morning Routine, Break, Evening Routine) pauses productivity and is not in weekly capacity. Assignable week hours = `dayMinutes × 7`. The packer uses section timers and bucket caps, not a clock.
+
+Buckets pack by **weight** (lower number = higher priority) inside their slot. Each bucket’s assigned hours are a **cap**: items compete only for that bucket’s time. A bucket does not expand to fill the section. Going over on a bucket does not steal from later buckets or later sections. Extra section time moves **forward only** when you hit **Start Next** before the section timer hits zero.
+
+0-duration items never drop; they stay on the list in weight order (reminders). Item order is unique weight only.
 
 ## Day container
 
-`dayMinutes` is the full day, including Morning Routine, Break, Evening Routine, Work, other buckets, appointments, and transitions. Weekly capacity = `dayMinutes × 7`. Edit → Buckets shows a live total of assigned weekly hours vs hours left after Personal. Leftover week time stays open so dropped items can fill it. Save refuses a week that is over that cap.
+Edit → Day shows the live morning / midday / evening section lengths, plus timer sound / vibrate. Edit → Buckets shows assigned weekly hours vs leftover. Personal hours are not subtracted from the week. Leftover week time stays unassigned. Save refuses a week that is over that cap.
 
-Each Edit tab has one **Save** (Lists and Appointments keep row Save / Remove). After a successful write, today + 21 packed days rebuild so Today and Calendar match. Buckets Save is `saveBuckets`: Personal settings + every Work/weighted bucket (Add New if named), cap check, then pack. Drag-reorder and archive also rebuild. Unstarted days always pack from current list order; started or ended days keep Complete / Skip.
+Each Edit tab has one **Save** (Lists and Appointments keep row Save / Remove). After a successful write, today + 21 packed days rebuild. Buckets Save is `saveBuckets`: Personal settings + Work + Events + weighted buckets (Add New if named), cap check, then pack. Item Save keeps the stored list weight. Unstarted days pack from current list order; started or ended days keep Complete / Skip.
 
-Work and weighted buckets set hours as **Week** (total split across checked days) or **Day** (that many hours on each checked day; week total = hours × days). Collapsed rows show `8h/wk` or `2h/day`. Packer daily budget: week-mode `floor(weeklyMinutes / days.length)` on a checked day; day-mode `hoursMinutes` on a checked day.
+Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show `slot · 8h/wk` (Personal: hours only). Packer daily budget: week-mode `floor(weeklyMinutes / days.length)` on a checked day; day-mode `hoursMinutes` on a checked day.
 
 ## Locked vs customizable
 
-- **Personal** always exists and is shown on Edit → Buckets as a collapsible row with weekly hours. Morning Routine, Break, and Evening Routine durations are editable. Color can change. Cannot be renamed, removed, or given a list.
-- **Work** always exists and is shown on Edit → Buckets, weight 1, occupies midday. List items pack first in drag order; leftover work minutes are an invisible lowest-priority filler at the end. Break splits a work block only if it is longer than 3 hours; if Break would land in a list item of 3 hours or less, Break moves after that item. Can be **renamed** and recolored. Cannot be deleted. Days of week and Week/Day hours are editable.
-- **Weighted buckets** can be added, removed, renamed, recolored, reweighted, and given days / slot / Week or Day hours. Each bucket is a collapsible row with the hours you set on that line.
-- Day length and transition minutes are settings. The clock starts when you tap **Start Day** or complete **Morning Routine**; remaining hours (day length minus morning) get start/end times from that timestamp.
+- **Personal** always exists. Morning Routine, Break, and Evening Routine durations are editable. Color can change. Cannot be renamed, removed, or given a list. Does not consume week hours.
+- **Work** always exists, weight 1, first in **its** slot (slot is editable). Cannot be deleted or drag-reordered. Break is tied to Work and centered in the Work block (2-hour split). If Work has no items that day, Break still lands once in Work’s slot.
+- **Events** always exists. Date range on the bucket. No slot, no week hours, no day sections. Cannot be deleted.
+- **Weighted buckets** can be added, removed, renamed, recolored, reweighted, and given days / slot / Week or Day hours.
 
-## Clock order
+## Today (normal day)
 
-Morning Routine → morning buckets (by weight) → work list items → Break (may split a block longer than 3 hours) → remaining work items → generic Work → other midday buckets → evening buckets → Evening Routine.
+Buttons transform in place:
 
-Appointments punch holes and never move. They stay visually distinct on Today (Appt tag, locked clock) and the 3-week view (filled chips, start time, pinned to the top of each cell). The 3-week grid starts on Sunday so weekday columns match. The side list starts at today. Each day shows scheduled hours (personal, work, other buckets, appointments, and transitions): green under 50% of day length, gold from 50–85%, red above 85%. One transition between different buckets, and between Morning / Break / Evening. None between list items in the same bucket.
+- Morning Routine: Start → End. Ending it **is** Start Day: morning section countdown begins.
+- After Start Day, Today lists **this section only** (placed + falling-off) plus Personal pause controls.
+- Break: Start Break / End Break pauses/resumes the current section timer.
+- Morning and midday bottom: **Start Next** + time remaining. Auto-skips unmarked items in the section you leave, adds leftover minutes to the next section, and repacks. If leftover + next section is 0, auto End Day.
+- Evening: Start Evening Routine **is** End Day.
+- Appointments sit at the top of the section list. Each has Start/Stop and counts **up**. On Stop, elapsed time is subtracted from the current section, then following sections; remaining sections repack. Appointments never sound.
+
+Section timers use the Day sound/vibrate toggles. Going over a bucket does not steal later time.
+
+## Events
+
+If today is inside the Events date range: **event day**. Show Personal + Events list items only. No morning/midday/evening, no Break. Start Day / End Day are a count-up stopwatch. Total event hours are logged.
+
+## Calendar and list
+
+The 2-week Sunday board and side list stay. Hours marks at the top of each list day and cell count **productive** packed minutes (no Personal), colored vs `dayMinutes` (green under 50%, gold 50–85%, red above). Chips are `title · duration` (title only if 0). No clocks. Appointments are visually distinct and first in the cell. List order is section, then weight. Falling-off stays at the bottom of that day. Event days: one list of event items; hours mark is that day’s event time.
 
 ## Lists
 
-Recurring = cadence forever. Scheduled = due date + cadence. Skip scheduled → next assigned day for that bucket. Skip recurring → no makeup.
+Recurring = cadence forever. Scheduled = due date + cadence. Skip scheduled → next assigned day for that bucket. Skip recurring → no makeup. Skip-push is scheduled-only.
 
-Start Day (or completing Morning Routine) chains remaining flexible ETAs from now. Appointments stay put. End Day: leftover scheduled skip-push; leftover recurring drop. Pack restamps packed block colors from the current buckets.
-
-Falling off lists dropped buckets and dropped items. Each item still needs Complete or Skip.
+End Day: leftover scheduled skip-push; leftover recurring drop. Next day starts clean.
 
 ## Controls
 
-Menu, Start Day (top of Today), End Day (after the packed day), Complete / Skip, Save, and Remove share high-contrast control styles. The current page is marked in the menu.
+Menu, transforming Start/End, Start Next, Complete / Skip, Save, and Remove share high-contrast control styles. The chrome is navy and antique gold from the app icon. The current page is marked in the menu.

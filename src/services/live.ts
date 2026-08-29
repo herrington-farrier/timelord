@@ -1,7 +1,7 @@
 import { collection, doc, onSnapshot, query, where, type DocumentData } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
-import type { Appointment, Bucket, DaySettings, ListItem } from '../domain/types';
+import type { Appointment, Bucket, DaySettings, ListItem, Slot } from '../domain/types';
 import type { DroppedBucket } from '../domain/packDay';
 import type { PackedBlock } from '../domain/types';
 import { db } from './firebase';
@@ -16,6 +16,14 @@ export type DayDoc = {
   startedAt?: string | null;
   endedAt?: string | null;
   packedAt?: string | null;
+  section?: Slot | 'event' | null;
+  sectionStartedAt?: string | null;
+  sectionRemainingMinutes?: number | null;
+  pausedAt?: string | null;
+  sectionExtra?: Partial<Record<Slot, number>>;
+  sectionUsed?: Partial<Record<Slot, number>>;
+  eventStartedAt?: string | null;
+  appointmentRuns?: Record<string, { startedAt?: string; elapsedMinutes?: number }>;
 };
 
 function tenantCol(uid: string, name: string) {

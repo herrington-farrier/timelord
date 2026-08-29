@@ -4,16 +4,16 @@ Personal day packer. Sign in with Google. Each account owns its own schedule.
 
 **App:** https://timelord-e0c80.web.app
 
-Today packs Personal, Work, weighted buckets, and appointments. Complete or Skip as you go. Start Day or completing Morning Routine starts the clock from now; remaining hours get start and end times from that moment. End Day clears leftovers. Priorities are drag-and-drop.
+Today runs productive-day section timers. Personal pauses (Morning Routine, Break, Evening Routine) do not consume week hours. End Morning Routine starts the morning countdown; Start Next carries leftover time into the next section. Appointments are duration-only and count up. Events can turn a date range into an unsectioned event day. Overflow is falling-off. Priorities are drag-and-drop.
 
 ## Screens
 
-- **Today** — packed day, Start Day / End Day, Complete / Skip, Falling off
-- **3-week** — calendar
-- **Edit** — day length, live weekly hours vs Personal, Week/Day hours on Work and other buckets, lists, appointments
+- **Today** — section countdown, Start Next, Break pause, appointment stopwatches, Complete / Skip, Falling off
+- **2-week** — calendar, Today / Next 2wks, packed-hours marks, duration chips
+- **Edit** — day length and timer sound/vibrate, weekly hours, Events date range, lists, duration-only appointments
 - **Log** — append-only events
 
-Work stays first and cannot be deleted. Other buckets can be added, removed, renamed, or recolored. Lower-priority buckets drop as a unit when the day is full.
+Work stays first in its slot and cannot be deleted. Events is locked and uses a date range. Other buckets can be added, removed, renamed, or recolored.
 
 ## Run locally
 

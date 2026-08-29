@@ -1,6 +1,6 @@
 import { weekdayFromKey } from './cadence';
 import { formatDuration } from './duration';
-import { PERSONAL_ID, WORK_ID, type Bucket, type DaySettings, type HoursMode, type Weekday } from './types';
+import { EVENTS_ID, PERSONAL_ID, WORK_ID, type Bucket, type DaySettings, type HoursMode, type Slot, type Weekday } from './types';
 
 export type DailyBudgetMap = Record<string, number>;
 
@@ -18,12 +18,12 @@ export function personalWeekMinutes(settings: DaySettings): number {
 }
 
 export function assignableWeekMinutes(settings: DaySettings): number {
-  return weeklyCapacity(settings) - personalWeekMinutes(settings);
+  return weeklyCapacity(settings);
 }
 
 export function assignedWeekMinutes(buckets: Bucket[]): number {
   return buckets
-    .filter((b) => !b.archived && b.kind !== 'personal' && b.id !== PERSONAL_ID)
+    .filter((b) => !b.archived && b.kind !== 'personal' && b.kind !== 'event' && b.id !== PERSONAL_ID && b.id !== EVENTS_ID)
     .reduce((sum, b) => sum + bucketAssignedMinutes(b), 0);
 }
 
@@ -58,12 +58,11 @@ export type WeekBudgetSummary = {
 
 export function weekBudgetSummary(settings: DaySettings, assignedMinutes: number): WeekBudgetSummary {
   const capacityMinutes = weeklyCapacity(settings);
-  const personalMinutes = personalWeekMinutes(settings);
   const assignableMinutes = assignableWeekMinutes(settings);
   const assigned = minutes(assignedMinutes);
   return {
     capacityMinutes,
-    personalMinutes,
+    personalMinutes: 0,
     assignableMinutes,
     assignedMinutes: assigned,
     leftoverMinutes: assignableMinutes - assigned,
@@ -76,7 +75,7 @@ export function activeDays(bucket: Bucket): Weekday[] {
 
 /**
  * Stamp derived weeklyMinutes. Throws if user assignments exceed assignable time.
- * Leftover week minutes stay unassigned so the packer can fill them with dropped items.
+ * Leftover week minutes stay unassigned. The packer does not spend them on falling-off items.
  */
 export function assignWeeklyBudgets(settings: DaySettings, buckets: Bucket[]): Bucket[] {
   const work = buckets.find((b) => !b.archived && (b.kind === 'work' || b.id === WORK_ID));
@@ -87,14 +86,14 @@ export function assignWeeklyBudgets(settings: DaySettings, buckets: Bucket[]): B
   const userSum = assignedWeekMinutes(buckets);
   if (userSum > assignable) {
     throw new Error(
-      `Bucket weekly hours (${formatDuration(userSum)}) exceed the ${formatDuration(assignable)} left after Personal.`
+      `Bucket weekly hours (${formatDuration(userSum)}) exceed the ${formatDuration(assignable)} week.`
     );
   }
   return buckets.map((b) => ({ ...b, weeklyMinutes: bucketAssignedMinutes(b) }));
 }
 
 export function dailyBudgetFor(bucket: Bucket, dateKey: string): number {
-  if (bucket.archived || bucket.kind === 'personal') return 0;
+  if (bucket.archived || bucket.kind === 'personal' || bucket.kind === 'event') return 0;
   const days = activeDays(bucket);
   if (!days.length) return 0;
   if (!days.includes(weekdayFromKey(dateKey))) return 0;
@@ -113,6 +112,15 @@ export function formatHoursField(mode: HoursMode, hoursMinutes: number): string 
 
 export function formatBucketHours(bucket: Bucket): string {
   return formatHoursField(hoursModeOf(bucket), hoursMinutesOf(bucket));
+}
+
+export function collapsedSlotHours(slot: Slot, hours: string): string {
+  return `${slot} · ${hours}`;
+}
+
+export function eventsRangeLabel(startDate?: string, endDate?: string): string {
+  if (startDate && endDate) return `${startDate}–${endDate}`;
+  return 'off';
 }
 
 export function dailyBudgets(buckets: Bucket[], dateKey: string): DailyBudgetMap {
