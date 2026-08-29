@@ -116,6 +116,27 @@ describe('packDay', () => {
     expect(appt?.endMinutes).toBe(11 * 60);
   });
 
+  it('places items around appointments', () => {
+    const house = bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 120, days: ['Mon'], slot: 'midday' });
+    const result = packDay({
+      ...base(),
+      buckets: [workBucket({ weeklyMinutes: 0, days: ['Tue'] }), house],
+      items: [
+        item({ id: 'a', bucketId: 'house', title: 'Before', weight: 1, durationMinutes: 30 }),
+        item({ id: 'b', bucketId: 'house', title: 'After', weight: 2, durationMinutes: 30 }),
+      ],
+      appointments: [{ id: 'meeting', title: 'Meeting', date: monday, startMinutes: 12 * 60, durationMinutes: 60 }],
+    });
+    const meeting = result.blocks.find((b) => b.appointmentId === 'meeting');
+    const itemBlocks = result.blocks.filter((b) => b.bucketId === 'house');
+    expect(meeting).toBeDefined();
+    expect(itemBlocks.length).toBe(2);
+    for (const block of itemBlocks) {
+      const overlaps = block.startMinutes < meeting!.endMinutes && block.endMinutes > meeting!.startMinutes;
+      expect(overlaps).toBe(false);
+    }
+  });
+
   it('preserves complete status on rebuild for the same item', () => {
     const house = bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 60, days: ['Mon'] });
     const dishes = item({ id: 'dishes', bucketId: 'house', title: 'Dishes', durationMinutes: 20 });
