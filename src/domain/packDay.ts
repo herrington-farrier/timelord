@@ -370,6 +370,33 @@ export function packDay(input: PackDayInput): PackDayResult {
     }
   }
 
+  // Adjust generic work blocks to only show remaining unaccounted time
+  const workItemBlocks = blocks.filter((b) => b.kind === 'work' && b.itemId);
+  function adjustWorkBlock(genericBlock: PackedBlock | undefined) {
+    if (!genericBlock) return;
+    const itemsInWindow = workItemBlocks.filter(
+      (b) => b.startMinutes >= genericBlock.startMinutes && b.endMinutes <= genericBlock.endMinutes
+    );
+    const itemMinutes = itemsInWindow.reduce((s, b) => s + b.durationMinutes, 0);
+    const remaining = genericBlock.durationMinutes - itemMinutes;
+    if (remaining <= 0) {
+      const idx = blocks.indexOf(genericBlock);
+      if (idx >= 0) blocks.splice(idx, 1);
+    } else {
+      const lastItem = itemsInWindow.sort((a, b) => b.endMinutes - a.endMinutes)[0];
+      if (lastItem) {
+        genericBlock.startMinutes = lastItem.endMinutes;
+        genericBlock.durationMinutes = remaining;
+        genericBlock.endMinutes = genericBlock.startMinutes + remaining;
+      } else {
+        genericBlock.durationMinutes = remaining;
+        genericBlock.endMinutes = genericBlock.startMinutes + remaining;
+      }
+    }
+  }
+  adjustWorkBlock(work1Block);
+  adjustWorkBlock(work2Block);
+
   const middayBuckets = buckets
     .filter((b) => !b.archived && b.kind === 'weighted' && b.slot === 'midday' && (remainingBudget[b.id] || 0) > 0)
     .sort((a, b) => a.weight - b.weight);
