@@ -9,7 +9,8 @@
   --head: #7d8fa3;
   --gold: #f0c14a;
   --gold-bg: rgba(240, 193, 74, 0.14);
-  --sand: #e7d5c5;
+  --accent: #5b9bd5;
+  --accent-hover: #7ab3e8;
   --danger: #f87171;
   --danger-bg: rgba(248, 113, 113, 0.16);
   --ok: #86efac;
@@ -88,7 +89,7 @@ button:hover:not(:disabled),
 .chrome-btn:hover,
 .tab:hover {
   background: var(--control-hover);
-  border-color: var(--sand);
+  border-color: var(--accent);
   color: var(--text);
 }
 button:focus-visible,
@@ -104,16 +105,16 @@ button:disabled {
 button.primary,
 .chrome-btn.is-on,
 .tab.is-on {
-  background: var(--sand);
+  background: var(--accent);
   color: var(--bg);
-  border-color: var(--sand);
+  border-color: var(--accent);
   font-weight: 700;
 }
 button.primary:hover:not(:disabled),
 .chrome-btn.is-on:hover,
 .tab.is-on:hover {
-  background: var(--gold);
-  border-color: var(--gold);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   color: var(--bg);
 }
 .btn--success {
@@ -231,7 +232,7 @@ button.skip:hover:not(:disabled) {
 .buffer:before, .buffer:after {
   content: ""; flex: 1; height: 1px; background: var(--border);
 }
-.opts { font-size: 0.8rem; color: var(--sand); margin-top: 6px; }
+.opts { font-size: 0.8rem; color: var(--accent); margin-top: 6px; }
 .fall-wrap h2 {
   margin: 8px 0 8px;
   font-size: 0.85rem;
@@ -376,7 +377,7 @@ button.skip:hover:not(:disabled) {
   border-left: 4px solid var(--bcolor, var(--border));
 }
 .add-card { border-left-color: var(--gold); }
-.meta-form { border-left-color: var(--sand); }
+.meta-form { border-left-color: var(--accent); }
 .bucket-card { border-left-width: 5px; }
 .bucket-head {
   display: flex;
