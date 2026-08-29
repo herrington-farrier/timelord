@@ -97,6 +97,9 @@ export function EditPage() {
               await rebuild();
             })
           }
+          onReset={(id) =>
+            act('Bucket reset.', () => api.resetBucket({ id }))
+          }
         />
       ) : null}
       {tab === 'lists' ? (
@@ -281,12 +284,14 @@ function BucketsForm({
   onSave,
   onReorder,
   onRemove,
+  onReset,
 }: {
   settings: DaySettings;
   buckets: Bucket[];
   onSave: (payload: Record<string, unknown>) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
+  onReset: (id: string) => Promise<void>;
 }) {
   const { personal, work, weighted } = splitEditBuckets(buckets);
   const ids = weighted.map((b) => b.id);
@@ -310,12 +315,12 @@ function BucketsForm({
     >
       <WeekBudgetBar summary={live ?? saved} />
       <PersonalCard settings={settings} bucket={personal} />
-      <BucketCard bucket={work} locked />
+      <BucketCard bucket={work} onReset={onReset} />
       <SortableList ids={ids} onReorder={(next) => onReorder(next)}>
         {(id) => {
           const bucket = weighted.find((b) => b.id === id);
           if (!bucket) return null;
-          return <BucketCard bucket={bucket} onRemove={onRemove} />;
+          return <BucketCard bucket={bucket} onRemove={onRemove} onReset={onReset} />;
         }}
       </SortableList>
       <div className="edit-card add-card">
@@ -436,11 +441,11 @@ function PersonalCard({ settings, bucket }: { settings: DaySettings; bucket: Buc
 function BucketCard({
   bucket,
   onRemove,
-  locked,
+  onReset,
 }: {
   bucket: Bucket;
   onRemove?: (id: string) => Promise<void>;
-  locked?: boolean;
+  onReset?: (id: string) => Promise<void>;
 }) {
   return (
     <CollapsibleBucket
@@ -456,7 +461,8 @@ function BucketCard({
       <BucketFields
         bucket={bucket}
         kind={bucket.kind === 'work' ? 'work' : 'weighted'}
-        onRemove={onRemove && !locked && canDeleteBucket(bucket) ? () => onRemove(bucket.id) : undefined}
+        onRemove={onRemove && canDeleteBucket(bucket) ? () => onRemove(bucket.id) : undefined}
+        onReset={onReset ? () => onReset(bucket.id) : undefined}
       />
     </CollapsibleBucket>
   );
@@ -466,10 +472,12 @@ function BucketFields({
   bucket,
   kind,
   onRemove,
+  onReset,
 }: {
   bucket?: Bucket;
   kind: 'work' | 'weighted' | 'new';
   onRemove?: () => void;
+  onReset?: () => void;
 }) {
   const hours = splitMinutes(bucket ? hoursMinutesOf(bucket) : 0);
   const mode = bucket ? hoursModeOf(bucket) : 'week';
@@ -520,6 +528,11 @@ function BucketFields({
               {d}
             </label>
           ))}
+          {onReset ? (
+            <button type="button" className="skip bucket-remove" onClick={onReset}>
+              Reset
+            </button>
+          ) : null}
           {onRemove ? (
             <button type="button" className="danger bucket-remove" onClick={onRemove}>
               Remove

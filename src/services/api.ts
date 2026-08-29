@@ -18,6 +18,7 @@ export const api = {
   saveSettings: call<Record<string, unknown>, { ok: boolean }>('saveSettings'),
   saveBuckets: call<Record<string, unknown>, { ok: boolean }>('saveBuckets'),
   archiveBucket: call<{ id: string }, { ok: boolean }>('archiveBucket'),
+  resetBucket: call<{ id: string }, { ok: boolean }>('resetBucket'),
   reorderBuckets: call<{ weightedOrderIds: string[] }, { ok: boolean }>('reorderBuckets'),
   upsertItem: call<Record<string, unknown>, { ok: boolean; id: string }>('upsertItem'),
   archiveItem: call<{ id: string }, { ok: boolean }>('archiveItem'),
