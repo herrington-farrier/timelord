@@ -90,6 +90,7 @@ export function packDay(input: PackDayInput): PackDayResult {
   const buckets = assignWeeklyBudgets(settings, input.buckets);
   const work = buckets.find((b) => b.kind === 'work' && !b.archived);
   if (!work) throw new Error('Work bucket is required.');
+  const personal = buckets.find((b) => b.kind === 'personal' || b.id === PERSONAL_ID);
 
   const dayStart = settings.dayStartMinutes;
   const dayEnd = dayStart + settings.dayMinutes;
@@ -124,7 +125,7 @@ export function packDay(input: PackDayInput): PackDayResult {
     return block;
   }
 
-  const personalColor = 'e7d5c5';
+  const personalColor = personal?.color || '5b9bd5';
   pushBlock({
     id: blockId(date, 'morning'),
     bucketId: PERSONAL_ID,

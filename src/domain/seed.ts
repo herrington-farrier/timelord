@@ -18,7 +18,7 @@ export const PERSONAL_BUCKET: Bucket = {
   hoursMinutes: 0,
   days: [...WEEKDAYS],
   slot: 'morning',
-  color: 'e7d5c5',
+  color: '5b9bd5',
 };
 
 export const WORK_BUCKET: Bucket = {
