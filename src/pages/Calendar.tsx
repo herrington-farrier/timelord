@@ -2,12 +2,13 @@ import { useState } from 'react';
 
 import { formatDuration } from '../domain/duration';
 import { slotIndex } from '../domain/sections';
-import { isEventPacked } from '../domain/today';
+import { isBreakBlock, isEventPacked } from '../domain/today';
 import { addDaysKey, todayKey, weekStart } from '../shared/dates';
+import { isEventDay } from '../domain/sections';
 import { useAuth } from '../shared/auth';
-import { useDays, useSettings } from '../services/live';
+import { useBuckets, useDays, useSettings } from '../services/live';
 import { Chrome } from '../components/Chrome';
-import type { PackedBlock } from '../domain/types';
+import { EVENTS_ID, type PackedBlock } from '../domain/types';
 
 const BOARD_DAYS = 14;
 
@@ -30,7 +31,11 @@ export function CalendarPage() {
   const listKeys = listKeysFrom(boardKeys, today);
   const days = useDays(user?.uid, boardStart, boardKeys[boardKeys.length - 1]);
   const settings = useSettings(user?.uid);
+  const buckets = useBuckets(user?.uid);
+  const events = buckets.find((b) => b.id === EVENTS_ID || b.kind === 'event');
+  const eventColor = events?.color ? `#${events.color}` : undefined;
   const dayMinutes = settings?.dayMinutes || 0;
+  const mark = (on: boolean) => (on && eventColor ? { ['--bcolor' as string]: eventColor } : undefined);
 
   return (
     <Chrome title="2-week" wide>
@@ -40,11 +45,15 @@ export function CalendarPage() {
             const day = days[key];
             const placed = listChips(day?.blocks || []);
             const falling = fallingChips(day?.dropped);
-            if (!placed.length && !falling.length) return null;
+            const eventDay = isEventDay(events, key);
+            if (!listShowsDay(placed, falling, eventDay)) return null;
             const hours = scheduledMinutes(day?.blocks || []);
             return (
               <div key={key}>
-                <div className="cal-day-h">
+                <div
+                  className={`cal-day-h${eventDay ? ' is-event' : ''}`}
+                  style={mark(eventDay)}
+                >
                   {key}
                   {key === today ? ' · today' : ''}
                   {hours > 0 ? (
@@ -84,8 +93,13 @@ export function CalendarPage() {
               const placed = visibleChips(placedChips(day?.blocks || []));
               const falling = fallingChips(day?.dropped);
               const hours = scheduledMinutes(day?.blocks || []);
+              const eventDay = isEventDay(events, key);
               return (
-                <div key={key} className={`cal-cell${key === today ? ' is-today' : ''}`}>
+                <div
+                  key={key}
+                  className={`cal-cell${key === today ? ' is-today' : ''}${eventDay ? ' is-event' : ''}`}
+                  style={mark(eventDay)}
+                >
                   <div className="cal-cell-num">
                     <span>{key.slice(8)}</span>
                     <HoursMark minutes={hours} dayMinutes={dayMinutes} />
@@ -111,10 +125,17 @@ function HoursMark({ minutes, dayMinutes }: { minutes: number; dayMinutes: numbe
   return <span className={`cal-hrs cal-hrs--${loadTone(minutes, dayMinutes)}`}>{formatDuration(minutes)}</span>;
 }
 
+export function isAccentChip(block: PackedBlock): boolean {
+  return block.kind === 'appointment' || block.kind === 'event' || block.bucketId === EVENTS_ID;
+}
+
 function Chip({ block, overflow }: { block: PackedBlock; overflow?: boolean }) {
-  const appt = block.kind === 'appointment';
+  const brk = isBreakBlock(block);
   return (
-    <div className={`cal-chip${overflow ? ' overflow' : ''}${appt ? ' cal-chip--appt' : ''}`} style={{ ['--bcolor' as string]: `#${block.color}` }}>
+    <div
+      className={`cal-chip${overflow ? ' overflow' : ''}${isAccentChip(block) ? ' cal-chip--appt' : ''}${brk ? ' cal-chip--break' : ''}`}
+      style={{ ['--bcolor' as string]: `#${block.color}` }}
+    >
       {block.title}
       {block.durationMinutes ? ` · ${formatDuration(block.durationMinutes)}` : ''}
     </div>
@@ -139,14 +160,21 @@ export function listKeysFrom(boardKeys: string[], today: string): string[] {
   return boardKeys.filter((key) => key >= today);
 }
 
+export function listShowsDay(
+  placed: PackedBlock[],
+  falling: PackedBlock[],
+  eventDay: boolean
+): boolean {
+  return eventDay || placed.length > 0 || falling.length > 0;
+}
+
 export function placedChips(blocks: PackedBlock[]): PackedBlock[] {
-  return blocks.filter((b) => b.kind !== 'transition' && b.kind !== 'personal');
+  return blocks.filter((b) => b.kind !== 'transition' && (b.kind !== 'personal' || isBreakBlock(b)));
 }
 
 function listRank(block: PackedBlock): number {
   if (block.title === 'Morning Routine') return -2;
   if (block.title === 'Evening Routine') return 2;
-  if (block.title === 'Break') return 1;
   return 0;
 }
 
@@ -154,20 +182,25 @@ export function listChips(blocks: PackedBlock[]): PackedBlock[] {
   if (isEventPacked(blocks)) {
     return blocks.filter((b) => b.kind !== 'transition' && b.kind !== 'personal');
   }
-  return blocks
-    .filter((b) => b.kind !== 'transition')
+  const rows = blocks.filter((b) => b.kind !== 'transition');
+  const accent = rows.filter((b) => isAccentChip(b));
+  const rest = rows
+    .filter((b) => !isAccentChip(b))
     .sort(
       (a, b) =>
         slotIndex(a.slot) - slotIndex(b.slot) ||
         listRank(a) - listRank(b) ||
         a.startMinutes - b.startMinutes
     );
+  return [...accent, ...rest];
 }
 
 export function orderChips(blocks: PackedBlock[]): PackedBlock[] {
-  const appts = blocks.filter((b) => b.kind === 'appointment');
-  const rest = blocks.filter((b) => b.kind !== 'appointment');
-  return [...appts, ...rest];
+  const accent = blocks.filter((b) => isAccentChip(b));
+  const rest = blocks
+    .filter((b) => !isAccentChip(b))
+    .sort((a, b) => slotIndex(a.slot) - slotIndex(b.slot) || a.startMinutes - b.startMinutes);
+  return [...accent, ...rest];
 }
 
 export function fallingChips(dropped: PackedBlock[] | undefined): PackedBlock[] {

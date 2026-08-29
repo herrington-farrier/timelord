@@ -61,6 +61,7 @@ function prevStatus(previous: PreviousBlock[] | undefined, itemId?: string, appo
 function itemHitsDate(item: ListItem, dateKey: string, skipPushes: SkipPush[]): boolean {
   if (item.archived) return false;
   if (skipPushes.some((p) => p.itemId === item.id && p.toDate === dateKey)) return true;
+  if (item.bucketId === EVENTS_ID) return item.dueAt === dateKey;
   return cadenceHitsDate(item.cadence, dateKey);
 }
 
@@ -91,13 +92,15 @@ export function packDay(input: PackDayInput): PackDayResult {
   function pushBlock(
     partial: Omit<PackedBlock, 'date' | 'endMinutes' | 'durationMinutes'> & { durationMinutes: number }
   ): PackedBlock {
+    const { slot, ...rest } = partial;
     const block: PackedBlock = {
-      ...partial,
+      ...rest,
       date,
       startMinutes: partial.startMinutes,
       endMinutes: partial.startMinutes + partial.durationMinutes,
       durationMinutes: partial.durationMinutes,
     };
+    if (slot) block.slot = slot;
     const saved = prevStatus(previous, block.itemId, block.appointmentId);
     if (saved && (saved.status === 'complete' || saved.status === 'skipped')) {
       block.status = saved.status;
@@ -114,14 +117,14 @@ export function packDay(input: PackDayInput): PackDayResult {
       bucketId: bucket.id,
       itemId: item.id,
       title: item.title,
-      kind: bucket.kind === 'work' ? 'work' : bucket.kind === 'event' ? 'weighted' : 'weighted',
+      kind: bucket.kind === 'work' ? 'work' : bucket.kind === 'event' ? 'event' : 'weighted',
       startMinutes: 0,
       endMinutes: item.durationMinutes,
       durationMinutes: item.durationMinutes,
       status: 'dropped',
       color: bucket.color,
       flexible: true,
-      slot: bucket.kind === 'event' ? undefined : bucket.slot,
+      ...(bucket.kind === 'event' ? {} : { slot: bucket.slot }),
     });
   }
 
@@ -177,7 +180,7 @@ export function packDay(input: PackDayInput): PackDayResult {
       bucketId: bucket.id,
       itemId: item.id,
       title: item.title,
-      kind: bucket.kind === 'work' ? 'work' : 'weighted',
+      kind: bucket.kind === 'work' ? 'work' : bucket.kind === 'event' ? 'event' : 'weighted',
       startMinutes: order++,
       durationMinutes: item.durationMinutes,
       status: 'pending',
@@ -204,13 +207,18 @@ export function packDay(input: PackDayInput): PackDayResult {
     };
   }
 
+  if (events) {
+    for (const item of hittingFor(events)) {
+      placeItem(item, events);
+    }
+  }
+
   const remainingBudget: Record<string, number> = {};
   for (const b of buckets) remainingBudget[b.id] = dailyBudgetFor(b, date);
 
   const caps = sectionCapacity(settings, input.sectionExtra, input.sectionUsed);
 
   function placeBreak(slot: Slot): void {
-    if (settings.breakMinutes <= 0) return;
     pushBlock({
       id: blockId(date, 'break'),
       bucketId: PERSONAL_ID,
@@ -313,7 +321,10 @@ export function packDay(input: PackDayInput): PackDayResult {
 
   for (const slot of SLOTS) {
     let left = caps[slot];
-    const inSlot = live.filter((b) => b.slot === slot);
+    const inSlot = live.filter((b) => {
+      const slotOf = b.kind === 'work' || b.id === WORK_ID ? (SLOTS.includes(b.slot) ? b.slot : 'midday') : b.slot;
+      return slotOf === slot;
+    });
     for (const bucket of inSlot) {
       if (bucket.kind === 'work' || bucket.id === WORK_ID) {
         left = placeWorkInSlot(slot, left);
@@ -366,8 +377,10 @@ export function packDay(input: PackDayInput): PackDayResult {
   blocks.sort((a, b) => {
     const sa = slotIndex(a.slot);
     const sb = slotIndex(b.slot);
-    if (a.kind === 'appointment' && b.kind !== 'appointment') return -1;
-    if (b.kind === 'appointment' && a.kind !== 'appointment') return 1;
+    const aAccent = a.kind === 'appointment' || a.kind === 'event';
+    const bAccent = b.kind === 'appointment' || b.kind === 'event';
+    if (aAccent && !bAccent) return -1;
+    if (bAccent && !aAccent) return 1;
     if (sa !== sb) return sa - sb;
     return a.startMinutes - b.startMinutes;
   });

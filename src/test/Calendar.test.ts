@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardStartFor, fallingChips, listChips, listKeysFrom, loadTone, orderChips, placedChips, scheduledMinutes, visibleChips } from '../pages/Calendar';
+import { boardStartFor, fallingChips, isAccentChip, listChips, listKeysFrom, listShowsDay, loadTone, orderChips, placedChips, scheduledMinutes, visibleChips } from '../pages/Calendar';
 import { weekStart } from '../shared/dates';
 import type { PackedBlock } from '../domain/types';
 
@@ -53,8 +53,10 @@ describe('placedChips', () => {
       block({ id: 'trans', kind: 'transition' }),
       block({ id: 'house', kind: 'weighted' }),
       block({ id: 'meet', kind: 'appointment' }),
+      block({ id: 'trip', kind: 'event', bucketId: 'events' }),
+      block({ id: 'break', kind: 'personal', title: 'Break' }),
     ]);
-    expect(shown.map((b) => b.id)).toEqual(['house', 'meet']);
+    expect(shown.map((b) => b.id)).toEqual(['house', 'meet', 'trip', 'break']);
   });
 });
 
@@ -62,10 +64,37 @@ describe('listChips', () => {
   it('lists event-day items without section grouping', () => {
     const shown = listChips([
       block({ id: 'morning', kind: 'personal', title: 'Morning Routine', slot: 'morning' }),
-      block({ id: 'trip', kind: 'weighted', title: 'Travel', durationMinutes: 0 }),
+      block({ id: 'trip', kind: 'event', bucketId: 'events', title: 'Travel', durationMinutes: 0 }),
       block({ id: 'evening', kind: 'personal', title: 'Evening Routine', slot: 'evening' }),
     ]);
     expect(shown.map((b) => b.id)).toEqual(['trip']);
+  });
+
+  it('still lists Break when work chips have no slot', () => {
+    const shown = listChips([
+      block({ id: 'w1', kind: 'work', title: 'Deep' }),
+      block({ id: 'd:break', kind: 'personal', title: 'Break' }),
+      block({ id: 'w2', kind: 'work', title: 'Deep' }),
+    ]);
+    expect(shown.map((b) => b.id)).toEqual(['w1', 'd:break', 'w2']);
+  });
+
+  it('keeps Break between Work halves', () => {
+    const shown = listChips([
+      block({ id: 'w2', kind: 'work', slot: 'midday', title: 'Deep', startMinutes: 3 }),
+      block({ id: 'break', kind: 'personal', slot: 'midday', title: 'Break', startMinutes: 2 }),
+      block({ id: 'w1', kind: 'work', slot: 'midday', title: 'Deep', startMinutes: 1 }),
+    ]);
+    expect(shown.map((b) => b.id)).toEqual(['w1', 'break', 'w2']);
+  });
+
+  it('pins event items on a normal day', () => {
+    const shown = listChips([
+      block({ id: 'house', kind: 'weighted', slot: 'morning', title: 'Floors' }),
+      block({ id: 'trip', kind: 'event', bucketId: 'events', title: 'Travel' }),
+      block({ id: 'morning', kind: 'personal', slot: 'morning', title: 'Morning Routine' }),
+    ]);
+    expect(shown.map((b) => b.id)).toEqual(['trip', 'morning', 'house']);
   });
 
   it('orders the list by section, not clock', () => {
@@ -88,6 +117,17 @@ describe('orderChips', () => {
     ]);
     expect(shown.map((b) => b.id)).toEqual(['meet', 'house']);
   });
+
+  it('pins event items with appointments', () => {
+    const shown = orderChips([
+      block({ id: 'house', kind: 'weighted' }),
+      block({ id: 'trip', kind: 'event', bucketId: 'events' }),
+    ]);
+    expect(shown.map((b) => b.id)).toEqual(['trip', 'house']);
+    expect(isAccentChip(block({ id: 'trip', kind: 'event', bucketId: 'events' }))).toBe(true);
+    expect(isAccentChip(block({ id: 'meet', kind: 'appointment' }))).toBe(true);
+    expect(isAccentChip(block({ id: 'house', kind: 'weighted' }))).toBe(false);
+  });
 });
 
 describe('fallingChips', () => {
@@ -98,6 +138,14 @@ describe('fallingChips', () => {
       block({ id: 'g3', kind: 'weighted', status: 'dropped', bucketId: 'garden' }),
     ]);
     expect(shown.map((b) => b.id)).toEqual(['g1', 'g2', 'g3']);
+  });
+});
+
+describe('listShowsDay', () => {
+  it('keeps an empty event day on the list', () => {
+    expect(listShowsDay([], [], true)).toBe(true);
+    expect(listShowsDay([], [], false)).toBe(false);
+    expect(listShowsDay([block({ id: 'house', kind: 'weighted' })], [], false)).toBe(true);
   });
 });
 

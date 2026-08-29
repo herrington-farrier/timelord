@@ -125,7 +125,9 @@ describe('weekly budget', () => {
   });
 
   it('labels an Events range or off', () => {
-    expect(eventsRangeLabel('2026-08-29', '2026-09-02')).toBe('2026-08-29–2026-09-02');
+    expect(eventsRangeLabel('2026-12-12', '2027-09-17')).toBe('280d, Dec 12, 2026/Sep 17, 2027');
+    expect(eventsRangeLabel('2026-08-29', '2026-09-02')).toBe('5d, Aug 29/Sep 2');
+    expect(eventsRangeLabel('2026-12-12', '2026-12-12')).toBe('1d, Dec 12');
     expect(eventsRangeLabel('', '')).toBe('off');
   });
 });

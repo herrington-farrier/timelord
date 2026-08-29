@@ -22,6 +22,7 @@ Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; onl
 
 - `bucketId`, `title`, `type` (`recurring` | `scheduled`), `weight`, `durationMinutes` (0 is a reminder; never dropped)
 - `cadence` object, optional `dueAt`, `archived`
+- Events items are always `scheduled`. `dueAt` is the date they pack; cadence is unused.
 
 ## appointments/{id}
 

@@ -65,7 +65,7 @@ export type Appointment = {
   startMinutes?: number;
 };
 
-export type BlockKind = 'personal' | 'work' | 'weighted' | 'appointment' | 'transition';
+export type BlockKind = 'personal' | 'work' | 'weighted' | 'appointment' | 'event' | 'transition';
 
 export type BlockStatus = 'pending' | 'complete' | 'skipped' | 'dropped';
 

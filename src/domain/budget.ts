@@ -1,4 +1,4 @@
-import { weekdayFromKey } from './cadence';
+import { daysBetween, weekdayFromKey } from './cadence';
 import { formatDuration } from './duration';
 import { EVENTS_ID, PERSONAL_ID, WORK_ID, type Bucket, type DaySettings, type HoursMode, type Slot, type Weekday } from './types';
 
@@ -118,9 +118,23 @@ export function collapsedSlotHours(slot: Slot, hours: string): string {
   return `${slot} · ${hours}`;
 }
 
+function formatRangeDay(dateKey: string, withYear: boolean): string {
+  const [y, mo, d] = dateKey.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+    ...(withYear ? { year: 'numeric' } : {}),
+  });
+}
+
 export function eventsRangeLabel(startDate?: string, endDate?: string): string {
-  if (startDate && endDate) return `${startDate}–${endDate}`;
-  return 'off';
+  if (!startDate || !endDate || endDate < startDate) return 'off';
+  const days = daysBetween(startDate, endDate) + 1;
+  if (days === 1) return `1d, ${formatRangeDay(startDate, false)}`;
+  const years = startDate.slice(0, 4) !== endDate.slice(0, 4);
+  return `${days}d, ${formatRangeDay(startDate, years)}/${formatRangeDay(endDate, years)}`;
 }
 
 export function dailyBudgets(buckets: Bucket[], dateKey: string): DailyBudgetMap {

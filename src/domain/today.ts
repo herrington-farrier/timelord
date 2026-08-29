@@ -35,7 +35,11 @@ export function todayEventItems(blocks: PackedBlock[]): PackedBlock[] {
 
 export function isEventPacked(blocks: PackedBlock[]): boolean {
   const productive = blocks.filter((b) => b.kind !== 'personal' && b.kind !== 'transition');
-  return productive.length > 0 && productive.every((b) => !b.slot);
+  return productive.length > 0 && productive.every((b) => b.kind === 'event');
+}
+
+export function isBreakBlock(block: { title?: string; id?: string }): boolean {
+  return block.title === 'Break' || String(block.id || '').endsWith(':break');
 }
 
 export function signalSectionEnd(sound: boolean, vibrate: boolean): void {

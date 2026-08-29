@@ -17,8 +17,8 @@ Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show 
 ## Locked vs customizable
 
 - **Personal** always exists. Morning Routine, Break, and Evening Routine durations are editable. Color can change. Cannot be renamed, removed, or given a list. Does not consume week hours.
-- **Work** always exists, weight 1, first in **its** slot (slot is editable). Cannot be deleted or drag-reordered. Break is tied to Work and centered in the Work block (2-hour split). If Work has no items that day, Break still lands once in Work’s slot.
-- **Events** always exists. Date range on the bucket. No slot, no week hours, no day sections. Cannot be deleted.
+- **Work** always exists, weight 1, first in **its** slot (slot is editable). Cannot be deleted or drag-reordered. Break is tied to Work and centered in the Work block (2-hour split). Today, the 2-week board, and the side list keep Break between those Work halves. If Work has no items that day, Break still lands once in Work’s slot.
+- **Events** always exists. Date range on the bucket. Collapsed row shows `5d, Aug 29/Sep 2`. No slot, no week hours, no day sections. Cannot be deleted.
 - **Weighted buckets** can be added, removed, renamed, recolored, reweighted, and given days / slot / Week or Day hours.
 
 ## Today (normal day)
@@ -38,9 +38,11 @@ Section timers use the Day sound/vibrate toggles. Going over a bucket does not s
 
 If today is inside the Events date range: **event day**. Show Personal + Events list items only. No morning/midday/evening, no Break. Start Day / End Day are a count-up stopwatch. Total event hours are logged.
 
+Events list items are **scheduled only**: date + duration, no cadence. They pack on that date. Calendar chips use the same filled treatment as appointments and pin to the top of the cell.
+
 ## Calendar and list
 
-The 2-week Sunday board and side list stay. Hours marks at the top of each list day and cell count **productive** packed minutes (no Personal), colored vs `dayMinutes` (green under 50%, gold 50–85%, red above). Chips are `title · duration` (title only if 0). No clocks. Appointments are visually distinct and first in the cell. List order is section, then weight. Falling-off stays at the bottom of that day. Event days: one list of event items; hours mark is that day’s event time.
+The 2-week Sunday board and side list stay. Hours marks at the top of each list day and cell count **productive** packed minutes (no Personal), colored vs `dayMinutes` (green under 50%, gold 50–85%, red above). Chips are `title · duration` (title only if 0). No clocks. Appointments and Events are visually distinct and first in the cell and list. Other list items follow section, then weight. Falling-off stays at the bottom of that day. Event days (the Events date range) outline the cell and list day in the Events color even when empty. Event items also show on a normal day on their date.
 
 ## Lists
 

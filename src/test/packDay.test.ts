@@ -144,9 +144,21 @@ describe('packDay', () => {
     });
     const workBlocks = result.blocks.filter((b) => b.itemId === 'deep');
     const brk = result.blocks.find((b) => b.title === 'Break');
-    expect(workBlocks.length).toBe(2);
-    expect(brk).toBeDefined();
+    expect(workBlocks).toHaveLength(2);
     expect(brk?.slot).toBe('midday');
+    expect(workBlocks[0].startMinutes).toBeLessThan(brk?.startMinutes ?? 0);
+    expect(brk?.startMinutes ?? 0).toBeLessThan(workBlocks[1].startMinutes);
+    expect(workBlocks[0].durationMinutes).toBe(2 * 60);
+  });
+
+  it('places Break even when Personal break hours are 0', () => {
+    const result = packDay({
+      ...base(),
+      settings: settings({ breakMinutes: 0 }),
+      buckets: [workBucket({ weeklyMinutes: 10 * 60, hoursMinutes: 10 * 60, days: ['Mon'] })],
+      items: [item({ id: 'deep', bucketId: 'work', title: 'Deep work', weight: 1, durationMinutes: 4 * 60 })],
+    });
+    expect(result.blocks.some((b) => b.title === 'Break')).toBe(true);
   });
 
   it('places Break in Work’s slot when Work has no items', () => {
@@ -210,12 +222,86 @@ describe('packDay', () => {
         house,
       ],
       items: [
-        item({ id: 'trip', bucketId: EVENTS_ID, title: 'Travel day', weight: 1, durationMinutes: 0 }),
+        item({
+          id: 'trip',
+          bucketId: EVENTS_ID,
+          title: 'Travel day',
+          type: 'scheduled',
+          weight: 1,
+          durationMinutes: 0,
+          dueAt: monday,
+        }),
         item({ id: 'dishes', bucketId: 'house', title: 'Dishes', weight: 1, durationMinutes: 20 }),
       ],
     });
-    expect(result.blocks.some((b) => b.itemId === 'trip')).toBe(true);
+    const trip = result.blocks.find((b) => b.itemId === 'trip');
+    expect(trip?.kind).toBe('event');
     expect(result.blocks.some((b) => b.itemId === 'dishes')).toBe(false);
+  });
+
+  it('places an event item only on its date', () => {
+    const events = {
+      ...bucket({ id: EVENTS_ID, name: 'Events', weight: 0, weeklyMinutes: 0, hoursMinutes: 0 }),
+      kind: 'event' as const,
+      startDate: monday,
+      endDate: '2026-09-02',
+    };
+    const trip = item({
+      id: 'trip',
+      bucketId: EVENTS_ID,
+      title: 'Travel day',
+      type: 'scheduled',
+      dueAt: '2026-09-01',
+      durationMinutes: 60,
+    });
+    const onDate = packDay({
+      ...base(),
+      date: '2026-09-01',
+      buckets: [workBucket({ weeklyMinutes: 0, days: ['Tue'] }), events],
+      items: [trip],
+    });
+    const otherDay = packDay({
+      ...base(),
+      date: monday,
+      buckets: [workBucket({ weeklyMinutes: 0, days: ['Tue'] }), events],
+      items: [trip],
+    });
+    expect(onDate.blocks.some((b) => b.itemId === 'trip')).toBe(true);
+    expect(otherDay.blocks.some((b) => b.itemId === 'trip')).toBe(false);
+  });
+
+  it('places an event item on its date even when the day is not an event day', () => {
+    const events = {
+      ...bucket({ id: EVENTS_ID, name: 'Events', weight: 0, weeklyMinutes: 0, hoursMinutes: 0 }),
+      kind: 'event' as const,
+      startDate: '',
+      endDate: '',
+    };
+    const house = bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 60, days: ['Mon'] });
+    const result = packDay({
+      ...base(),
+      buckets: [workBucket({ weeklyMinutes: 0, days: ['Tue'] }), events, house],
+      items: [
+        item({
+          id: 'trip',
+          bucketId: EVENTS_ID,
+          title: 'Travel day',
+          type: 'scheduled',
+          dueAt: monday,
+          durationMinutes: 60,
+        }),
+        item({ id: 'dishes', bucketId: 'house', title: 'Dishes', weight: 1, durationMinutes: 20 }),
+      ],
+    });
+    const trip = result.blocks.find((b) => b.itemId === 'trip');
+    expect(trip?.kind).toBe('event');
+    expect(result.blocks.some((b) => b.itemId === 'dishes')).toBe(true);
+    expect(trip && 'slot' in trip).toBe(false);
+    const appt = packDay({
+      ...base(),
+      appointments: [{ id: 'dentist', title: 'Dentist', date: monday, durationMinutes: 60 }],
+    }).blocks.find((b) => b.appointmentId === 'dentist');
+    expect(appt && 'slot' in appt).toBe(false);
   });
 
   it('places more in the next section only when leftover extra is passed in', () => {

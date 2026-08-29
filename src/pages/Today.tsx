@@ -156,15 +156,19 @@ export function TodayPage() {
               />
             ))}
           {sectionItems
-            .filter((b) => b.kind !== 'appointment' && b.title !== 'Break')
-            .map((b) => (
-              <ItemCard key={b.id} block={b} date={date} act={act} />
-            ))}
-          <BreakControl
-            on={paused}
-            onStart={() => act('Break started.', () => api.startBreak({ date }))}
-            onEnd={() => act('Break ended.', () => api.endBreak({ date }))}
-          />
+            .filter((b) => b.kind !== 'appointment')
+            .map((b) =>
+              b.title === 'Break' ? (
+                <BreakControl
+                  key={b.id}
+                  on={paused}
+                  onStart={() => act('Break started.', () => api.startBreak({ date }))}
+                  onEnd={() => act('Break ended.', () => api.endBreak({ date }))}
+                />
+              ) : (
+                <ItemCard key={b.id} block={b} date={date} act={act} />
+              )
+            )}
         </div>
       ) : null}
 
@@ -301,16 +305,21 @@ function NormalDayControls({
 
 function BreakControl({ on, onStart, onEnd }: { on: boolean; onStart: () => void; onEnd: () => void }) {
   return (
-    <div className="day-acts">
-      {on ? (
-        <button type="button" className="danger" onClick={onEnd}>
-          End Break
-        </button>
-      ) : (
-        <button type="button" className="skip" onClick={onStart}>
-          Start Break
-        </button>
-      )}
+    <div className="item">
+      <div className="item-top">
+        <div className="item-title">Break</div>
+      </div>
+      <div className="item-acts">
+        {on ? (
+          <button type="button" className="danger" onClick={onEnd}>
+            End Break
+          </button>
+        ) : (
+          <button type="button" className="skip" onClick={onStart}>
+            Start Break
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -369,7 +378,10 @@ function ItemCard({
   return (
     <div className={`item${cls}`} style={{ ['--bcolor' as string]: `#${block.color}` }}>
       <div className="item-top">
-        <div className="item-title">{block.title}</div>
+        <div className="item-title">
+          {block.kind === 'event' ? <span className="item-tag">Event</span> : null}
+          {block.title}
+        </div>
         {block.durationMinutes ? <div className="item-hours">{formatDuration(block.durationMinutes)}</div> : null}
       </div>
       {block.status === 'pending' ? (

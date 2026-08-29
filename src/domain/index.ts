@@ -11,4 +11,4 @@ export { SEED_BUCKETS, SEED_ITEMS, PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET, 
 export { applyBucketOrder, applyItemOrder, sortByWeight, nextItemWeight } from './order';
 export { eatFromSections, isEventDay, nextSlot, sectionCapacity, usedFromEat } from './sections';
 export { sectionRemainingNow, elapsedSince } from './timer';
-export { formatCountdown, todaySectionItems, todayEventItems, isEventPacked } from './today';
+export { formatCountdown, todaySectionItems, todayEventItems, isEventPacked, isBreakBlock } from './today';

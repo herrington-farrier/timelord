@@ -339,6 +339,17 @@ button.skip:hover:not(:disabled) {
   overflow: auto;
 }
 .cal-cell.is-today { background: var(--gold-bg); }
+.cal-cell.is-event,
+.cal-day-h.is-event {
+  outline: 2px solid var(--bcolor, var(--gold));
+  outline-offset: -2px;
+}
+.cal-day-h.is-event {
+  outline-offset: 0;
+  border-radius: 6px;
+  padding: 4px 6px;
+  border-bottom: none;
+}
 .cal-cell-num {
   display: flex;
   justify-content: space-between;
@@ -376,6 +387,12 @@ button.skip:hover:not(:disabled) {
   border-left-width: 5px;
   background: color-mix(in srgb, var(--bcolor) 32%, var(--panel));
   color: var(--text);
+}
+.cal-chip--break {
+  font-weight: 750;
+  border-left-style: dashed;
+  color: var(--muted);
+  background: var(--panel);
 }
 
 .ok {

@@ -40,6 +40,10 @@ function todayKey(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
 }
 
+function firestoreDoc(row: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(row)) as Record<string, unknown>;
+}
+
 async function writeLog(
   uid: string,
   row: { type: string; date: string; itemId?: string; bucketId?: string; minutes?: number }
@@ -107,20 +111,23 @@ async function writePackedRange(uid: string, start: string, days: number): Promi
     const result = reusePrevious && prev?.blocks
       ? domainCall(() => packDay(asPackInput(loaded, row.date, prev.blocks, extra, used)))
       : domainCall(() => packDay(asPackInput(loaded, row.date, undefined, extra, used)));
-    batch.set(daysCol.doc(row.date), {
-      ...result,
-      startedAt: prev?.startedAt || null,
-      endedAt: prev?.endedAt || null,
-      packedAt: nowIso(),
-      section: prev?.section ?? null,
-      sectionStartedAt: prev?.sectionStartedAt ?? null,
-      sectionRemainingMinutes: prev?.sectionRemainingMinutes ?? null,
-      pausedAt: prev?.pausedAt ?? null,
-      sectionExtra: extra || {},
-      sectionUsed: used || {},
-      eventStartedAt: prev?.eventStartedAt ?? null,
-      appointmentRuns: prev?.appointmentRuns || {},
-    });
+    batch.set(
+      daysCol.doc(row.date),
+      firestoreDoc({
+        ...result,
+        startedAt: prev?.startedAt || null,
+        endedAt: prev?.endedAt || null,
+        packedAt: nowIso(),
+        section: prev?.section ?? null,
+        sectionStartedAt: prev?.sectionStartedAt ?? null,
+        sectionRemainingMinutes: prev?.sectionRemainingMinutes ?? null,
+        pausedAt: prev?.pausedAt ?? null,
+        sectionExtra: extra || {},
+        sectionUsed: used || {},
+        eventStartedAt: prev?.eventStartedAt ?? null,
+        appointmentRuns: prev?.appointmentRuns || {},
+      })
+    );
   }
   await batch.commit();
   await writeLog(uid, { type: 'rebuild', date: start });
@@ -317,19 +324,23 @@ export const upsertItem = onCall(async (request) => {
   const ref = tenantRef(uid).collection('items').doc(id);
   const existing = await ref.get();
   const storedWeight = existing.exists ? Number((existing.data() as { weight?: unknown }).weight) : NaN;
+  const bucketId = asString(data.bucketId, 'Bucket');
+  const eventItem = bucketId === EVENTS_ID;
+  const type = eventItem ? 'scheduled' : asString(data.type, 'Type');
+  const dueAt = type === 'scheduled' ? asString(data.dueAt, 'Date') : '';
   const weight = existing.exists
     ? Number.isFinite(storedWeight)
       ? storedWeight
       : 1
-    : nextItemWeight((await loadTenant(uid)).items as ListItem[], asString(data.bucketId, 'Bucket'));
+    : nextItemWeight((await loadTenant(uid)).items as ListItem[], bucketId);
   const payload = {
-    bucketId: asString(data.bucketId, 'Bucket'),
+    bucketId,
     title: asString(data.title, 'Title'),
-    type: asString(data.type, 'Type'),
+    type,
     weight,
     durationMinutes,
-    cadence: data.cadence || { kind: 'daily' },
-    dueAt: typeof data.dueAt === 'string' ? data.dueAt : '',
+    cadence: eventItem ? { kind: 'daily' } : data.cadence || { kind: 'daily' },
+    dueAt,
     archived: false,
   };
   const stamp = existing.exists ? await stampLastUpdated(uid, nowIso()) : await stampCreated(uid, nowIso());
@@ -631,7 +642,7 @@ export const startNext = onCall(async (request) => {
     return prev && (prev.status === 'complete' || prev.status === 'skipped') ? { ...b, status: prev.status } : b;
   });
   await dayRef.set(
-    {
+    firestoreDoc({
       ...result,
       blocks: merged,
       startedAt: data.startedAt,
@@ -643,7 +654,7 @@ export const startNext = onCall(async (request) => {
       pausedAt: null,
       packedAt: nowIso(),
       ...stamp,
-    },
+    }),
     { merge: true }
   );
   await writeSkipPushes(uid, date, pushes);
@@ -713,7 +724,7 @@ export const stopAppointment = onCall(async (request) => {
   const runs = { ...(data.appointmentRuns || {}) };
   runs[id] = { elapsedMinutes: elapsed };
   await dayRef.set(
-    {
+    firestoreDoc({
       ...result,
       sectionUsed: used,
       sectionRemainingMinutes: Math.max(0, nowRemain - eatenHere),
@@ -721,7 +732,7 @@ export const stopAppointment = onCall(async (request) => {
       appointmentRuns: runs,
       packedAt: nowIso(),
       ...stamp,
-    },
+    }),
     { merge: true }
   );
   await writeLog(uid, { type: 'appointment_stop', date, minutes: elapsed });

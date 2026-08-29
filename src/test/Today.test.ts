@@ -31,6 +31,7 @@ describe('today section list', () => {
       'morning'
     );
     expect(shown.map((b) => b.id)).toEqual(['appt', 'house', 'break']);
+    expect(shown.find((b) => b.title === 'Break')?.slot).toBe('morning');
   });
 
   it('shows falling-off for that section only', () => {
@@ -49,7 +50,7 @@ describe('event day list', () => {
   it('hides Personal on an event day', () => {
     const blocks = [
       block({ id: 'morning', kind: 'personal', title: 'Morning Routine', slot: 'morning' }),
-      block({ id: 'trip', kind: 'weighted', title: 'Travel' }),
+      block({ id: 'trip', kind: 'event', title: 'Travel' }),
     ];
     expect(isEventPacked(blocks)).toBe(true);
     expect(todayEventItems(blocks).map((b) => b.id)).toEqual(['trip']);
