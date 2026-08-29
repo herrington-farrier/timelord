@@ -740,7 +740,7 @@ function ApptForm({
         const start = splitMinutes(a.startMinutes);
         const dur = splitMinutes(a.durationMinutes);
         return (
-          <div key={a.id} className="edit-card">
+          <div key={a.id} className="edit-card" style={{ ['--bcolor' as string]: '#f87171' }}>
             <ApptFields
               appointment={a}
               start={start}
