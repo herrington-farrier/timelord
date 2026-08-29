@@ -160,7 +160,7 @@ export function packDay(input: PackDayInput): PackDayResult {
       startMinutes: appt.startMinutes,
       durationMinutes: appt.durationMinutes,
       status: 'pending',
-      color: 'f87171',
+      color: appt.color || 'f87171',
       flexible: false,
     });
   }
@@ -370,32 +370,35 @@ export function packDay(input: PackDayInput): PackDayResult {
     }
   }
 
-  // Adjust generic work blocks to only show remaining unaccounted time
+  // If work items exist, remove generic work blocks and only show remaining time
   const workItemBlocks = blocks.filter((b) => b.kind === 'work' && b.itemId);
-  function adjustWorkBlock(genericBlock: PackedBlock | undefined) {
-    if (!genericBlock) return;
-    const itemsInWindow = workItemBlocks.filter(
-      (b) => b.startMinutes >= genericBlock.startMinutes && b.endMinutes <= genericBlock.endMinutes
-    );
-    const itemMinutes = itemsInWindow.reduce((s, b) => s + b.durationMinutes, 0);
-    const remaining = genericBlock.durationMinutes - itemMinutes;
-    if (remaining <= 0) {
-      const idx = blocks.indexOf(genericBlock);
-      if (idx >= 0) blocks.splice(idx, 1);
-    } else {
-      const lastItem = itemsInWindow.sort((a, b) => b.endMinutes - a.endMinutes)[0];
-      if (lastItem) {
-        genericBlock.startMinutes = lastItem.endMinutes;
-        genericBlock.durationMinutes = remaining;
-        genericBlock.endMinutes = genericBlock.startMinutes + remaining;
-      } else {
-        genericBlock.durationMinutes = remaining;
-        genericBlock.endMinutes = genericBlock.startMinutes + remaining;
-      }
+  if (workItemBlocks.length > 0) {
+    const work1Idx = blocks.findIndex((b) => b.id === blockId(date, 'work-1'));
+    if (work1Idx >= 0) blocks.splice(work1Idx, 1);
+    const work2Idx = blocks.findIndex((b) => b.id === blockId(date, 'work-2'));
+    if (work2Idx >= 0) blocks.splice(work2Idx, 1);
+    
+    // Calculate remaining work budget after items
+    const workItemMinutes = workItemBlocks.reduce((s, b) => s + b.durationMinutes, 0);
+    const remainingWork = workToday - workItemMinutes;
+    
+    // Add a single "Work" block for remaining unaccounted time
+    if (remainingWork > 0) {
+      const lastWorkItem = workItemBlocks.sort((a, b) => b.endMinutes - a.endMinutes)[0];
+      const workStart = lastWorkItem ? lastWorkItem.endMinutes : breakEnd;
+      pushBlock({
+        id: blockId(date, 'work-remaining'),
+        bucketId: WORK_ID,
+        title: work.name,
+        kind: 'work',
+        startMinutes: workStart,
+        durationMinutes: remainingWork,
+        status: 'pending',
+        color: workColor,
+        flexible: true,
+      });
     }
   }
-  adjustWorkBlock(work1Block);
-  adjustWorkBlock(work2Block);
 
   const middayBuckets = buckets
     .filter((b) => !b.archived && b.kind === 'weighted' && b.slot === 'midday' && (remainingBudget[b.id] || 0) > 0)

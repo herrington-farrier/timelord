@@ -727,7 +727,7 @@ function ApptForm({
   onSave,
   onRemove,
 }: {
-  appointments: { id: string; title: string; date: string; startMinutes: number; durationMinutes: number }[];
+  appointments: { id: string; title: string; date: string; startMinutes: number; durationMinutes: number; color?: string }[];
   onSave: (row: Record<string, unknown>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
 }) {
@@ -740,7 +740,7 @@ function ApptForm({
         const start = splitMinutes(a.startMinutes);
         const dur = splitMinutes(a.durationMinutes);
         return (
-          <div key={a.id} className="edit-card" style={{ ['--bcolor' as string]: '#f87171' }}>
+          <div key={a.id} className="edit-card" style={{ ['--bcolor' as string]: `#${a.color || 'f87171'}` }}>
             <ApptFields
               appointment={a}
               start={start}
@@ -765,7 +765,7 @@ function ApptFields({
   dur,
   onSubmit,
 }: {
-  appointment?: { title: string; date: string };
+  appointment?: { title: string; date: string; color?: string };
   start?: { hours: number; minutes: number };
   dur?: { hours: number; minutes: number };
   onSubmit: (payload: Record<string, unknown>) => void;
@@ -780,6 +780,7 @@ function ApptFields({
           date: fd.get('date'),
           startMinutes: hoursToMinutes(fd.get('sH'), fd.get('sM')),
           durationMinutes: hoursToMinutes(fd.get('dH'), fd.get('dM')),
+          color: String(fd.get('color') || '').replace('#', ''),
         });
       }}
     >
@@ -792,6 +793,9 @@ function ApptFields({
         </FormField>
         <DurationFields name="s" label="Starts At" h={start?.hours || 10} m={start?.minutes || 0} clock />
         <DurationFields name="d" label="Duration" h={dur?.hours || 1} m={dur?.minutes || 0} />
+        <FormField label="Color">
+          <input name="color" type="color" defaultValue={`#${appointment?.color || 'f87171'}`} />
+        </FormField>
       </div>
       <div className="edit-acts">
         <button type="submit" className="primary">

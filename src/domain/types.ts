@@ -58,6 +58,7 @@ export type Appointment = {
   date: string;
   startMinutes: number;
   durationMinutes: number;
+  color?: string;
 };
 
 export type BlockKind = 'personal' | 'work' | 'weighted' | 'appointment' | 'transition';
