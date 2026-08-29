@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 
 export function CollapsibleBucket({
   title,
@@ -16,11 +16,9 @@ export function CollapsibleBucket({
   liveHours?: (root: HTMLElement) => string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [label, setLabel] = useState(hours);
+  const [label, setLabel] = useState<string | null>(null);
   const bodyId = useId();
-  useEffect(() => {
-    setLabel(hours);
-  }, [hours]);
+  const displayLabel = label ?? hours;
 
   function refresh(root: HTMLElement) {
     if (!liveHours) return;
@@ -40,11 +38,11 @@ export function CollapsibleBucket({
         className="bucket-toggle"
         aria-expanded={open}
         aria-controls={bodyId}
-        aria-label={`${title}, ${label}`}
+        aria-label={`${title}, ${displayLabel}`}
         onClick={() => setOpen((v) => !v)}
       >
         <strong>{title}</strong>
-        <span className="bucket-hours">{label}</span>
+        <span className="bucket-hours">{displayLabel}</span>
       </button>
       <div id={bodyId} className="bucket-body" hidden={!open}>
         {children}

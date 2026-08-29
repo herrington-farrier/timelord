@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { FormField } from '../components/FormField';
 import { SortableList } from '../components/SortableList';
@@ -294,13 +294,12 @@ function BucketsForm({
     () => weekBudgetSummary(settings, assignedWeekMinutes(buckets)),
     [settings, buckets]
   );
-  const [live, setLive] = useState<WeekBudgetSummary | null>(null);
-  useEffect(() => {
-    setLive(null);
-  }, [settings, buckets]);
+  const cacheKey = `${settings.dayMinutes}-${settings.morningMinutes}-${settings.breakMinutes}-${settings.eveningMinutes}-${buckets.map(b => b.id).join(',')}`;
+  const [liveState, setLiveState] = useState<{ key: string; value: WeekBudgetSummary | null }>({ key: '', value: null });
+  const live = liveState.key === cacheKey ? liveState.value : null;
 
   function refreshLive(root: HTMLElement) {
-    setLive(liveWeekBudget(root, settings));
+    setLiveState({ key: cacheKey, value: liveWeekBudget(root, settings) });
   }
 
   return (
@@ -426,7 +425,7 @@ function PersonalCard({ settings, bucket }: { settings: DaySettings; bucket: Buc
             <CompactHours name="e" h={evening.hours} m={evening.minutes} />
           </div>
           <FormField label="Color">
-            <input name="color" type="color" defaultValue={`#${bucket.color || 'e7d5c5'}`} />
+            <input name="color" type="color" defaultValue={`#${bucket.color || '5b9bd5'}`} />
           </FormField>
         </div>
       </form>
