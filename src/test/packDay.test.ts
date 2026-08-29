@@ -45,7 +45,7 @@ describe('packDay', () => {
     expect(result.blocks.filter((b) => b.kind === 'work' && !b.itemId)).toHaveLength(0);
   });
 
-  it('packs higher-weight items first and drops the rest', () => {
+  it('packs higher-weight items first and rescues dropped with extra time', () => {
     const house = bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 30, days: ['Mon'] });
     const result = packDay({
       ...base(),
@@ -56,7 +56,7 @@ describe('packDay', () => {
       ],
     });
     expect(result.blocks.some((b) => b.itemId === 'a')).toBe(true);
-    expect(result.dropped.some((b) => b.itemId === 'b')).toBe(true);
+    expect(result.blocks.some((b) => b.itemId === 'b')).toBe(true);
   });
 
   it('drops a lower-priority bucket as a unit when it does not fit', () => {

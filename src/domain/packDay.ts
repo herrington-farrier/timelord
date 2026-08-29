@@ -424,6 +424,46 @@ export function packDay(input: PackDayInput): PackDayResult {
     }
   }
 
+  // Fill remaining gaps with dropped items by priority
+  const allGaps = subtractBusy({ start: morningEnd, end: eveningStart }, busy);
+  if (gapMinutes(allGaps) > 0 && dropped.length > 0) {
+    const sortedBuckets = buckets
+      .filter((b) => !b.archived && b.kind === 'weighted')
+      .sort((a, b) => a.weight - b.weight);
+    
+    let fillGaps = allGaps.map((g) => ({ ...g }));
+    for (const bucket of sortedBuckets) {
+      const droppedForBucket = dropped.filter((d) => d.bucketId === bucket.id);
+      for (const droppedBlock of droppedForBucket) {
+        const item = items.find((i) => i.id === droppedBlock.itemId);
+        if (!item) continue;
+        const need = item.durationMinutes;
+        for (let i = 0; i < fillGaps.length; i += 1) {
+          const gap = fillGaps[i];
+          const trans = needsTransition(gap.start) ? settings.transitionMinutes : 0;
+          const start = gap.start + trans;
+          if (start + need > gap.end) continue;
+          pushBlock({
+            id: blockId(date, `fill-${item.id}`),
+            bucketId: bucket.id,
+            itemId: item.id,
+            title: item.title,
+            kind: 'weighted',
+            startMinutes: start,
+            durationMinutes: need,
+            status: 'pending',
+            color: bucket.color,
+            flexible: true,
+          });
+          fillGaps[i] = { start: start + need, end: gap.end };
+          const dropIdx = dropped.findIndex((d) => d.itemId === item.id);
+          if (dropIdx >= 0) dropped.splice(dropIdx, 1);
+          break;
+        }
+      }
+    }
+  }
+
   const content = blocks
     .filter((b) => b.kind !== 'transition')
     .sort((a, b) => a.startMinutes - b.startMinutes || a.title.localeCompare(b.title));
