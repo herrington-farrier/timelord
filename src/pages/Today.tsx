@@ -64,7 +64,7 @@ export function TodayPage() {
         </button>
         <button
           type="button"
-          className="primary"
+          className="danger"
           disabled={!day?.startedAt || Boolean(day?.endedAt)}
           onClick={() => act('Day ended.', () => api.endDay({ date }))}
         >

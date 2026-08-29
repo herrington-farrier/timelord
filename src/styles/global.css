@@ -118,16 +118,15 @@ button.primary:hover:not(:disabled),
   color: var(--bg);
 }
 .btn--success {
-  background: var(--ok);
-  color: var(--bg);
+  background: var(--ok-bg);
+  color: var(--ok);
   border-color: var(--ok);
   font-weight: 700;
 }
 .btn--success:hover:not(:disabled) {
-  filter: brightness(1.08);
+  background: var(--ok);
   border-color: var(--ok);
   color: var(--bg);
-  background: var(--ok);
 }
 button.danger {
   background: var(--danger-bg);
