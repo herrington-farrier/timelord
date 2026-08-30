@@ -49,6 +49,7 @@ export const EVENTS_BUCKET: Bucket = {
   color: 'c4923a',
   startDate: '',
   endDate: '',
+  ranges: [],
 };
 
 export const SEED_BUCKETS: Bucket[] = [

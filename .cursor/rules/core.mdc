@@ -12,4 +12,5 @@ alwaysApply: true
 - DRY: extract a token, helper, or component if you'd hardcode twice.
 - Dark-mode-only. Colors come from tokens in `src/styles/global.css`. No hex in components.
 - Every Firestore write goes through a Cloud Function callable and stamps actor identity.
+- Never deploy all Cloud Functions. Deploy only the named callables that changed (`firebase deploy --only functions:rebuildRange`). A full functions deploy burns Cloud Run CPU quota and is never required.
 - If a change alters behavior, data shape, UI, or auth, update `docs/` in the same PR.

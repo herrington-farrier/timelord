@@ -42,6 +42,13 @@ export type Bucket = {
   archived?: boolean;
   startDate?: string;
   endDate?: string;
+  ranges?: EventRange[];
+};
+
+export type EventRange = {
+  id: string;
+  startDate: string;
+  endDate: string;
 };
 
 export type ListItem = {

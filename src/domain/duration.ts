@@ -10,6 +10,14 @@ export function splitMinutes(total: number): { hours: number; minutes: number } 
   return { hours: Math.floor(mins / 60), minutes: mins % 60 };
 }
 
+export function durationInputs(
+  totalMinutes: number | undefined,
+  whenEmpty: { hours: number; minutes: number } = { hours: 1, minutes: 0 }
+): { hours: number; minutes: number } {
+  if (totalMinutes == null) return whenEmpty;
+  return splitMinutes(totalMinutes);
+}
+
 export function formatDuration(totalMinutes: number): string {
   const mins = Math.round(Number(totalMinutes) || 0);
   if (mins <= 0) return '0m';

@@ -19,7 +19,7 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 - `name`, `weight`, `hoursMode` (`week` | `day`, default `week`), `hoursMinutes` (the hours field)
 - `weeklyMinutes`: derived week total (`hoursMinutes` in week-mode; `hoursMinutes ×` checked days in day-mode)
 - `days[]`, `slot`, `color`, `archived`
-- Events: `startDate`, `endDate` (inclusive). No slot, no week hours.
+- Events: `ranges[]` (`id`, `startDate`, `endDate`, inclusive; start === end is a 1-day block). Legacy `startDate` / `endDate` on the bucket still count as one range until the next Save. No slot, no week hours.
 - Work id is `work` (weight 1). Personal id is `personal`. Events id is `events`. Morning Routine, Break, and Evening Routine durations live on settings.
 
 ## items/{id}

@@ -1,3 +1,4 @@
+import { eventRanges } from './events';
 import { EVENTS_ID, SLOTS, type Bucket, type DaySettings, type Slot } from './types';
 
 export function daySections(settings: Pick<DaySettings, 'dayMinutes' | 'dayStartMinutes'>): {
@@ -37,9 +38,7 @@ export function slotIndex(slot: Slot | undefined): number {
 export function isEventDay(bucket: Bucket | undefined, date: string): boolean {
   if (!bucket || bucket.archived) return false;
   if (bucket.kind !== 'event' && bucket.id !== EVENTS_ID) return false;
-  const start = bucket.startDate || '';
-  const end = bucket.endDate || '';
-  return Boolean(start && end && date >= start && date <= end);
+  return eventRanges(bucket).some((range) => date >= range.startDate && date <= range.endDate);
 }
 
 export function sectionCapacity(

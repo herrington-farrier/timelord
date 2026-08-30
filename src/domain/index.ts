@@ -1,8 +1,9 @@
-export type { Appointment, Bucket, Cadence, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Weekday } from './types';
+export type { Appointment, Bucket, Cadence, DaySettings, EventRange, HoursMode, ListItem, PackedBlock, SkipPush, Weekday } from './types';
 export { DEFAULT_SETTINGS, EVENTS_ID, PERSONAL_ID, SLOTS, WEEKDAYS, WORK_ID } from './types';
 export { cadenceHitsDate, weekdayFromKey, addDaysKey } from './cadence';
-export { formatDuration, formatClock, hoursToMinutes, splitMinutes } from './duration';
-export { assignWeeklyBudgets, assignableWeekMinutes, assignedDayBudget, assignedWeekMinutes, bucketAssignedMinutes, dailyBudgetFor, derivedWeeklyMinutes, formatBucketHours, formatHoursField, hoursMinutesOf, hoursModeOf, itemExceedsBucketMessage, itemFitsBucket, weekBudgetSummary, weeklyCapacity, collapsedSlotHours, eventsRangeLabel } from './budget';
+export { durationInputs, formatDuration, formatClock, hoursToMinutes, splitMinutes } from './duration';
+export { assignWeeklyBudgets, assignableWeekMinutes, assignedDayBudget, assignedWeekMinutes, bucketAssignedMinutes, dailyBudgetFor, derivedWeeklyMinutes, formatBucketHours, formatHoursField, hoursMinutesOf, hoursModeOf, itemExceedsBucketMessage, itemFitsBucket, weekBudgetSummary, weeklyCapacity, collapsedSlotHours, eventsRangeLabel, eventsRangesLabel } from './budget';
+export { eventRanges, newEventRangeId, parseEventRanges } from './events';
 export { packDay, collectEndDaySkipPushes, daySections, sectionMinutes } from './packDay';
 export { PACK_RANGE_DAYS, packRange } from './packWeek';
 export { recomputeEtas } from './etas';

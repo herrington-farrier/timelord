@@ -20,7 +20,7 @@ Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show 
 
 - **Personal** always exists. Morning Routine, Break, and Evening Routine durations are editable. Color can change. Cannot be renamed, removed, or given a list. Does not consume week hours.
 - **Work** always exists, weight 1, first in **its** slot (slot is editable). Cannot be deleted or drag-reordered. Break is tied to Work and centered in the Work block (2-hour split). Today, the 2-week board, and the side list keep Break between those Work halves. If Work has no items that day, Break still lands once in Work’s slot.
-- **Events** always exists. Date range on the bucket. Collapsed row shows `5d, Aug 29/Sep 2`. No slot, no week hours, no day sections. Cannot be deleted.
+- **Events** always exists. One or more date ranges on the bucket (1-day ranges allowed). Add / remove ranges in Edit → Buckets; page Save writes them. Collapsed row shows each range (`5d, Aug 29/Sep 2 · 1d, Sep 10`) or `off`. No slot, no week hours, no day sections. Cannot be deleted.
 - **Weighted buckets** can be added, removed, renamed, recolored, reweighted, and given days / slot / Week or Day hours.
 
 ## Today (normal day)
@@ -38,13 +38,13 @@ Section timers show hours and minutes. They use the Day sound/vibrate toggles. G
 
 ## Events
 
-If today is inside the Events date range: **event day**. Show Events list items only, with Complete / Skip. No morning/midday/evening, no Break, no Start Day / End Day, no stopwatch.
+If today is inside any Events date range: **event day**. Show Events list items only, with Complete / Skip. No morning/midday/evening, no Break, no Start Day / End Day, no stopwatch.
 
 Events list items are **scheduled only**: date + duration, no cadence. They pack on that date. Calendar chips use the same filled treatment as appointments and pin to the top of the cell.
 
 ## Calendar and list
 
-The 2-week Sunday board and side list stay. Days before today are blank on the board (date number only) and omitted from the side list. Hours marks at the top of each list day and cell count **productive** packed minutes (no Personal), colored vs `dayMinutes` (green under 50%, gold 50–85%, red above). The side list also shows leftover morning / midday / evening minutes (section thirds minus packed items in that slot; leftover eat applies). Those leftover numbers use the same load colors by time used (green under 50%, gold through 85%, red when little or none is left). Event days omit that row. Chips are `title · duration` (title only if 0). No clocks. Appointments are visually distinct and first in the cell and list. Event items look like other list chips; the day outline marks the Events range. Other list items follow section, then weight. Evening chips stay in the last third, before Evening Routine; a missing packed slot uses the bucket’s slot. Falling-off stays at the bottom of that day. Event days outline the cell and list day in the Events color even when empty. Event items also show on a normal day on their date.
+The 2-week Sunday board and side list stay. Days before today are blank on the board (date number only) and omitted from the side list. Hours marks at the top of each list day and cell count **productive** packed minutes (no Personal), colored vs `dayMinutes` (green under 50%, gold 50–85%, red above). The side list also shows leftover morning / midday / evening minutes (section thirds minus packed items in that slot; leftover eat applies). Those leftover numbers use the same load colors by time used (green under 50%, gold through 85%, red when little or none is left). Event days omit that row. Chips are `title · duration` (title only if 0). No clocks. Appointments are visually distinct and first in the cell and list. Event items look like other list chips; the day outline marks an Events range. Other list items follow section, then weight. Evening chips stay in the last third, before Evening Routine; a missing packed slot uses the bucket’s slot. Falling-off stays at the bottom of that day. Event days outline the cell and list day in the Events color even when empty. Event items also show on a normal day on their date.
 
 ## Lists
 

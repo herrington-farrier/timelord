@@ -287,6 +287,22 @@ describe('packDay', () => {
     expect(result.blocks.find((b) => b.itemId === 'dishes')?.status).toBe('complete');
   });
 
+  it('treats a later Events range as an event day', () => {
+    const events = {
+      ...bucket({ id: EVENTS_ID, name: 'Events', weight: 0, weeklyMinutes: 0, hoursMinutes: 0 }),
+      kind: 'event' as const,
+      ranges: [{ id: 'a', startDate: '2026-09-10', endDate: '2026-09-10' }],
+    };
+    const house = bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 60, days: ['Thu'] });
+    const result = packDay({
+      ...base(),
+      date: '2026-09-10',
+      buckets: [workBucket({ weeklyMinutes: 0, days: ['Fri'] }), events, house],
+      items: [item({ id: 'dishes', bucketId: 'house', title: 'Dishes', durationMinutes: 20 })],
+    });
+    expect(result.blocks.some((b) => b.itemId === 'dishes')).toBe(false);
+  });
+
   it('packs only event items on an event day', () => {
     const events = bucket({
       id: EVENTS_ID,

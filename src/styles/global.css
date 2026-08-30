@@ -742,6 +742,25 @@ button.skip:hover:not(:disabled) {
 .bucket-card .field:has(input[type="color"]) {
   max-width: 5.5rem;
 }
+.event-ranges {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.event-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: end;
+}
+.event-range .field {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.event-range .danger {
+  margin-bottom: 1px;
+}
 .page-save {
   position: sticky;
   bottom: 0;

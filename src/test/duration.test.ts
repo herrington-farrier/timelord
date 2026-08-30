@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDuration, formatTimeInput, hoursToMinutes, parseTimeInput } from '../domain/duration';
+import { durationInputs, formatDuration, formatTimeInput, hoursToMinutes, parseTimeInput } from '../domain/duration';
 
 describe('formatDuration', () => {
   it('formats 20 minutes as 20m', () => {
@@ -21,6 +21,11 @@ describe('formatDuration', () => {
 
   it('converts 0 hours and 20 minutes to 20', () => {
     expect(hoursToMinutes(0, 20)).toBe(20);
+  });
+
+  it('keeps a 30m appointment as 0 hours', () => {
+    expect(durationInputs(30)).toEqual({ hours: 0, minutes: 30 });
+    expect(durationInputs(undefined)).toEqual({ hours: 1, minutes: 0 });
   });
 
   it('round-trips a clock time', () => {

@@ -23,7 +23,7 @@ const CARDS = [
     id: 'events',
     kicker: 'Bucket',
     title: 'Events',
-    body: 'A date range for days that are just events. No sections, no timer. Complete or skip the items. You cannot delete it.',
+    body: 'Date ranges for days that are just events. One-day blocks are fine. No sections, no timer. Complete or skip the items. You cannot delete it.',
   },
   {
     id: 'weighted',

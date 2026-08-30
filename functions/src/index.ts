@@ -5,6 +5,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { canAdmitAccount, isAllowedEmail } from '../../src/domain/allowlist';
 
+import { eventRanges, parseEventRanges } from '../../src/domain/events';
 import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
@@ -91,8 +92,19 @@ function bucketFields(data: Record<string, unknown>, resolvedKind: string, resol
     slot: asString(data.slot || 'morning', 'Time of day'),
     color: asString(data.color, 'Color').replace(/^#/, ''),
     archived: false,
-    startDate: typeof data.startDate === 'string' ? data.startDate : '',
-    endDate: typeof data.endDate === 'string' ? data.endDate : '',
+    startDate: '',
+    endDate: '',
+    ranges:
+      resolvedKind === 'event'
+        ? domainCall(() =>
+            Array.isArray(data.ranges)
+              ? parseEventRanges(data.ranges)
+              : eventRanges({
+                  startDate: typeof data.startDate === 'string' ? data.startDate : '',
+                  endDate: typeof data.endDate === 'string' ? data.endDate : '',
+                })
+          )
+        : [],
   };
 }
 

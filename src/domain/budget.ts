@@ -151,6 +151,11 @@ export function eventsRangeLabel(startDate?: string, endDate?: string): string {
   return `${days}d, ${formatRangeDay(startDate, years)}/${formatRangeDay(endDate, years)}`;
 }
 
+export function eventsRangesLabel(ranges: { startDate: string; endDate: string }[]): string {
+  const parts = ranges.map((r) => eventsRangeLabel(r.startDate, r.endDate)).filter((s) => s !== 'off');
+  return parts.length ? parts.join(' · ') : 'off';
+}
+
 export function dailyBudgets(buckets: Bucket[], dateKey: string): DailyBudgetMap {
   const out: DailyBudgetMap = {};
   for (const b of buckets) {

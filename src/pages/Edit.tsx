@@ -9,7 +9,7 @@ import {
   assignedWeekMinutes,
   collapsedSlotHours,
   derivedWeeklyMinutes,
-  eventsRangeLabel,
+  eventsRangesLabel,
   formatBucketHours,
   formatHoursField,
   hoursMinutesOf,
@@ -20,7 +20,8 @@ import {
   weekBudgetSummary,
   type WeekBudgetSummary,
 } from '../domain/budget';
-import { formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
+import { durationInputs, formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
+import { eventRanges, newEventRangeId, parseEventRanges } from '../domain/events';
 import { PACK_RANGE_DAYS } from '../domain/packWeek';
 import { canDeleteBucket, canRenameBucket, listCadenceDays, listableBuckets, splitEditBuckets } from '../domain/seed';
 import {
@@ -28,6 +29,7 @@ import {
   WEEKDAYS,
   type Appointment,
   type Bucket,
+  type EventRange,
   type Cadence,
   type DaySettings,
   type HoursMode,
@@ -310,6 +312,7 @@ function BucketsForm({
   onRemove: (id: string) => Promise<void>;
   onReset: (id: string) => Promise<void>;
 }) {
+  const { showToast } = useToast();
   const { personal, work, events, weighted } = splitEditBuckets(buckets);
   const ids = weighted.map((b) => b.id);
   const saved = useMemo(
@@ -363,6 +366,16 @@ function BucketsForm({
             const eventsForm = root.querySelector<HTMLFormElement>('form[data-kind="event"]');
             if (eventsForm) {
               const fd = new FormData(eventsForm);
+              const ids = fd.getAll('rangeId').map(String);
+              const starts = fd.getAll('rangeStart').map(String);
+              const ends = fd.getAll('rangeEnd').map(String);
+              let ranges: EventRange[] = [];
+              try {
+                ranges = parseEventRanges(ids.map((id, i) => ({ id, startDate: starts[i] || '', endDate: ends[i] || '' })));
+              } catch (err) {
+                showToast(formatActionError(err, 'Events'), 'error');
+                return;
+              }
               rows.push({
                 id: EVENTS_ID,
                 kind: 'event',
@@ -373,8 +386,9 @@ function BucketsForm({
                 days: WEEKDAYS,
                 slot: 'morning',
                 color: String(fd.get('color') || '').replace('#', ''),
-                startDate: String(fd.get('startDate') || ''),
-                endDate: String(fd.get('endDate') || ''),
+                ranges,
+                startDate: '',
+                endDate: '',
               });
             }
             const addForm = root.querySelector<HTMLFormElement>('form[data-kind="new"]');
@@ -505,35 +519,59 @@ function BucketCard({
 }
 
 function EventsCard({ bucket }: { bucket: Bucket }) {
+  const [ranges, setRanges] = useState<EventRange[]>(() => eventRanges(bucket));
   return (
     <CollapsibleBucket
       title="Events"
-      hours={eventsRangeLabel(bucket.startDate, bucket.endDate)}
+      hours={eventsRangesLabel(eventRanges(bucket))}
       color={bucket.color}
       liveHours={(root) => {
         const form = root.querySelector('form');
-        if (!(form instanceof HTMLFormElement)) return eventsRangeLabel(bucket.startDate, bucket.endDate);
-        return eventsRangeLabel(inputValue(form, 'input[name="startDate"]') || '', inputValue(form, 'input[name="endDate"]') || '');
+        if (!(form instanceof HTMLFormElement)) return eventsRangesLabel(ranges);
+        const starts = [...form.querySelectorAll<HTMLInputElement>('input[name="rangeStart"]')];
+        const ends = [...form.querySelectorAll<HTMLInputElement>('input[name="rangeEnd"]')];
+        return eventsRangesLabel(starts.map((el, i) => ({ startDate: el.value, endDate: ends[i]?.value || '' })));
       }}
     >
       <form
-        key={`${bucket.startDate || ''}-${bucket.endDate || ''}-${bucket.color}`}
         data-kind="event"
         data-id={EVENTS_ID}
         onSubmit={(e) => {
           e.preventDefault();
         }}
       >
+        <div className="event-ranges">
+          {ranges.map((range) => (
+            <div key={range.id} className="event-range">
+              <input type="hidden" name="rangeId" value={range.id} />
+              <FormField label="Start">
+                <input name="rangeStart" type="date" defaultValue={range.startDate} />
+              </FormField>
+              <FormField label="End">
+                <input name="rangeEnd" type="date" defaultValue={range.endDate} />
+              </FormField>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => setRanges((cur) => cur.filter((row) => row.id !== range.id))}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
         <div className="fields">
-          <FormField label="Start date">
-            <input name="startDate" type="date" defaultValue={bucket.startDate || ''} />
-          </FormField>
-          <FormField label="End date">
-            <input name="endDate" type="date" defaultValue={bucket.endDate || ''} />
-          </FormField>
           <FormField label="Color">
             <input name="color" type="color" defaultValue={`#${bucket.color || 'c4923a'}`} />
           </FormField>
+        </div>
+        <div className="edit-acts">
+          <button
+            type="button"
+            onClick={() => setRanges((cur) => [...cur, { id: newEventRangeId(), startDate: '', endDate: '' }])}
+          >
+            Add range
+          </button>
         </div>
       </form>
     </CollapsibleBucket>
@@ -870,36 +908,31 @@ function ApptForm({
       <div className="edit-card add-card">
         <ApptFields onSubmit={(payload) => onSave(payload)} />
       </div>
-      {appointments.map((a) => {
-        const dur = splitMinutes(a.durationMinutes);
-        return (
-          <div key={a.id} className="edit-card" style={{ ['--bcolor' as string]: `#${a.color || 'f87171'}` }}>
-            <ApptFields
-              appointment={a}
-              dur={dur}
-              onSubmit={(payload) => onSave({ id: a.id, ...payload })}
-            />
-            <div className="edit-acts">
-              <button type="button" className="danger" onClick={() => onRemove(a.id)}>
-                Remove
-              </button>
-            </div>
+      {appointments.map((a) => (
+        <div key={a.id} className="edit-card" style={{ ['--bcolor' as string]: `#${a.color || 'f87171'}` }}>
+          <ApptFields
+            appointment={a}
+            onSubmit={(payload) => onSave({ id: a.id, ...payload })}
+          />
+          <div className="edit-acts">
+            <button type="button" className="danger" onClick={() => onRemove(a.id)}>
+              Remove
+            </button>
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
 
 function ApptFields({
   appointment,
-  dur,
   onSubmit,
 }: {
-  appointment?: { title: string; date: string; color?: string };
-  dur?: { hours: number; minutes: number };
+  appointment?: { title: string; date: string; color?: string; durationMinutes?: number };
   onSubmit: (payload: Record<string, unknown>) => void;
 }) {
+  const dur = durationInputs(appointment?.durationMinutes);
   return (
     <form
       onSubmit={(e) => {
@@ -920,7 +953,7 @@ function ApptFields({
         <FormField label="Date">
           <input name="date" type="date" defaultValue={appointment?.date || ''} required />
         </FormField>
-        <DurationFields name="d" label="Duration" h={dur?.hours || 1} m={dur?.minutes || 0} />
+        <DurationFields name="d" label="Duration" h={dur.hours} m={dur.minutes} />
         <FormField label="Color">
           <input name="color" type="color" defaultValue={`#${appointment?.color || 'f87171'}`} />
         </FormField>
