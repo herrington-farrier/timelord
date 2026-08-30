@@ -2,13 +2,14 @@ export type { Appointment, Bucket, Cadence, DaySettings, HoursMode, ListItem, Pa
 export { DEFAULT_SETTINGS, EVENTS_ID, PERSONAL_ID, SLOTS, WEEKDAYS, WORK_ID } from './types';
 export { cadenceHitsDate, weekdayFromKey, addDaysKey } from './cadence';
 export { formatDuration, formatClock, hoursToMinutes, splitMinutes } from './duration';
-export { assignWeeklyBudgets, assignableWeekMinutes, assignedWeekMinutes, bucketAssignedMinutes, dailyBudgetFor, derivedWeeklyMinutes, formatBucketHours, formatHoursField, hoursMinutesOf, hoursModeOf, weekBudgetSummary, weeklyCapacity, collapsedSlotHours, eventsRangeLabel } from './budget';
+export { assignWeeklyBudgets, assignableWeekMinutes, assignedDayBudget, assignedWeekMinutes, bucketAssignedMinutes, dailyBudgetFor, derivedWeeklyMinutes, formatBucketHours, formatHoursField, hoursMinutesOf, hoursModeOf, itemExceedsBucketMessage, itemFitsBucket, weekBudgetSummary, weeklyCapacity, collapsedSlotHours, eventsRangeLabel } from './budget';
 export { packDay, collectEndDaySkipPushes, daySections, sectionMinutes } from './packDay';
 export { packRange } from './packWeek';
 export { recomputeEtas } from './etas';
 export { skipPushDate, nextAssignedDate } from './skip';
 export { SEED_BUCKETS, SEED_ITEMS, PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET, defaultSettings, canDeleteBucket, canRenameBucket, splitEditBuckets, listableBuckets, listCadenceDays, bucketsToBackfill } from './seed';
 export { applyBucketOrder, applyItemOrder, sortByWeight, nextItemWeight } from './order';
-export { eatFromSections, isEventDay, nextSlot, sectionCapacity, usedFromEat } from './sections';
+export { eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity, usedFromEat } from './sections';
 export { sectionRemainingNow, elapsedSince } from './timer';
-export { formatCountdown, todaySectionItems, todayEventItems, isEventPacked, isBreakBlock } from './today';
+export { formatCountdown, nextSectionAction, slotLabel, todaySectionItems, todayEventItems, isEventPacked, isBreakBlock } from './today';
+export { formatLogEvent, logEventTone } from './log';

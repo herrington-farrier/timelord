@@ -92,17 +92,31 @@ export function assignWeeklyBudgets(settings: DaySettings, buckets: Bucket[]): B
   return buckets.map((b) => ({ ...b, weeklyMinutes: bucketAssignedMinutes(b) }));
 }
 
-export function dailyBudgetFor(bucket: Bucket, dateKey: string): number {
+export function assignedDayBudget(bucket: Bucket): number {
   if (bucket.archived || bucket.kind === 'personal' || bucket.kind === 'event') return 0;
   const days = activeDays(bucket);
   if (!days.length) return 0;
-  if (!days.includes(weekdayFromKey(dateKey))) return 0;
   if (hoursModeOf(bucket) === 'day') {
     const assigned = bucketAssignedMinutes(bucket);
     const extra = Math.max(0, minutes(bucket.weeklyMinutes) - assigned);
     return hoursMinutesOf(bucket) + Math.floor(extra / days.length);
   }
   return Math.floor(minutes(bucket.weeklyMinutes) / days.length);
+}
+
+export function dailyBudgetFor(bucket: Bucket, dateKey: string): number {
+  if (!activeDays(bucket).includes(weekdayFromKey(dateKey))) return 0;
+  return assignedDayBudget(bucket);
+}
+
+export function itemFitsBucket(durationMinutes: number, bucket: Bucket | undefined): boolean {
+  if (durationMinutes === 0) return true;
+  if (!bucket || bucket.kind === 'event' || bucket.id === EVENTS_ID) return true;
+  return durationMinutes <= assignedDayBudget(bucket);
+}
+
+export function itemExceedsBucketMessage(bucket: Bucket): string {
+  return `Duration cannot exceed the ${bucket.name} daily hours (${formatDuration(assignedDayBudget(bucket))}).`;
 }
 
 export function formatHoursField(mode: HoursMode, hoursMinutes: number): string {

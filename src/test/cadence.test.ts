@@ -35,6 +35,18 @@ describe('cadenceHitsDate', () => {
     ).toBe(true);
   });
 
+  it('does not hit a matching day before startDate', () => {
+    const cadence = { kind: 'everyNDays' as const, n: 2, startWeekday: 'Tue' as const, startDate: '2000-01-10' };
+    expect(cadenceHitsDate(cadence, '2000-01-04')).toBe(false);
+    expect(cadenceHitsDate(cadence, '2000-01-08')).toBe(false);
+  });
+
+  it('hits the first matching day on or after startDate', () => {
+    const cadence = { kind: 'everyNDays' as const, n: 2, startWeekday: 'Tue' as const, startDate: '2000-01-10' };
+    expect(cadenceHitsDate(cadence, '2000-01-10')).toBe(true);
+    expect(cadenceHitsDate(cadence, '2000-01-11')).toBe(false);
+  });
+
   it('hits the first of the month for monthly cadence', () => {
     expect(cadenceHitsDate({ kind: 'monthly', dayOfMonth: 1 }, '2026-09-01')).toBe(true);
   });

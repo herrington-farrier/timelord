@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { appointmentElapsed, formatCountdown, isEventPacked, todayEventItems, todaySectionDropped, todaySectionItems } from '../domain/today';
+import { appointmentElapsed, formatCountdown, isEventPacked, nextSectionAction, slotLabel, todayEventItems, todaySectionDropped, todaySectionItems } from '../domain/today';
 import type { PackedBlock } from '../domain/types';
 
 function block(partial: Partial<PackedBlock> & Pick<PackedBlock, 'id' | 'kind'>): PackedBlock {
@@ -50,17 +50,29 @@ describe('event day list', () => {
   it('hides Personal on an event day', () => {
     const blocks = [
       block({ id: 'morning', kind: 'personal', title: 'Morning Routine', slot: 'morning' }),
-      block({ id: 'trip', kind: 'event', title: 'Travel' }),
+      block({ id: 'trip', kind: 'event', title: 'Travel', status: 'pending' }),
     ];
     expect(isEventPacked(blocks)).toBe(true);
     expect(todayEventItems(blocks).map((b) => b.id)).toEqual(['trip']);
+    expect(todayEventItems(blocks)[0].status).toBe('pending');
+  });
+});
+
+describe('nextSectionAction', () => {
+  it('names the next bucket stretch and End Day', () => {
+    expect(nextSectionAction('morning')).toEqual({ label: 'Start Next Buckets', kind: 'next' });
+    expect(nextSectionAction('midday')).toEqual({ label: 'Start Next Buckets', kind: 'next' });
+    expect(nextSectionAction('evening')).toEqual({ label: 'End Day', kind: 'end' });
+    expect(slotLabel('morning')).toBe('Morning');
   });
 });
 
 describe('formatCountdown', () => {
-  it('renders remaining minutes as m:ss', () => {
-    expect(formatCountdown(12.5)).toBe('12:30');
-    expect(formatCountdown(0)).toBe('0:00');
+  it('renders remaining time as hours and minutes', () => {
+    expect(formatCountdown(5 * 60)).toBe('5h');
+    expect(formatCountdown(5 * 60 + 12)).toBe('5h 12m');
+    expect(formatCountdown(12.5)).toBe('12m');
+    expect(formatCountdown(0)).toBe('0m');
   });
 });
 

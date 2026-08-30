@@ -72,6 +72,16 @@ export function eatFromSections(
   return out;
 }
 
+export function liveSectionState(prev?: {
+  startedAt?: string | null;
+  endedAt?: string | null;
+  sectionExtra?: Partial<Record<Slot, number>>;
+  sectionUsed?: Partial<Record<Slot, number>>;
+}): { extra: Partial<Record<Slot, number>>; used: Partial<Record<Slot, number>> } {
+  if (!prev?.startedAt && !prev?.endedAt) return { extra: {}, used: {} };
+  return { extra: prev.sectionExtra || {}, used: prev.sectionUsed || {} };
+}
+
 export function usedFromEat(base: Record<Slot, number>, after: Record<Slot, number>): Partial<Record<Slot, number>> {
   const used: Partial<Record<Slot, number>> = {};
   for (const slot of SLOTS) {

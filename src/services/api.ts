@@ -26,6 +26,7 @@ export const api = {
   upsertAppointment: call<Record<string, unknown>, { ok: boolean; id: string }>('upsertAppointment'),
   archiveAppointment: call<{ id: string }, { ok: boolean }>('archiveAppointment'),
   rebuildRange: call<{ start?: string; days?: number }, { ok: boolean }>('rebuildRange'),
+  resetToday: call<Record<string, never>, { ok: boolean }>('resetToday'),
   completeBlock: call<{ date: string; id: string }, { ok: boolean }>('completeBlock'),
   skipBlock: call<{ date: string; id: string }, { ok: boolean }>('skipBlock'),
   startDay: call<{ date: string }, { ok: boolean }>('startDay'),

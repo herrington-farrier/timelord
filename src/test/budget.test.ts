@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assignWeeklyBudgets, assignableWeekMinutes, assignedWeekMinutes, collapsedSlotHours, dailyBudgetFor, eventsRangeLabel, formatBucketHours, weekBudgetSummary, weeklyCapacity } from '../domain/budget';
+import { assignWeeklyBudgets, assignableWeekMinutes, assignedDayBudget, assignedWeekMinutes, collapsedSlotHours, dailyBudgetFor, eventsRangeLabel, formatBucketHours, itemExceedsBucketMessage, itemFitsBucket, weekBudgetSummary, weeklyCapacity } from '../domain/budget';
 import { PERSONAL_BUCKET, SEED_BUCKETS } from '../domain/seed';
 import { bucket, settings, workBucket } from './fixtures';
 
@@ -129,5 +129,40 @@ describe('weekly budget', () => {
     expect(eventsRangeLabel('2026-08-29', '2026-09-02')).toBe('5d, Aug 29/Sep 2');
     expect(eventsRangeLabel('2026-12-12', '2026-12-12')).toBe('1d, Dec 12');
     expect(eventsRangeLabel('', '')).toBe('off');
+  });
+});
+
+describe('item vs bucket daily hours', () => {
+  it('rejects a 4h item in a 3h/day bucket', () => {
+    const food = bucket({
+      id: 'food',
+      name: 'Food',
+      weight: 3,
+      hoursMode: 'day',
+      hoursMinutes: 3 * 60,
+      weeklyMinutes: 3 * 60,
+      days: ['Mon'],
+    });
+    expect(assignedDayBudget(food)).toBe(3 * 60);
+    expect(itemFitsBucket(4 * 60, food)).toBe(false);
+    expect(itemFitsBucket(3 * 60, food)).toBe(true);
+    expect(itemFitsBucket(0, food)).toBe(true);
+    expect(itemExceedsBucketMessage(food)).toBe(
+      'Duration cannot exceed the Food daily hours (3h).'
+    );
+  });
+
+  it('uses the daily share of week-mode hours', () => {
+    const food = bucket({
+      id: 'food',
+      name: 'Food',
+      weight: 3,
+      hoursMode: 'week',
+      hoursMinutes: 3 * 60,
+      weeklyMinutes: 3 * 60,
+      days: ['Mon', 'Tue', 'Wed', 'Thu'],
+    });
+    expect(assignedDayBudget(food)).toBe(45);
+    expect(itemFitsBucket(60, food)).toBe(false);
   });
 });

@@ -20,8 +20,8 @@ Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; onl
 
 ## items/{id}
 
-- `bucketId`, `title`, `type` (`recurring` | `scheduled`), `weight`, `durationMinutes` (0 is a reminder; never dropped)
-- `cadence` object, optional `dueAt`, `archived`
+- `bucketId`, `title`, `type` (`recurring` | `scheduled`), `weight`, `durationMinutes` (0 is a reminder; never dropped). Timed duration cannot exceed the bucket’s daily hours.
+- `cadence` object, optional `dueAt`, `archived`. `everyNDays` may include `startDate`; no hits before it.
 - Events items are always `scheduled`. `dueAt` is the date they pack; cadence is unused.
 
 ## appointments/{id}
@@ -33,13 +33,13 @@ Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; onl
 
 - `blocks[]` (each block may have `slot`), `dropped[]`, `droppedBuckets[]`, `startedAt`, `endedAt`, `packedAt`
 - `section` (`morning` | `midday` | `evening` | `event`), `sectionStartedAt`, `sectionRemainingMinutes`, `pausedAt`
-- `sectionExtra`, `sectionUsed` (leftover carry and appointment eat)
-- `eventStartedAt`, `appointmentRuns` (`{ startedAt?, elapsedMinutes? }` keyed by appointment id)
-- Pack restamps `color` from current buckets and appointments. Unstarted days pack fresh; started or ended days keep Complete / Skip.
+- `sectionExtra`, `sectionUsed` (appointment eat). Pack rebuilds from this week’s Sunday and clears both. Start Next Buckets does not write leftover extra.
+- `eventStartedAt` (unused on event days; no stopwatch), `appointmentRuns` (`{ startedAt?, elapsedMinutes? }` keyed by appointment id)
+- Pack restamps `color` from current buckets and appointments. Started or ended days keep Complete / Skip.
 
 ## logs/{id}
 
-Append-only: `type`, `at`, `date`, `itemId`, `bucketId`, `minutes`. Never overwritten. Event days log `event_hours`.
+Append-only: `type`, `at`, `date`, `itemId`, `bucketId`, `minutes`, optional `title` and `section`. Never overwritten. `rebuild` displays as Schedule packed (gold). Complete is green; skip is red.
 
 ## skipPushes/{id}
 

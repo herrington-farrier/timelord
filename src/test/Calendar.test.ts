@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardStartFor, fallingChips, isAccentChip, listChips, listKeysFrom, listShowsDay, loadTone, orderChips, placedChips, scheduledMinutes, visibleChips } from '../pages/Calendar';
+import { boardShowsDay, boardStartFor, fallingChips, isAccentChip, listChips, listKeysFrom, listShowsDay, loadTone, orderChips, placedChips, scheduledMinutes, sectionFreeMinutes, visibleChips } from '../pages/Calendar';
 import { weekStart } from '../shared/dates';
 import type { PackedBlock } from '../domain/types';
 
@@ -28,6 +28,49 @@ describe('scheduledMinutes', () => {
       block({ id: 'drop', kind: 'weighted', durationMinutes: 45, status: 'dropped' }),
     ]);
     expect(minutes).toBe(120);
+  });
+});
+
+describe('sectionFreeMinutes', () => {
+  const settings = { dayMinutes: 15 * 60 };
+
+  it('subtracts packed productive minutes from each section', () => {
+    expect(
+      sectionFreeMinutes(settings, [
+        block({ id: 'a', kind: 'weighted', slot: 'morning', durationMinutes: 3 * 60 }),
+        block({ id: 'b', kind: 'weighted', slot: 'evening', durationMinutes: 45 }),
+      ])
+    ).toEqual({ morning: 2 * 60, midday: 5 * 60, evening: 5 * 60 - 45 });
+  });
+
+  it('ignores personal, appointments, events, and dropped items', () => {
+    expect(
+      sectionFreeMinutes(settings, [
+        block({ id: 'morning', kind: 'personal', slot: 'morning', title: 'Morning Routine', durationMinutes: 60 }),
+        block({ id: 'meet', kind: 'appointment', durationMinutes: 90 }),
+        block({ id: 'trip', kind: 'event', bucketId: 'events', durationMinutes: 120 }),
+        block({ id: 'drop', kind: 'weighted', slot: 'midday', durationMinutes: 60, status: 'dropped' }),
+      ])
+    ).toEqual({ morning: 5 * 60, midday: 5 * 60, evening: 5 * 60 });
+  });
+
+  it('uses the bucket slot when the packed slot is missing', () => {
+    const food = { id: 'food', slot: 'evening' as const };
+    expect(
+      sectionFreeMinutes(
+        settings,
+        [block({ id: 'cook', kind: 'weighted', bucketId: 'food', durationMinutes: 60 })],
+        [food]
+      )
+    ).toEqual({ morning: 5 * 60, midday: 5 * 60, evening: 4 * 60 });
+  });
+
+  it('applies leftover eat to section capacity', () => {
+    expect(sectionFreeMinutes(settings, [], [], { evening: 30 }, { morning: 60 })).toEqual({
+      morning: 4 * 60,
+      midday: 5 * 60,
+      evening: 5 * 60 + 30,
+    });
   });
 });
 
@@ -101,11 +144,25 @@ describe('listChips', () => {
     const shown = listChips([
       block({ id: 'evening', kind: 'personal', slot: 'evening', title: 'Evening Routine' }),
       block({ id: 'house', kind: 'weighted', slot: 'morning', title: 'Floors' }),
+      block({ id: 'cook', kind: 'weighted', slot: 'evening', title: 'Cooking' }),
       block({ id: 'break', kind: 'personal', slot: 'midday', title: 'Break' }),
       block({ id: 'morning', kind: 'personal', slot: 'morning', title: 'Morning Routine' }),
       block({ id: 'trans', kind: 'transition' }),
     ]);
-    expect(shown.map((b) => b.id)).toEqual(['morning', 'house', 'break', 'evening']);
+    expect(shown.map((b) => b.id)).toEqual(['morning', 'house', 'break', 'cook', 'evening']);
+  });
+
+  it('keeps evening-bucket chips in the last third when the packed slot is missing', () => {
+    const food = { id: 'food', slot: 'evening' as const };
+    const shown = listChips(
+      [
+        block({ id: 'evening', kind: 'personal', slot: 'evening', title: 'Evening Routine' }),
+        block({ id: 'cook', kind: 'weighted', bucketId: 'food', title: 'Cooking' }),
+        block({ id: 'house', kind: 'weighted', slot: 'morning', title: 'Floors' }),
+      ],
+      [food]
+    );
+    expect(shown.map((b) => b.id)).toEqual(['house', 'cook', 'evening']);
   });
 });
 
@@ -155,6 +212,14 @@ describe('listKeysFrom', () => {
       '2026-08-29',
       '2026-09-12',
     ]);
+  });
+});
+
+describe('boardShowsDay', () => {
+  it('hides days before today', () => {
+    expect(boardShowsDay('2026-08-28', '2026-08-29')).toBe(false);
+    expect(boardShowsDay('2026-08-29', '2026-08-29')).toBe(true);
+    expect(boardShowsDay('2026-08-30', '2026-08-29')).toBe(true);
   });
 });
 

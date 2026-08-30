@@ -13,7 +13,7 @@ export type Cadence =
   | { kind: 'weekdays' }
   | { kind: 'weekends' }
   | { kind: 'weekly'; days: Weekday[] }
-  | { kind: 'everyNDays'; n: number; startWeekday: Weekday }
+  | { kind: 'everyNDays'; n: number; startWeekday: Weekday; startDate?: string }
   | { kind: 'monthly'; dayOfMonth: number };
 
 export type DaySettings = {

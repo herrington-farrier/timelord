@@ -19,6 +19,10 @@
   --control-hover: #2a2318;
   --glow: #2a1c08;
   --glow-2: #161008;
+  --guide-rose: #f9a8d4;
+  --guide-sky: #7dd3fc;
+  --guide-lime: #bef264;
+  --guide-violet: #c4b5fd;
   --btn-radius: 8px;
   --btn-pad: 0.5em 0.95em;
   --btn-size: 0.9rem;
@@ -60,6 +64,16 @@ html, body {
   gap: 8px;
 }
 .title-right { justify-content: flex-end; }
+.pack-bar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 12px;
+  background: linear-gradient(var(--bg) 72%, transparent);
+}
+.pack-bar .primary { min-width: 12rem; }
 .title-heading {
   margin: 0;
   font-size: clamp(1.4rem, 4vw, 2.4rem);
@@ -158,7 +172,7 @@ button.skip:hover:not(:disabled) {
   margin-bottom: 14px;
 }
 .day-acts--end {
-  margin-top: 6px;
+  margin-top: 14px;
   margin-bottom: 0;
 }
 .day-acts button {
@@ -207,6 +221,12 @@ button.skip:hover:not(:disabled) {
 }
 .item.complete { opacity: 0.5; }
 .item.skipped { opacity: 0.45; text-decoration: line-through; }
+.log-row--ok { border-left-color: var(--ok); }
+.log-row--ok .item-title { color: var(--ok); }
+.log-row--skip { border-left-color: var(--danger); }
+.log-row--skip .item-title { color: var(--danger); }
+.log-row--pack { border-left-color: var(--gold); }
+.log-row--pack .item-title { color: var(--gold); }
 .item--appt {
   border-left-width: 6px;
   background: color-mix(in srgb, var(--bcolor) 18%, var(--panel));
@@ -305,6 +325,19 @@ button.skip:hover:not(:disabled) {
   border-bottom: 1px solid var(--border);
   padding-bottom: 4px;
 }
+.cal-secs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: -2px 0 6px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cal-secs b {
+  font-weight: 650;
+  color: var(--text);
+}
 .cal-board {
   background: var(--panel);
   border: 1px solid var(--panel-edge);
@@ -344,6 +377,7 @@ button.skip:hover:not(:disabled) {
   overflow: auto;
 }
 .cal-cell.is-today { background: var(--gold-bg); }
+.cal-cell.is-past { color: var(--head); }
 .cal-cell.is-event,
 .cal-day-h.is-event {
   outline: 2px solid var(--bcolor, var(--gold));
@@ -796,6 +830,55 @@ button.skip:hover:not(:disabled) {
 }
 .sign-in .primary { margin-top: 16px; min-width: 10rem; }
 .eta { color: var(--gold); font-variant-numeric: tabular-nums; font-size: 0.8rem; }
+.guide { display: flex; flex-direction: column; gap: 16px; }
+.guide-lede {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--muted);
+  max-width: 42rem;
+}
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.guide-card {
+  --gcolor: var(--gold);
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--gcolor) 18%, var(--panel)) 0%, var(--panel) 55%),
+    var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+  padding: 16px 18px 18px;
+  border-top: 4px solid var(--gcolor);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gcolor) 22%, transparent);
+}
+.guide-kicker {
+  margin: 0 0 6px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gcolor);
+}
+.guide-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+}
+.guide-card p:last-child {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.45;
+}
+.guide-card--pack-how { --gcolor: var(--gold); grid-column: 1 / -1; }
+.guide-card--personal { --gcolor: var(--ok); }
+.guide-card--work { --gcolor: var(--accent-hover); }
+.guide-card--events { --gcolor: var(--guide-violet); }
+.guide-card--weighted { --gcolor: var(--guide-sky); }
+.guide-card--today { --gcolor: var(--danger); }
+.guide-card--calendar { --gcolor: var(--guide-lime); }
+.guide-card--lists { --gcolor: var(--guide-rose); }
 @media (max-width: 700px) {
   .title-row {
     grid-template-columns: 1fr;

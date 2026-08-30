@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { CalendarPage } from './pages/Calendar';
 import { EditPage } from './pages/Edit';
+import { GuidePage } from './pages/Guide';
 import { LogPage } from './pages/Log';
 import { SignInPage } from './pages/SignIn';
 import { TodayPage } from './pages/Today';
@@ -16,6 +17,7 @@ export default function App() {
       <Route path="/" element={<TodayPage />} />
       <Route path="/calendar" element={<CalendarPage />} />
       <Route path="/edit" element={<EditPage />} />
+      <Route path="/guide" element={<GuidePage />} />
       <Route path="/log" element={<LogPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

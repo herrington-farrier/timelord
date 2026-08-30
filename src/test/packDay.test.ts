@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { daySections, packDay, sectionMinutes } from '../domain/packDay';
-import { eatFromSections, isEventDay, nextSlot, sectionCapacity } from '../domain/sections';
+import { eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity } from '../domain/sections';
 import { nextAssignedDate, skipPushDate } from '../domain/skip';
 import { EVENTS_ID } from '../domain/types';
+import { weekStart } from '../shared/dates';
 import { bucket, item, settings, workBucket } from './fixtures';
 
 const monday = '2026-08-31';
@@ -37,6 +38,22 @@ describe('sectionMinutes', () => {
       morning: 280,
       midday: 280,
       evening: 280,
+    });
+  });
+
+  it('puts leftover minutes on evening, not on morning or midday', () => {
+    expect(sectionMinutes(settings({ dayMinutes: 10 * 60 + 10 }))).toEqual({
+      morning: 203,
+      midday: 203,
+      evening: 204,
+    });
+  });
+
+  it('splits a 15h day into three 5h sections', () => {
+    expect(sectionMinutes(settings({ dayMinutes: 15 * 60 }))).toEqual({
+      morning: 5 * 60,
+      midday: 5 * 60,
+      evening: 5 * 60,
     });
   });
 });
@@ -106,7 +123,71 @@ describe('packDay', () => {
     expect(result.blocks.find((b) => b.itemId === 'lift')?.slot).toBe('midday');
   });
 
-  it('uses Start Next leftover to place more items in the next section', () => {
+  it('packs a full evening third on a 15h day when midday has no buckets', () => {
+    const food = bucket({
+      id: 'food',
+      name: 'Food',
+      weight: 3,
+      hoursMode: 'day',
+      hoursMinutes: 5 * 60,
+      weeklyMinutes: 5 * 60,
+      days: ['Mon'],
+      slot: 'evening',
+    });
+    const result = packDay({
+      ...base(),
+      settings: settings({ dayMinutes: 15 * 60 }),
+      buckets: [workBucket({ weeklyMinutes: 0, days: ['Tue'] }), food],
+      items: [item({ id: 'cook', bucketId: 'food', title: 'Cook', weight: 1, durationMinutes: 5 * 60 })],
+    });
+    expect(result.blocks.find((b) => b.itemId === 'cook')?.durationMinutes).toBe(5 * 60);
+    expect(result.blocks.find((b) => b.itemId === 'cook')?.slot).toBe('evening');
+  });
+
+  it('does not let leftover eat shrink evening on an unstarted day', () => {
+    const food = bucket({
+      id: 'food',
+      name: 'Food',
+      weight: 3,
+      hoursMode: 'day',
+      hoursMinutes: 5 * 60,
+      weeklyMinutes: 5 * 60,
+      days: ['Mon'],
+      slot: 'evening',
+    });
+    const stale = { extra: {}, used: { evening: 225 } };
+    const live = liveSectionState({ sectionUsed: stale.used });
+    const result = packDay({
+      ...base(),
+      settings: settings({ dayMinutes: 15 * 60 }),
+      buckets: [workBucket({ weeklyMinutes: 0, days: ['Tue'] }), food],
+      items: [item({ id: 'cook', bucketId: 'food', title: 'Cook', weight: 1, durationMinutes: 5 * 60 })],
+      sectionExtra: live.extra,
+      sectionUsed: live.used,
+    });
+    expect(live.used).toEqual({});
+    expect(result.blocks.find((b) => b.itemId === 'cook')?.durationMinutes).toBe(5 * 60);
+  });
+
+  it('stamps evening on evening-bucket items', () => {
+    const food = bucket({
+      id: 'food',
+      name: 'Food',
+      weight: 3,
+      weeklyMinutes: 60,
+      days: ['Mon'],
+      slot: 'evening',
+    });
+    const result = packDay({
+      ...base(),
+      buckets: [workBucket({ weeklyMinutes: 0, days: ['Tue'] }), food],
+      items: [item({ id: 'cook', bucketId: 'food', title: 'Cooking', weight: 1, durationMinutes: 30 })],
+    });
+    expect(result.blocks.find((b) => b.itemId === 'cook')?.slot).toBe('evening');
+    expect(sectionCapacity(settings(), {}, {}).evening).toBe(sectionMinutes(settings()).evening);
+  });
+
+  it('uses section extra to place more items in the next section', () => {
     const fitness = bucket({
       id: 'fitness',
       name: 'Fitness',
@@ -337,6 +418,17 @@ describe('packDay', () => {
 });
 
 describe('section carry', () => {
+  it('keeps leftover eat only after the day has started', () => {
+    expect(liveSectionState({ sectionUsed: { evening: 225 } })).toEqual({ extra: {}, used: {} });
+    expect(liveSectionState({ startedAt: '2026-08-29T12:00:00.000Z', sectionUsed: { evening: 225 } }).used).toEqual({
+      evening: 225,
+    });
+  });
+
+  it('packs from this week’s Sunday so the 2-week board is included', () => {
+    expect(weekStart('2026-08-29')).toBe('2026-08-23');
+  });
+
   it('eats appointment time from the current section then the next', () => {
     const caps = sectionCapacity(settings(), {}, {});
     const after = eatFromSections(caps, 'morning', 300);

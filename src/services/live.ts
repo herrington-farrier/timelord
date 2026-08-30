@@ -111,14 +111,14 @@ export function useDays(uid: string | undefined, start: string, end: string): Re
   return value;
 }
 
-export function useLogs(uid: string | undefined, date: string) {
+export function useLogs(uid: string | undefined, start: string, end: string) {
   const [value, setValue] = useState<DocumentData[]>([]);
   useEffect(() => {
     if (!uid || !db) return;
-    const q = query(tenantCol(uid, 'logs'), where('date', '==', date));
+    const q = query(tenantCol(uid, 'logs'), where('date', '>=', start), where('date', '<=', end));
     return onSnapshot(q, (snap) => {
       setValue(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-  }, [uid, date]);
+  }, [uid, start, end]);
   return value;
 }

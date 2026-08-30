@@ -1,29 +1,39 @@
 import { formatDuration } from '../domain/duration';
-import { useLogs } from '../services/live';
+import { formatLogEvent, logEventTone } from '../domain/log';
+import { addDaysKey, todayKey } from '../shared/dates';
+import { useItems, useLogs } from '../services/live';
 import { useAuth } from '../shared/auth';
-import { todayKey } from '../shared/dates';
 import { Chrome } from '../components/Chrome';
+
+const LOG_DAYS = 14;
 
 export function LogPage() {
   const { user } = useAuth();
-  const date = todayKey();
-  const logs = useLogs(user?.uid, date);
+  const today = todayKey();
+  const start = addDaysKey(today, -(LOG_DAYS - 1));
+  const logs = useLogs(user?.uid, start, today);
+  const items = useItems(user?.uid);
   return (
-    <Chrome title="Log" stamp={date}>
+    <Chrome title="Log" stamp={`${LOG_DAYS} days`}>
       <p className="hint">Append-only. Complete, skip, start, and end are never overwritten.</p>
       {logs
         .slice()
-        .sort((a, b) => String(a.at).localeCompare(String(b.at)))
-        .map((row) => (
-          <div key={String(row.id)} className="item">
-            <div className="item-title">{String(row.type)}</div>
-            <div className="item-meta">
-              {String(row.at || '')}
-              {row.minutes ? ` · ${formatDuration(Number(row.minutes))}` : ''}
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+        .map((row) => {
+          const title = String(row.title || items.find((i) => i.id === row.itemId)?.title || '');
+          const tone = logEventTone(String(row.type || ''));
+          return (
+            <div key={String(row.id)} className={`item${tone ? ` log-row--${tone}` : ''}`}>
+              <div className="item-title">{formatLogEvent({ ...row, title })}</div>
+              <div className="item-meta">
+                {String(row.date || '')}
+                {row.at ? ` · ${String(row.at)}` : ''}
+                {row.minutes ? ` · ${formatDuration(Number(row.minutes))}` : ''}
+              </div>
             </div>
-          </div>
-        ))}
-      {!logs.length ? <p className="hint">No events for today yet.</p> : null}
+          );
+        })}
+      {!logs.length ? <p className="hint">No events in the last {LOG_DAYS} days.</p> : null}
     </Chrome>
   );
 }

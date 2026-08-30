@@ -14,6 +14,8 @@ import {
   formatHoursField,
   hoursMinutesOf,
   hoursModeOf,
+  itemExceedsBucketMessage,
+  itemFitsBucket,
   personalWeekMinutes,
   weekBudgetSummary,
   type WeekBudgetSummary,
@@ -83,6 +85,7 @@ export function EditPage() {
               await rebuild();
             })
           }
+          onResetToday={() => act('Today reset.', () => api.resetToday())}
         />
       ) : null}
       {tab === 'buckets' && settings ? (
@@ -155,9 +158,11 @@ export function EditPage() {
 function DayForm({
   settings,
   onSave,
+  onResetToday,
 }: {
   settings: DaySettings;
   onSave: (payload: Record<string, unknown>) => Promise<void>;
+  onResetToday: () => Promise<void>;
 }) {
   const day = splitMinutes(settings.dayMinutes);
   const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
@@ -200,6 +205,9 @@ function DayForm({
         </div>
       </div>
       <div className="page-save">
+        <button type="button" className="skip" onClick={() => onResetToday()}>
+          Reset Today
+        </button>
         <button type="submit" className="primary">
           Save
         </button>
@@ -689,6 +697,7 @@ function ItemFields({
   const openDays = listCadenceDays(currentBucket);
   const [kind, setKind] = useState(item?.type || 'recurring');
   const [cadenceKind, setCadenceKind] = useState(item?.cadence.kind || 'daily');
+  const { showToast } = useToast();
   return (
     <form
       onSubmit={(e) => {
@@ -696,6 +705,11 @@ function ItemFields({
         const fd = new FormData(e.currentTarget);
         const type = eventItem ? 'scheduled' : String(fd.get('type'));
         const cadKind = String(fd.get('cadenceKind') || 'daily');
+        const durationMinutes = hoursToMinutes(fd.get('iH'), fd.get('iM'));
+        if (!eventItem && currentBucket && !itemFitsBucket(durationMinutes, currentBucket)) {
+          showToast(itemExceedsBucketMessage(currentBucket), 'error');
+          return;
+        }
         let cadence: Cadence = { kind: 'daily' };
         if (!eventItem) {
           if (cadKind === 'weekdays' || cadKind === 'weekends' || cadKind === 'daily') {
@@ -706,12 +720,14 @@ function ItemFields({
               days: (fd.getAll('weeklyDays') as Weekday[]).filter((d) => openDays.includes(d)),
             };
           } else if (cadKind === 'everyNDays') {
+            const startDate = String(fd.get('startDate') || '').trim();
             cadence = {
               kind: 'everyNDays',
               n: Number(fd.get('everyN')) || 2,
               startWeekday: (openDays.includes(String(fd.get('startWeekday')) as Weekday)
               ? String(fd.get('startWeekday'))
               : openDays[0] || 'Mon') as Weekday,
+              ...(startDate ? { startDate } : {}),
             };
           } else if (cadKind === 'monthly') {
             cadence = { kind: 'monthly', dayOfMonth: Number(fd.get('monthDay')) || 1 };
@@ -721,7 +737,7 @@ function ItemFields({
           bucketId: fd.get('bucketId'),
           title: fd.get('title'),
           type,
-          durationMinutes: hoursToMinutes(fd.get('iH'), fd.get('iM')),
+          durationMinutes,
           cadence,
           dueAt: type === 'scheduled' ? fd.get('dueAt') : '',
         });
@@ -814,6 +830,13 @@ function ItemFields({
                 </option>
               ))}
             </select>
+          </FormField>
+          <FormField label="Start date">
+            <input
+              name="startDate"
+              type="date"
+              defaultValue={item?.cadence.kind === 'everyNDays' ? item.cadence.startDate || '' : ''}
+            />
           </FormField>
         </div>
       ) : null}

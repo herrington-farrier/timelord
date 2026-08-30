@@ -1,14 +1,15 @@
 import { useState } from 'react';
 
 import { formatDuration } from '../domain/duration';
-import { slotIndex } from '../domain/sections';
+import { isEventDay, sectionCapacity, slotIndex } from '../domain/sections';
 import { isBreakBlock, isEventPacked } from '../domain/today';
 import { addDaysKey, todayKey, weekStart } from '../shared/dates';
-import { isEventDay } from '../domain/sections';
 import { useAuth } from '../shared/auth';
 import { useBuckets, useDays, useSettings } from '../services/live';
 import { Chrome } from '../components/Chrome';
-import { EVENTS_ID, type PackedBlock } from '../domain/types';
+import { EVENTS_ID, SLOTS, type Bucket, type DaySettings, type PackedBlock, type Slot } from '../domain/types';
+
+type SlotRef = Pick<Bucket, 'id' | 'slot'> & { kind?: Bucket['kind'] };
 
 const BOARD_DAYS = 14;
 
@@ -43,7 +44,7 @@ export function CalendarPage() {
         <div className="cal-list">
           {listKeys.map((key) => {
             const day = days[key];
-            const placed = listChips(day?.blocks || []);
+            const placed = listChips(day?.blocks || [], buckets);
             const falling = fallingChips(day?.dropped);
             const eventDay = isEventDay(events, key);
             if (!listShowsDay(placed, falling, eventDay)) return null;
@@ -63,6 +64,17 @@ export function CalendarPage() {
                     </>
                   ) : null}
                 </div>
+                {eventDay || !settings ? null : (
+                  <ListSectionFree
+                    free={sectionFreeMinutes(
+                      settings,
+                      day?.blocks || [],
+                      buckets,
+                      day?.sectionExtra,
+                      day?.sectionUsed
+                    )}
+                  />
+                )}
                 {placed.map((it) => (
                   <Chip key={it.id} block={it} />
                 ))}
@@ -89,15 +101,16 @@ export function CalendarPage() {
           </div>
           <div className="cal-weeks">
             {boardKeys.map((key) => {
-              const day = days[key];
-              const placed = visibleChips(placedChips(day?.blocks || []));
-              const falling = fallingChips(day?.dropped);
-              const hours = scheduledMinutes(day?.blocks || []);
-              const eventDay = isEventDay(events, key);
+              const open = boardShowsDay(key, today);
+              const day = open ? days[key] : undefined;
+              const placed = open ? visibleChips(placedChips(day?.blocks || []), buckets) : [];
+              const falling = open ? fallingChips(day?.dropped) : [];
+              const hours = open ? scheduledMinutes(day?.blocks || []) : 0;
+              const eventDay = open && isEventDay(events, key);
               return (
                 <div
                   key={key}
-                  className={`cal-cell${key === today ? ' is-today' : ''}${eventDay ? ' is-event' : ''}`}
+                  className={`cal-cell${key === today ? ' is-today' : ''}${eventDay ? ' is-event' : ''}${open ? '' : ' is-past'}`}
                   style={mark(eventDay)}
                 >
                   <div className="cal-cell-num">
@@ -117,6 +130,24 @@ export function CalendarPage() {
         </div>
       </div>
     </Chrome>
+  );
+}
+
+const SLOT_LABEL: Record<Slot, string> = {
+  morning: 'Morning',
+  midday: 'Midday',
+  evening: 'Evening',
+};
+
+export function ListSectionFree({ free }: { free: Record<Slot, number> }) {
+  return (
+    <div className="cal-secs">
+      {SLOTS.map((slot) => (
+        <span key={slot}>
+          {SLOT_LABEL[slot]} <b>{formatDuration(free[slot])}</b>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -142,6 +173,26 @@ function Chip({ block, overflow }: { block: PackedBlock; overflow?: boolean }) {
   );
 }
 
+export function sectionFreeMinutes(
+  settings: Pick<DaySettings, 'dayMinutes'>,
+  blocks: PackedBlock[],
+  buckets: SlotRef[] = [],
+  extra: Partial<Record<Slot, number>> = {},
+  used: Partial<Record<Slot, number>> = {}
+): Record<Slot, number> {
+  const caps = sectionCapacity(settings, extra, used);
+  const packed: Record<Slot, number> = { morning: 0, midday: 0, evening: 0 };
+  for (const block of blocks) {
+    if (block.status === 'dropped' || block.kind === 'personal' || block.kind === 'transition') continue;
+    const slot = chipSlot(block, buckets);
+    if (!slot) continue;
+    packed[slot] += Math.max(0, block.durationMinutes);
+  }
+  const free = { ...packed };
+  for (const slot of SLOTS) free[slot] = Math.max(0, caps[slot] - packed[slot]);
+  return free;
+}
+
 export function scheduledMinutes(blocks: PackedBlock[]): number {
   return blocks
     .filter((b) => b.status !== 'dropped' && b.kind !== 'personal' && b.kind !== 'transition')
@@ -156,8 +207,12 @@ export function loadTone(scheduled: number, dayMinutes: number): 'ok' | 'mid' | 
   return 'hot';
 }
 
+export function boardShowsDay(key: string, today: string): boolean {
+  return key >= today;
+}
+
 export function listKeysFrom(boardKeys: string[], today: string): string[] {
-  return boardKeys.filter((key) => key >= today);
+  return boardKeys.filter((key) => boardShowsDay(key, today));
 }
 
 export function listShowsDay(
@@ -178,7 +233,20 @@ function listRank(block: PackedBlock): number {
   return 0;
 }
 
-export function listChips(blocks: PackedBlock[]): PackedBlock[] {
+export function chipSlot(block: PackedBlock, buckets: SlotRef[] = []): Slot | undefined {
+  if (block.slot) return block.slot;
+  if (block.kind === 'appointment' || block.kind === 'event') return undefined;
+  const bucket = buckets.find((b) => b.id === block.bucketId);
+  if (!bucket || bucket.kind === 'event' || bucket.id === EVENTS_ID) return undefined;
+  return bucket.slot;
+}
+
+function chipSlotIndex(block: PackedBlock, buckets: SlotRef[] = []): number {
+  const slot = chipSlot(block, buckets);
+  return slot ? slotIndex(slot) : slotIndex('evening');
+}
+
+export function listChips(blocks: PackedBlock[], buckets: SlotRef[] = []): PackedBlock[] {
   if (isEventPacked(blocks)) {
     return blocks.filter((b) => b.kind !== 'transition' && b.kind !== 'personal');
   }
@@ -188,18 +256,18 @@ export function listChips(blocks: PackedBlock[]): PackedBlock[] {
     .filter((b) => !isAccentChip(b))
     .sort(
       (a, b) =>
-        slotIndex(a.slot) - slotIndex(b.slot) ||
+        chipSlotIndex(a, buckets) - chipSlotIndex(b, buckets) ||
         listRank(a) - listRank(b) ||
         a.startMinutes - b.startMinutes
     );
   return [...accent, ...rest];
 }
 
-export function orderChips(blocks: PackedBlock[]): PackedBlock[] {
+export function orderChips(blocks: PackedBlock[], buckets: SlotRef[] = []): PackedBlock[] {
   const accent = blocks.filter((b) => isAccentChip(b));
   const rest = blocks
     .filter((b) => !isAccentChip(b))
-    .sort((a, b) => slotIndex(a.slot) - slotIndex(b.slot) || a.startMinutes - b.startMinutes);
+    .sort((a, b) => chipSlotIndex(a, buckets) - chipSlotIndex(b, buckets) || a.startMinutes - b.startMinutes);
   return [...accent, ...rest];
 }
 
@@ -207,6 +275,6 @@ export function fallingChips(dropped: PackedBlock[] | undefined): PackedBlock[] 
   return (dropped || []).filter((b) => b.status === 'dropped');
 }
 
-export function visibleChips(blocks: PackedBlock[]): PackedBlock[] {
-  return orderChips(blocks);
+export function visibleChips(blocks: PackedBlock[], buckets: SlotRef[] = []): PackedBlock[] {
+  return orderChips(blocks, buckets);
 }

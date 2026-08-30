@@ -1,10 +1,19 @@
+import { formatDuration } from './duration';
 import type { PackedBlock, Slot } from './types';
 
 export function formatCountdown(minutes: number): string {
-  const secs = Math.max(0, Math.floor(minutes * 60));
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  return formatDuration(Math.floor(Math.max(0, Number(minutes) || 0)));
+}
+
+export function slotLabel(section: Slot): string {
+  if (section === 'morning') return 'Morning';
+  if (section === 'midday') return 'Midday';
+  return 'Evening';
+}
+
+export function nextSectionAction(section: Slot): { label: string; kind: 'next' | 'end' } {
+  if (section === 'evening') return { label: 'End Day', kind: 'end' };
+  return { label: 'Start Next Buckets', kind: 'next' };
 }
 
 export function appointmentElapsed(

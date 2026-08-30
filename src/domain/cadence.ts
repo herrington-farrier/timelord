@@ -46,6 +46,7 @@ export function cadenceHitsDate(cadence: Cadence, dateKey: string): boolean {
     const { d } = parseDateKey(dateKey);
     return d === cadence.dayOfMonth;
   }
+  if (cadence.startDate && dateKey < cadence.startDate) return false;
   const origin = phaseOrigin(cadence.startWeekday);
   const diff = daysBetween(origin, dateKey);
   return ((diff % cadence.n) + cadence.n) % cadence.n === 0;

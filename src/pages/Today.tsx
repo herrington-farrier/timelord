@@ -6,12 +6,14 @@ import { isEventDay } from '../domain/sections';
 import {
   appointmentElapsed,
   formatCountdown,
+  nextSectionAction,
   signalSectionEnd,
+  slotLabel,
   todayEventItems,
   todaySectionDropped,
   todaySectionItems,
 } from '../domain/today';
-import { elapsedSince, sectionRemainingNow } from '../domain/timer';
+import { sectionRemainingNow } from '../domain/timer';
 import { EVENTS_ID, type PackedBlock, type Slot } from '../domain/types';
 import { api } from '../services/api';
 import { useBuckets, useDay, useSettings } from '../services/live';
@@ -33,7 +35,6 @@ export function TodayPage() {
   const ended = Boolean(day?.endedAt);
   const section = day?.section && day.section !== 'event' ? day.section : null;
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [morningOn, setMorningOn] = useState(false);
   const wasPositive = useRef(true);
 
   useEffect(() => {
@@ -45,7 +46,6 @@ export function TodayPage() {
   const remaining = started && section
     ? sectionRemainingNow(day?.sectionRemainingMinutes || 0, day?.sectionStartedAt, day?.pausedAt, nowMs)
     : 0;
-  const eventElapsed = started && eventDay && day?.eventStartedAt ? elapsedSince(day.eventStartedAt, nowMs) : 0;
   const paused = Boolean(day?.pausedAt);
 
   useEffect(() => {
@@ -77,18 +77,9 @@ export function TodayPage() {
       title="Timelord"
       stamp={day?.packedAt ? 'Packed' : 'Not packed'}
       actions={
-        <>
-          <button
-            type="button"
-            className="chrome-btn"
-            onClick={() => act('Rebuilt.', () => api.rebuildRange({ start: date, days: 21 }))}
-          >
-            Pack
-          </button>
-          <button type="button" className="chrome-btn" onClick={() => logOut()}>
-            Sign Out
-          </button>
-        </>
+        <button type="button" className="chrome-btn" onClick={() => logOut()}>
+          Sign Out
+        </button>
       }
     >
       <div className="day-totals">
@@ -97,48 +88,27 @@ export function TodayPage() {
           : `${formatDuration(settings?.dayMinutes || 0)} day · packed ${formatDuration(day?.packedMinutes || 0)}`}
       </div>
 
-      {eventDay ? (
-        <EventDayControls
-          started={started}
-          ended={ended}
-          elapsed={eventElapsed}
-          ready={Boolean(day)}
-          onStart={() => act('Day started.', () => api.startDay({ date }))}
-          onEnd={() => act('Day ended.', () => api.endDay({ date }))}
-        />
-      ) : (
+      {eventDay ? null : (
         <NormalDayControls
           started={started}
           ended={ended}
-          morningOn={morningOn}
           section={section}
           remaining={remaining}
           paused={paused}
           ready={Boolean(day)}
-          onMorningStart={() => setMorningOn(true)}
-          onMorningEnd={() =>
-            act('Day started.', async () => {
-              await api.startDay({ date });
-              setMorningOn(false);
-            })
-          }
-          onStartNext={() => act('Next section.', () => api.startNext({ date }))}
-          onEvening={() => act('Day ended.', () => api.endDay({ date }))}
+          onStartDay={() => act('Day started.', () => api.startDay({ date }))}
         />
       )}
 
-      {!day ? <p className="err">No packed day. Tap Pack.</p> : null}
+      {!day ? <p className="err">No packed day.</p> : null}
 
-      {eventDay && started ? (
+      {eventDay && day ? (
         <div className="day">
           {eventItems.map((b) => (
             <ItemCard key={b.id} block={b} date={date} act={act} />
           ))}
+          {!eventItems.length ? <p className="hint">No Events items today.</p> : null}
         </div>
-      ) : null}
-
-      {!eventDay && !started && !ended ? (
-        <p className="hint">End Morning Routine to start the morning timer.</p>
       ) : null}
 
       {!eventDay && started && section ? (
@@ -197,109 +167,83 @@ export function TodayPage() {
           ))}
         </section>
       ) : null}
-    </Chrome>
-  );
-}
 
-function EventDayControls({
-  started,
-  ended,
-  elapsed,
-  ready,
-  onStart,
-  onEnd,
-}: {
-  started: boolean;
-  ended: boolean;
-  elapsed: number;
-  ready: boolean;
-  onStart: () => void;
-  onEnd: () => void;
-}) {
-  if (ended) return <p className="hint">Day ended.</p>;
-  if (!started) {
-    return (
-      <div className="day-acts">
-        <button type="button" className="btn--success" disabled={!ready} onClick={onStart}>
-          Start Day
-        </button>
-      </div>
-    );
-  }
-  return (
-    <div className="day-acts">
-      <div className="section-timer" aria-live="polite">
-        {formatCountdown(elapsed)}
-      </div>
-      <button type="button" className="danger" onClick={onEnd}>
-        End Day
-      </button>
-    </div>
+      {!eventDay && started && section ? (
+        <SectionEndActs
+          section={section}
+          remaining={remaining}
+          onStartNext={() =>
+            act(section === 'morning' ? 'Midday started.' : 'Evening started.', () => api.startNext({ date }))
+          }
+          onEvening={() => act('Day ended.', () => api.endDay({ date }))}
+        />
+      ) : null}
+    </Chrome>
   );
 }
 
 function NormalDayControls({
   started,
   ended,
-  morningOn,
   section,
   remaining,
   paused,
   ready,
-  onMorningStart,
-  onMorningEnd,
-  onStartNext,
-  onEvening,
+  onStartDay,
 }: {
   started: boolean;
   ended: boolean;
-  morningOn: boolean;
   section: Slot | null;
   remaining: number;
   paused: boolean;
   ready: boolean;
-  onMorningStart: () => void;
-  onMorningEnd: () => void;
-  onStartNext: () => void;
-  onEvening: () => void;
+  onStartDay: () => void;
 }) {
   if (ended) return <p className="hint">Day ended.</p>;
   if (!started) {
     return (
       <div className="day-acts">
-        {morningOn ? (
-          <button type="button" className="danger" onClick={onMorningEnd}>
-            End Routine
-          </button>
-        ) : (
-          <button type="button" className="btn--success" disabled={!ready} onClick={onMorningStart}>
-            Start Routine
-          </button>
-        )}
+        <button type="button" className="btn--success" disabled={!ready} onClick={onStartDay}>
+          Start Day
+        </button>
       </div>
     );
   }
   return (
-    <>
-      <div className="day-totals">
-        <span className={`section-timer${paused ? ' is-paused' : ''}`} aria-live="polite">
-          {formatCountdown(remaining)}
-        </span>
-        {paused ? ' · paused' : ''}
-        {section ? ` · ${section}` : ''}
-      </div>
-      <div className="day-acts day-acts--end">
-        {section === 'evening' ? (
-          <button type="button" className="danger" onClick={onEvening}>
-            Start Evening Routine
-          </button>
-        ) : (
-          <button type="button" className="btn--success" onClick={onStartNext}>
-            Start Next · {formatCountdown(remaining)}
-          </button>
-        )}
-      </div>
-    </>
+    <div className="day-totals">
+      <span className={`section-timer${paused ? ' is-paused' : ''}`} aria-live="polite">
+        {formatCountdown(remaining)}
+      </span>
+      {paused ? ' · paused' : ''}
+      {section ? ` · ${slotLabel(section)}` : ''}
+    </div>
+  );
+}
+
+function SectionEndActs({
+  section,
+  remaining,
+  onStartNext,
+  onEvening,
+}: {
+  section: Slot;
+  remaining: number;
+  onStartNext: () => void;
+  onEvening: () => void;
+}) {
+  const action = nextSectionAction(section);
+  return (
+    <div className="day-acts day-acts--end">
+      {action.kind === 'end' ? (
+        <button type="button" className="danger" onClick={onEvening}>
+          {action.label}
+        </button>
+      ) : (
+        <button type="button" className="btn--success" onClick={onStartNext}>
+          {action.label} · {formatCountdown(remaining)}
+        </button>
+      )}
+    </div>
   );
 }
 
