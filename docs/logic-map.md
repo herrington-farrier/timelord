@@ -42,11 +42,11 @@ Events list items are **scheduled only**: date + duration, no cadence. They pack
 
 ## Calendar and list
 
-The 2-week Sunday board and side list stay. Hours marks at the top of each list day and cell count **productive** packed minutes (no Personal), colored vs `dayMinutes` (green under 50%, gold 50–85%, red above). Chips are `title · duration` (title only if 0). No clocks. Appointments and Events are visually distinct and first in the cell and list. Other list items follow section, then weight. Falling-off stays at the bottom of that day. Event days (the Events date range) outline the cell and list day in the Events color even when empty. Event items also show on a normal day on their date.
+The 2-week Sunday board and side list stay. Hours marks at the top of each list day and cell count **productive** packed minutes (no Personal), colored vs `dayMinutes` (green under 50%, gold 50–85%, red above). Chips are `title · duration` (title only if 0). No clocks. Appointments are visually distinct and first in the cell and list. Event items look like other list chips; the day outline marks the Events range. Other list items follow section, then weight. Falling-off stays at the bottom of that day. Event days outline the cell and list day in the Events color even when empty. Event items also show on a normal day on their date.
 
 ## Lists
 
-Recurring = cadence forever. Scheduled = due date + cadence. Skip scheduled → next assigned day for that bucket. Skip recurring → no makeup. Skip-push is scheduled-only.
+Recurring = cadence forever. Scheduled = due date + cadence. A list item’s weekday pickers only allow days the bucket runs; unchecked bucket days are disabled. Skip scheduled → next assigned day for that bucket. Skip recurring → no makeup. Skip-push is scheduled-only.
 
 End Day: leftover scheduled skip-push; leftover recurring drop. Next day starts clean.
 

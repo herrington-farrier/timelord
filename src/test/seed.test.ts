@@ -6,6 +6,7 @@ import {
   bucketsToBackfill,
   canDeleteBucket,
   canRenameBucket,
+  listCadenceDays,
   listableBuckets,
   splitEditBuckets,
 } from '../domain/seed';
@@ -23,6 +24,20 @@ describe('locked buckets on Edit', () => {
     expect(work.name).toBe('Work');
     expect(events.id).toBe('events');
     expect(weighted.map((b) => b.id)).toEqual(['house']);
+  });
+});
+
+describe('list cadence days', () => {
+  it('closes weekdays the bucket does not run', () => {
+    expect(listCadenceDays(bucket({ id: 'house', name: 'House', weight: 4, days: ['Mon', 'Tue', 'Thu', 'Fri'] }))).toEqual([
+      'Mon',
+      'Tue',
+      'Thu',
+      'Fri',
+    ]);
+    expect(listCadenceDays(bucket({ id: 'house', name: 'House', weight: 4, days: ['Mon', 'Tue', 'Thu', 'Fri'] }))).not.toContain(
+      'Wed'
+    );
   });
 });
 

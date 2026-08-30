@@ -7,6 +7,7 @@ import {
   type Bucket,
   type DaySettings,
   type ListItem,
+  type Weekday,
 } from './types';
 
 export const PERSONAL_BUCKET: Bucket = {
@@ -184,6 +185,11 @@ export function splitEditBuckets(buckets: Bucket[]): {
 
 export function listableBuckets(buckets: Bucket[]): Bucket[] {
   return buckets.filter((b) => !b.archived && b.kind !== 'personal' && b.id !== PERSONAL_ID);
+}
+
+export function listCadenceDays(bucket: Bucket | undefined): Weekday[] {
+  if (!bucket?.days.length) return [];
+  return WEEKDAYS.filter((d) => bucket.days.includes(d));
 }
 
 export function bucketsToBackfill(existing: Bucket[]): Bucket[] {

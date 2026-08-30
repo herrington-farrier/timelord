@@ -126,7 +126,7 @@ function HoursMark({ minutes, dayMinutes }: { minutes: number; dayMinutes: numbe
 }
 
 export function isAccentChip(block: PackedBlock): boolean {
-  return block.kind === 'appointment' || block.kind === 'event' || block.bucketId === EVENTS_ID;
+  return block.kind === 'appointment';
 }
 
 function Chip({ block, overflow }: { block: PackedBlock; overflow?: boolean }) {

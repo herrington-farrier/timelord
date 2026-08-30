@@ -247,6 +247,11 @@ button.skip:hover:not(:disabled) {
   cursor: pointer;
 }
 .task-picks .check { min-height: 0; }
+.check:has(input:disabled) {
+  cursor: not-allowed;
+  color: var(--muted);
+  opacity: 0.45;
+}
 .buffer {
   display: flex; align-items: center; gap: 10px;
   color: var(--muted); font-size: 0.78rem;

@@ -88,13 +88,13 @@ describe('listChips', () => {
     expect(shown.map((b) => b.id)).toEqual(['w1', 'break', 'w2']);
   });
 
-  it('pins event items on a normal day', () => {
+  it('lists event items with other chips, not pinned', () => {
     const shown = listChips([
       block({ id: 'house', kind: 'weighted', slot: 'morning', title: 'Floors' }),
       block({ id: 'trip', kind: 'event', bucketId: 'events', title: 'Travel' }),
       block({ id: 'morning', kind: 'personal', slot: 'morning', title: 'Morning Routine' }),
     ]);
-    expect(shown.map((b) => b.id)).toEqual(['trip', 'morning', 'house']);
+    expect(shown.map((b) => b.id)).toEqual(['morning', 'house', 'trip']);
   });
 
   it('orders the list by section, not clock', () => {
@@ -118,13 +118,13 @@ describe('orderChips', () => {
     expect(shown.map((b) => b.id)).toEqual(['meet', 'house']);
   });
 
-  it('pins event items with appointments', () => {
+  it('does not accent event chips', () => {
     const shown = orderChips([
       block({ id: 'house', kind: 'weighted' }),
       block({ id: 'trip', kind: 'event', bucketId: 'events' }),
     ]);
-    expect(shown.map((b) => b.id)).toEqual(['trip', 'house']);
-    expect(isAccentChip(block({ id: 'trip', kind: 'event', bucketId: 'events' }))).toBe(true);
+    expect(shown.map((b) => b.id)).toEqual(['house', 'trip']);
+    expect(isAccentChip(block({ id: 'trip', kind: 'event', bucketId: 'events' }))).toBe(false);
     expect(isAccentChip(block({ id: 'meet', kind: 'appointment' }))).toBe(true);
     expect(isAccentChip(block({ id: 'house', kind: 'weighted' }))).toBe(false);
   });

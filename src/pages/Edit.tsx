@@ -19,7 +19,7 @@ import {
   type WeekBudgetSummary,
 } from '../domain/budget';
 import { formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
-import { canDeleteBucket, canRenameBucket, listableBuckets, splitEditBuckets } from '../domain/seed';
+import { canDeleteBucket, canRenameBucket, listCadenceDays, listableBuckets, splitEditBuckets } from '../domain/seed';
 import {
   EVENTS_ID,
   WEEKDAYS,
@@ -684,7 +684,9 @@ function ItemFields({
 }) {
   const dur = splitMinutes(item?.durationMinutes || 30);
   const [bucketId, setBucketId] = useState(item?.bucketId || buckets[0]?.id);
-  const eventItem = buckets.some((b) => b.id === bucketId && (b.kind === 'event' || b.id === EVENTS_ID));
+  const currentBucket = buckets.find((b) => b.id === bucketId);
+  const eventItem = Boolean(currentBucket && (currentBucket.kind === 'event' || currentBucket.id === EVENTS_ID));
+  const openDays = listCadenceDays(currentBucket);
   const [kind, setKind] = useState(item?.type || 'recurring');
   const [cadenceKind, setCadenceKind] = useState(item?.cadence.kind || 'daily');
   return (
@@ -699,12 +701,17 @@ function ItemFields({
           if (cadKind === 'weekdays' || cadKind === 'weekends' || cadKind === 'daily') {
             cadence = { kind: cadKind };
           } else if (cadKind === 'weekly') {
-            cadence = { kind: 'weekly', days: fd.getAll('weeklyDays') as typeof WEEKDAYS };
+            cadence = {
+              kind: 'weekly',
+              days: (fd.getAll('weeklyDays') as Weekday[]).filter((d) => openDays.includes(d)),
+            };
           } else if (cadKind === 'everyNDays') {
             cadence = {
               kind: 'everyNDays',
               n: Number(fd.get('everyN')) || 2,
-              startWeekday: String(fd.get('startWeekday') || 'Mon') as (typeof WEEKDAYS)[number],
+              startWeekday: (openDays.includes(String(fd.get('startWeekday')) as Weekday)
+              ? String(fd.get('startWeekday'))
+              : openDays[0] || 'Mon') as Weekday,
             };
           } else if (cadKind === 'monthly') {
             cadence = { kind: 'monthly', dayOfMonth: Number(fd.get('monthDay')) || 1 };
@@ -769,29 +776,40 @@ function ItemFields({
         )}
       </div>
       {!eventItem && cadenceKind === 'weekly' ? (
-        <div className="fields" style={{ marginTop: '10px' }}>
-          {WEEKDAYS.map((d) => (
-            <label key={d} className="check">
-              <input
-                name="weeklyDays"
-                type="checkbox"
-                value={d}
-                defaultChecked={item?.cadence.kind === 'weekly' ? item.cadence.days.includes(d) : false}
-              />
-              {d}
-            </label>
-          ))}
+        <div key={bucketId} className="fields" style={{ marginTop: '10px' }}>
+          {WEEKDAYS.map((d) => {
+            const open = openDays.includes(d);
+            return (
+              <label key={d} className="check">
+                <input
+                  name="weeklyDays"
+                  type="checkbox"
+                  value={d}
+                  disabled={!open}
+                  defaultChecked={open && item?.cadence.kind === 'weekly' ? item.cadence.days.includes(d) : false}
+                />
+                {d}
+              </label>
+            );
+          })}
         </div>
       ) : null}
       {!eventItem && cadenceKind === 'everyNDays' ? (
-        <div className="fields" style={{ marginTop: '10px' }}>
+        <div key={`${bucketId}-n`} className="fields" style={{ marginTop: '10px' }}>
           <FormField label="Every N days">
             <input name="everyN" type="number" min={2} defaultValue={item?.cadence.kind === 'everyNDays' ? item.cadence.n : 2} />
           </FormField>
           <FormField label="Start weekday">
-            <select name="startWeekday" defaultValue={item?.cadence.kind === 'everyNDays' ? item.cadence.startWeekday : 'Mon'}>
+            <select
+              name="startWeekday"
+              defaultValue={
+                item?.cadence.kind === 'everyNDays' && openDays.includes(item.cadence.startWeekday)
+                  ? item.cadence.startWeekday
+                  : openDays[0] || 'Mon'
+              }
+            >
               {WEEKDAYS.map((d) => (
-                <option key={d} value={d}>
+                <option key={d} value={d} disabled={!openDays.includes(d)}>
                   {d}
                 </option>
               ))}
