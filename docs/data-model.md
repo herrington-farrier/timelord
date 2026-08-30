@@ -37,7 +37,7 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 
 - `blocks[]` (each block may have `slot`), `dropped[]`, `droppedBuckets[]`, `startedAt`, `endedAt`, `packedAt`
 - `section` (`morning` | `midday` | `evening` | `event`), `sectionStartedAt`, `sectionRemainingMinutes`, `pausedAt`
-- `sectionExtra`, `sectionUsed` (appointment eat). Pack rebuilds from this week’s Sunday and clears both. Start Next Buckets does not write leftover extra.
+- `sectionExtra`, `sectionUsed` (appointment eat). Pack rebuilds 6 weeks from this week’s Sunday and clears both. Start Next Buckets does not write leftover extra.
 - `eventStartedAt` (unused on event days; no stopwatch), `appointmentRuns` (`{ startedAt?, elapsedMinutes? }` keyed by appointment id)
 - Pack restamps `color` from current buckets and appointments. Started or ended days keep Complete / Skip.
 

@@ -39,7 +39,7 @@ export function CalendarPage() {
   const mark = (on: boolean) => (on && eventColor ? { ['--bcolor' as string]: eventColor } : undefined);
 
   return (
-    <Chrome title="2-week" wide>
+    <Chrome title="Calendar" wide>
       <div className="cal-layout">
         <div className="cal-list">
           {listKeys.map((key) => {

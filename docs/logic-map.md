@@ -1,6 +1,6 @@
 # Logic map
 
-Google sign-in is invite-only. Add emails to `src/domain/allowlist.ts` and deploy functions. An existing tenant is always admitted (setup is never wiped). New accounts need an allowlisted email. Firestore reads require the `allowlisted` claim or an allowlisted email. First allowed signup and every denial write `accessLogs`.
+Google sign-in is invite-only. Add emails to `src/domain/allowlist.ts` and deploy functions. An existing tenant is always admitted (setup is never wiped). New accounts need an allowlisted email. Firestore reads require the `allowlisted` claim or an allowlisted email. First allowed signup and every denial write `accessLogs`. After the claim is set, refresh keeps the session and skips bootstrap. A server error on bootstrap does not sign the user out; only an invite denial does.
 
 Timelord packs **productive** time only. `dayMinutes` splits into three equal sections (`floor(dayMinutes / 3)`, remainder on evening). Personal (Morning Routine, Break, Evening Routine) pauses productivity and is not in weekly capacity. Assignable week hours = `dayMinutes × 7`. The packer uses section timers and bucket caps, not a clock.
 
@@ -12,7 +12,7 @@ Buckets pack by **weight** (lower number = higher priority) inside their slot. E
 
 Edit → Day shows the live morning / midday / evening section lengths, plus timer sound / vibrate, and **Reset Today** (re-packs today and clears start / complete / skip / timers). Edit → Buckets shows assigned weekly hours vs leftover. Personal hours are not subtracted from the week. Leftover week time stays unassigned. Save refuses a week that is over that cap.
 
-Each Edit tab has one **Save** (Lists and Appointments keep row Save / Remove). After a successful write, this week’s Sunday + 21 packed days rebuild. Buckets Save is `saveBuckets`: Personal settings + Work + Events + weighted buckets (Add New if named), cap check, then pack. Item Save keeps the stored list weight. Pack always uses fresh section thirds and clears leftover eat. Started or ended days keep Complete / Skip.
+Each Edit tab has one **Save** (Lists and Appointments keep row Save / Remove). After a successful write, this week’s Sunday + 6 weeks (42 days) rebuild. Buckets Save is `saveBuckets`: Personal settings + Work + Events + weighted buckets (Add New if named), cap check, then pack. Item Save keeps the stored list weight. Pack always uses fresh section thirds and clears leftover eat. Started or ended days keep Complete / Skip.
 
 Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show `slot · 8h/wk` (Personal: hours only). Packer daily budget: week-mode `floor(weeklyMinutes / days.length)` on a checked day; day-mode `hoursMinutes` on a checked day.
 
@@ -54,4 +54,4 @@ End Day: leftover scheduled skip-push; leftover recurring drop. Next day starts 
 
 ## Controls
 
-Menu, Pack the Day, transforming Start/End, Start Next Buckets, End Day, Complete / Skip, Save, Reset Today, and Remove share high-contrast control styles. Log rows: gold packed, green complete, red skip. Pack the Day is a sticky bar under the title on 2-week, Edit, and Log — not Today or Guide. Guide is a short tour of what each bucket and page is for, plus the hard limits. The chrome is navy and antique gold from the app icon. The current page is marked in the menu.
+Menu, Pack the Day, transforming Start/End, Start Next Buckets, End Day, Complete / Skip, Save, Reset Today, and Remove share high-contrast control styles. Log rows: gold packed, green complete, red skip. Pack the Day is a sticky bar under the title on Calendar, Edit, and Log — not Today or Guide. Guide is a short tour of what each bucket and page is for, plus the hard limits. The chrome is navy and antique gold from the app icon. The current page is marked in the menu.

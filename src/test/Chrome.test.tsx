@@ -30,6 +30,7 @@ describe('Chrome', () => {
     renderChrome('/edit');
     expect(screen.getByRole('link', { name: 'Edit' })).toHaveClass('is-on');
     expect(screen.getByRole('link', { name: 'Today' })).not.toHaveClass('is-on');
+    expect(screen.getByRole('link', { name: 'Calendar' })).not.toHaveClass('is-on');
     expect(screen.getByRole('link', { name: 'Guide' })).toBeInTheDocument();
   });
 

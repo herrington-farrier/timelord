@@ -9,7 +9,7 @@ Today runs productive-day section timers. Personal pauses (Morning Routine, Brea
 ## Screens
 
 - **Today** — section countdown, Start Next Buckets, End Day, Break pause, appointment stopwatches, Complete / Skip, Falling off
-- **2-week** — calendar, Today / Next 2wks, packed-hours marks, duration chips
+- **Calendar** — 2-week board, Today / Next 2wks, packs 6 weeks from Sunday, packed-hours marks, duration chips
 - **Edit** — day length and timer sound/vibrate, Reset Today, weekly hours, Events date range, lists, duration-only appointments
 - **Guide** — short tour of buckets, Today, the calendar, and lists
 - **Log** — append-only events (gold packed, green complete, red skip)

@@ -21,6 +21,7 @@ import {
   type WeekBudgetSummary,
 } from '../domain/budget';
 import { formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
+import { PACK_RANGE_DAYS } from '../domain/packWeek';
 import { canDeleteBucket, canRenameBucket, listCadenceDays, listableBuckets, splitEditBuckets } from '../domain/seed';
 import {
   EVENTS_ID,
@@ -42,7 +43,6 @@ import { useToast } from '../shared/toast';
 import { Chrome } from '../components/Chrome';
 
 const TABS = ['day', 'buckets', 'lists', 'appointments'] as const;
-const RANGE_DAYS = 21;
 
 export function EditPage() {
   const { user } = useAuth();
@@ -64,7 +64,7 @@ export function EditPage() {
   }
 
   async function rebuild() {
-    await api.rebuildRange({ days: RANGE_DAYS });
+    await api.rebuildRange({ days: PACK_RANGE_DAYS });
   }
 
   return (

@@ -3,8 +3,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 import { api } from '../services/api';
 import { auth, googleProvider } from '../services/firebase';
+import { hasAllowlistClaim, shouldSignOutOnGateError } from './authGate';
 import { formatActionError } from './formatActionError';
-import { FirebaseError } from 'firebase/app';
 
 type AuthContextValue = {
   user: User | null;
@@ -37,24 +37,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        const email = next.email || next.providerData.find((p) => p.email)?.email || '';
-        await api.bootstrap({ email });
-        try {
-          await next.getIdToken(true);
-        } catch {
-          /* claim refresh can wait */
+        const token = await next.getIdTokenResult();
+        if (!hasAllowlistClaim(token.claims)) {
+          const email = next.email || next.providerData.find((p) => p.email)?.email || '';
+          await api.bootstrap({ email });
+          try {
+            await next.getIdToken(true);
+          } catch {
+            /* claim refresh can wait */
+          }
         }
         setGateError(null);
         setUser(next);
       } catch (err) {
         console.error(err);
-        const denied =
-          err instanceof FirebaseError &&
-          (err.code === 'functions/permission-denied' || err.code === 'permission-denied');
         const who = next.email || next.providerData.find((p) => p.email)?.email;
-        setGateError(denied && who ? `Sign in: ${who} is not invited.` : formatActionError(err, 'Sign in'));
-        await signOut(firebaseAuth);
-        setUser(null);
+        setGateError(
+          shouldSignOutOnGateError(err) && who
+            ? `Sign in: ${who} is not invited.`
+            : formatActionError(err, 'Sign in')
+        );
+        if (shouldSignOutOnGateError(err)) {
+          await signOut(firebaseAuth);
+          setUser(null);
+        } else {
+          setUser(next);
+        }
       }
       setReady(true);
     });

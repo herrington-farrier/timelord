@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { daySections, packDay, sectionMinutes } from '../domain/packDay';
+import { PACK_RANGE_DAYS, packRange } from '../domain/packWeek';
 import { eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity } from '../domain/sections';
 import { nextAssignedDate, skipPushDate } from '../domain/skip';
 import { EVENTS_ID } from '../domain/types';
@@ -425,8 +426,13 @@ describe('section carry', () => {
     });
   });
 
-  it('packs from this week’s Sunday so the 2-week board is included', () => {
-    expect(weekStart('2026-08-29')).toBe('2026-08-23');
+  it('packs six weeks from this week’s Sunday', () => {
+    const from = weekStart('2026-08-29');
+    const rows = packRange(from, PACK_RANGE_DAYS, base());
+    expect(PACK_RANGE_DAYS).toBe(42);
+    expect(rows).toHaveLength(42);
+    expect(rows[0].date).toBe('2026-08-23');
+    expect(rows[41].date).toBe('2026-10-03');
   });
 
   it('eats appointment time from the current section then the next', () => {

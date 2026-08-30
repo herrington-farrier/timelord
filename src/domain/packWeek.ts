@@ -1,6 +1,8 @@
 import { addDaysKey } from './cadence';
 import { packDay, type PackDayInput, type PackDayResult } from './packDay';
 
+export const PACK_RANGE_DAYS = 42;
+
 export function packRange(
   startDate: string,
   dayCount: number,

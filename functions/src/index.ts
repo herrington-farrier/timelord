@@ -8,7 +8,7 @@ import { canAdmitAccount, isAllowedEmail } from '../../src/domain/allowlist';
 import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
-import { packRange } from '../../src/domain/packWeek';
+import { PACK_RANGE_DAYS, packRange } from '../../src/domain/packWeek';
 import { eatFromSections, isEventDay, nextSlot, sectionCapacity, usedFromEat } from '../../src/domain/sections';
 import { skipPushDate } from '../../src/domain/skip';
 import { elapsedSince, sectionRemainingNow } from '../../src/domain/timer';
@@ -321,7 +321,7 @@ export const saveBuckets = onCall(async (request) => {
     batch.set(ref, { ...payload, ...rowStamp }, { merge: true });
   }
   await batch.commit();
-  await writePackedRange(uid, todayKey(), 21);
+  await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
   return { ok: true };
 });
 
@@ -354,7 +354,7 @@ export const reorderBuckets = onCall(async (request) => {
     batch.set(col.doc(id), { weight: i + 2, ...stamp }, { merge: true });
   });
   await batch.commit();
-  await writePackedRange(uid, todayKey(), 21);
+  await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
   return { ok: true };
 });
 
@@ -399,7 +399,7 @@ export const upsertItem = onCall(async (request) => {
   };
   const stamp = existing.exists ? await stampLastUpdated(uid, nowIso()) : await stampCreated(uid, nowIso());
   await ref.set({ ...payload, ...stamp }, { merge: true });
-  await writePackedRange(uid, todayKey(), 21);
+  await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
   return { ok: true, id };
 });
 
@@ -417,7 +417,7 @@ export const reorderItems = onCall(async (request) => {
     batch.set(col.doc(id), { weight: i + 1, ...stamp }, { merge: true });
   });
   await batch.commit();
-  await writePackedRange(uid, todayKey(), 21);
+  await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
   return { ok: true };
 });
 
@@ -426,7 +426,7 @@ export const archiveItem = onCall(async (request) => {
   const id = asString(request.data?.id, 'Item');
   const stamp = await stampLastUpdated(uid, nowIso());
   await tenantRef(uid).collection('items').doc(id).set({ archived: true, ...stamp }, { merge: true });
-  await writePackedRange(uid, todayKey(), 21);
+  await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
   return { ok: true };
 });
 
@@ -449,7 +449,7 @@ export const resetBucket = onCall(async (request) => {
     ...stamp,
   }, { merge: true });
   await batch.commit();
-  await writePackedRange(uid, todayKey(), 21);
+  await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
   await writeLog(uid, { type: 'reset_bucket', date: todayKey(), bucketId: id });
   return { ok: true };
 });
@@ -512,7 +512,7 @@ export const rebuildRange = onCall(async (request) => {
   const uid = requireUid(request);
   await ensureTenant(uid, nowIso());
   const start = asString(request.data?.start || todayKey(), 'Start date');
-  const days = Number(request.data?.days) || 21;
+  const days = Number(request.data?.days) || PACK_RANGE_DAYS;
   await writePackedRange(uid, start, days);
   return { ok: true };
 });

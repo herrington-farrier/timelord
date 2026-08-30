@@ -4,7 +4,7 @@ export { cadenceHitsDate, weekdayFromKey, addDaysKey } from './cadence';
 export { formatDuration, formatClock, hoursToMinutes, splitMinutes } from './duration';
 export { assignWeeklyBudgets, assignableWeekMinutes, assignedDayBudget, assignedWeekMinutes, bucketAssignedMinutes, dailyBudgetFor, derivedWeeklyMinutes, formatBucketHours, formatHoursField, hoursMinutesOf, hoursModeOf, itemExceedsBucketMessage, itemFitsBucket, weekBudgetSummary, weeklyCapacity, collapsedSlotHours, eventsRangeLabel } from './budget';
 export { packDay, collectEndDaySkipPushes, daySections, sectionMinutes } from './packDay';
-export { packRange } from './packWeek';
+export { PACK_RANGE_DAYS, packRange } from './packWeek';
 export { recomputeEtas } from './etas';
 export { skipPushDate, nextAssignedDate } from './skip';
 export { SEED_BUCKETS, SEED_ITEMS, PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET, defaultSettings, canDeleteBucket, canRenameBucket, splitEditBuckets, listableBuckets, listCadenceDays, bucketsToBackfill } from './seed';

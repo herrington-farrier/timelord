@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
+import { PACK_RANGE_DAYS } from '../domain/packWeek';
 import { api } from '../services/api';
 import { todayKey } from '../shared/dates';
 import { formatActionError } from '../shared/formatActionError';
@@ -16,7 +17,7 @@ type Props = {
 
 const NAV = [
   { to: '/', label: 'Today' },
-  { to: '/calendar', label: '2-week' },
+  { to: '/calendar', label: 'Calendar' },
   { to: '/edit', label: 'Edit' },
   { to: '/guide', label: 'Guide' },
   { to: '/log', label: 'Log' },
@@ -33,7 +34,7 @@ export function Chrome({ title, stamp, wide, actions, children }: Props) {
 
   async function pack() {
     try {
-      await api.rebuildRange({ start: todayKey(), days: 21 });
+      await api.rebuildRange({ start: todayKey(), days: PACK_RANGE_DAYS });
       showToast('Packed.', 'success');
     } catch (err) {
       console.error(err);
