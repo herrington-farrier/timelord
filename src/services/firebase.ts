@@ -30,3 +30,4 @@ export const auth = app ? getAuth(app) : null;
 export const db = app ? getFirestore(app) : null;
 export const functions = app ? getFunctions(app) : null;
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('email');

@@ -1,8 +1,23 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function invited() {
+      return request.auth != null && (
+        request.auth.token.allowlisted == true
+        || request.auth.token.email in [
+          'herrington.farrier@gmail.com',
+          'codygllc.office@gmail.com',
+          'codygllc465@gmail.com'
+        ]
+      );
+    }
+
     function isOwner(tenantId) {
-      return request.auth != null && request.auth.uid == tenantId;
+      return invited() && request.auth.uid == tenantId;
+    }
+
+    match /accessLogs/{id} {
+      allow read, write: if false;
     }
 
     match /tenants/{tenantId} {

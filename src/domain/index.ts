@@ -13,3 +13,4 @@ export { eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacit
 export { sectionRemainingNow, elapsedSince } from './timer';
 export { formatCountdown, nextSectionAction, slotLabel, todaySectionItems, todayEventItems, isEventPacked, isBreakBlock } from './today';
 export { formatLogEvent, logEventTone } from './log';
+export { ALLOWED_EMAILS, canAdmitAccount, isAllowedEmail } from './allowlist';

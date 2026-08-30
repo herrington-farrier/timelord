@@ -1,11 +1,28 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 
-export function requireUid(request: CallableRequest): string {
+import { isAllowedEmail } from '../../src/domain/allowlist';
+
+export function requireSignedIn(request: CallableRequest): string {
   const uid = request.auth?.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Sign in to continue.');
   }
   return uid;
+}
+
+export function authEmail(request: CallableRequest, fallback?: string): string {
+  const token = request.auth?.token;
+  const fromToken = typeof token?.email === 'string' ? token.email : '';
+  const identities = token?.firebase?.identities?.email;
+  const fromIdentities = Array.isArray(identities) ? String(identities[0] || '') : '';
+  return fromToken || fromIdentities || fallback || '';
+}
+
+export function requireUid(request: CallableRequest): string {
+  const uid = requireSignedIn(request);
+  const claimed = request.auth?.token?.allowlisted === true;
+  if (claimed || isAllowedEmail(authEmail(request))) return uid;
+  throw new HttpsError('permission-denied', 'This app is invite-only.');
 }
 
 export function asString(value: unknown, label: string): string {

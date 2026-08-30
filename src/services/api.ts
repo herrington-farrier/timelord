@@ -14,7 +14,7 @@ function call<TReq, TRes>(name: string) {
 }
 
 export const api = {
-  bootstrap: call<Record<string, never>, { ok: boolean }>('bootstrap'),
+  bootstrap: call<{ email?: string }, { ok: boolean }>('bootstrap'),
   saveSettings: call<Record<string, unknown>, { ok: boolean }>('saveSettings'),
   saveBuckets: call<Record<string, unknown>, { ok: boolean }>('saveBuckets'),
   archiveBucket: call<{ id: string }, { ok: boolean }>('archiveBucket'),

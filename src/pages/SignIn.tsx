@@ -4,7 +4,7 @@ import { formatActionError } from '../shared/formatActionError';
 import { useToast } from '../shared/toast';
 
 export function SignInPage() {
-  const { signIn } = useAuth();
+  const { signIn, gateError } = useAuth();
   const { showToast } = useToast();
   if (!firebaseConfigured()) {
     return (
@@ -20,7 +20,8 @@ export function SignInPage() {
     <div className="sign-in">
       <div className="panel">
         <h1>Timelord</h1>
-        <p className="hint">Google sign-in. Each account gets its own schedule.</p>
+        <p className="hint">Invite-only. Google sign-in. Each invited account gets its own schedule.</p>
+        {gateError ? <p className="err">{gateError}</p> : null}
         <button
           type="button"
           className="primary"

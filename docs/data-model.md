@@ -1,6 +1,10 @@
 # Data model
 
-Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; only callables write.
+Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; only callables write. Google sign-in is invite-only (`src/domain/allowlist.ts`). Allowed users get an `allowlisted` auth claim. Firestore reads require that claim or an allowlisted email. Keep the email list in `firestore.rules` in sync when you add someone.
+
+## accessLogs/{id}
+
+Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `email`, `uid`, `at`. Watch this in the Firebase console to see new friends and blocked attempts.
 
 ## settings/current
 

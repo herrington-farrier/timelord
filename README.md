@@ -1,6 +1,6 @@
 # Timelord
 
-Personal day packer. Sign in with Google. Each account owns its own schedule.
+Personal day packer. Invite-only Google sign-in. Each invited account owns its own schedule. Add a friend’s email to `src/domain/allowlist.ts` and deploy functions.
 
 **App:** https://timelord-e0c80.web.app
 
@@ -28,7 +28,7 @@ npm test
 npm run dev
 ```
 
-Paste the Firebase web config into `.env.local`. Clients read Firestore; all writes go through callable functions.
+Paste the Firebase web config into `.env.local`. Clients read Firestore; all writes go through callable functions. Deploy functions and Firestore rules together after changing the allowlist so existing sessions get the `allowlisted` claim before rules require it.
 
 ## Deploy
 

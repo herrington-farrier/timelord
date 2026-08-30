@@ -334,10 +334,10 @@ button.skip:hover:not(:disabled) {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.cal-secs b {
-  font-weight: 650;
-  color: var(--text);
-}
+.cal-secs b { font-weight: 650; color: var(--text); }
+.cal-secs b.cal-hrs--ok { color: var(--ok); }
+.cal-secs b.cal-hrs--mid { color: var(--gold); }
+.cal-secs b.cal-hrs--hot { color: var(--danger); }
 .cal-board {
   background: var(--panel);
   border: 1px solid var(--panel-edge);

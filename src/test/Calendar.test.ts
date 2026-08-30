@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardShowsDay, boardStartFor, fallingChips, isAccentChip, listChips, listKeysFrom, listShowsDay, loadTone, orderChips, placedChips, scheduledMinutes, sectionFreeMinutes, visibleChips } from '../pages/Calendar';
+import { boardShowsDay, boardStartFor, fallingChips, freeTone, isAccentChip, listChips, listKeysFrom, listShowsDay, loadTone, orderChips, placedChips, scheduledMinutes, sectionFreeMinutes, visibleChips } from '../pages/Calendar';
 import { weekStart } from '../shared/dates';
 import type { PackedBlock } from '../domain/types';
 
@@ -79,6 +79,14 @@ describe('loadTone', () => {
     expect(loadTone(4 * 60, 14 * 60)).toBe('ok');
     expect(loadTone(7 * 60, 14 * 60)).toBe('mid');
     expect(loadTone(12 * 60, 14 * 60)).toBe('hot');
+  });
+});
+
+describe('freeTone', () => {
+  it('is red when none is left and green when the section is unused', () => {
+    expect(freeTone(0, 5 * 60)).toBe('hot');
+    expect(freeTone(5 * 60, 5 * 60)).toBe('ok');
+    expect(freeTone(2 * 60, 5 * 60)).toBe('mid');
   });
 });
 

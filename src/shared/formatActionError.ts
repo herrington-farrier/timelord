@@ -1,7 +1,7 @@
 import { FirebaseError } from 'firebase/app';
 
 const SHORT_BY_CODE: Record<string, string> = {
-  'permission-denied': 'not allowed.',
+  'permission-denied': 'invite-only.',
   unauthenticated: 'sign in expired.',
   'not-found': 'not found.',
   'already-exists': 'already exists.',

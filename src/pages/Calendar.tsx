@@ -73,6 +73,7 @@ export function CalendarPage() {
                       day?.sectionExtra,
                       day?.sectionUsed
                     )}
+                    cap={sectionCapacity(settings, day?.sectionExtra, day?.sectionUsed)}
                   />
                 )}
                 {placed.map((it) => (
@@ -139,12 +140,13 @@ const SLOT_LABEL: Record<Slot, string> = {
   evening: 'Evening',
 };
 
-export function ListSectionFree({ free }: { free: Record<Slot, number> }) {
+export function ListSectionFree({ free, cap }: { free: Record<Slot, number>; cap: Record<Slot, number> }) {
   return (
     <div className="cal-secs">
       {SLOTS.map((slot) => (
         <span key={slot}>
-          {SLOT_LABEL[slot]} <b>{formatDuration(free[slot])}</b>
+          {SLOT_LABEL[slot]}{' '}
+          <b className={`cal-hrs--${freeTone(free[slot], cap[slot])}`}>{formatDuration(free[slot])}</b>
         </span>
       ))}
     </div>
@@ -205,6 +207,10 @@ export function loadTone(scheduled: number, dayMinutes: number): 'ok' | 'mid' | 
   if (part < 0.5) return 'ok';
   if (part <= 0.85) return 'mid';
   return 'hot';
+}
+
+export function freeTone(free: number, cap: number): 'ok' | 'mid' | 'hot' {
+  return loadTone(Math.max(0, cap - Math.max(0, free)), cap);
 }
 
 export function boardShowsDay(key: string, today: string): boolean {

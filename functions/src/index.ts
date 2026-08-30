@@ -1,6 +1,9 @@
 import { initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+
+import { canAdmitAccount, isAllowedEmail } from '../../src/domain/allowlist';
 
 import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
@@ -14,7 +17,7 @@ import type { Appointment, Bucket, DaySettings, HoursMode, ListItem, PackedBlock
 import { EVENTS_ID } from '../../src/domain/types';
 import { weekStart } from '../../src/shared/dates';
 import { stampCreated, stampLastUpdated } from './actorAudit';
-import { asNumber, asString, newId, requireUid } from './http';
+import { asNumber, asString, authEmail, newId, requireSignedIn, requireUid } from './http';
 import { ensureTenant, loadTenant, tenantRef } from './tenant';
 
 initializeApp();
@@ -142,9 +145,41 @@ async function writePackedRange(uid: string, start: string, days: number): Promi
   await writeLog(uid, { type: 'rebuild', date: start });
 }
 
+async function writeAccessLog(row: { type: 'signup' | 'denied'; email: string; uid: string }): Promise<void> {
+  await getFirestore().collection('accessLogs').doc(newId()).set({
+    ...row,
+    at: nowIso(),
+  });
+}
+
+function assertInvitedEmail(email: string | undefined): void {
+  if (isAllowedEmail(email)) return;
+  throw new HttpsError('permission-denied', 'This app is invite-only.');
+}
+
 export const bootstrap = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = requireSignedIn(request);
+  const record = await getAuth().getUser(uid);
+  const providerEmail = record.providerData.map((p) => p.email).find(Boolean) || '';
+  const hinted = typeof request.data?.email === 'string' ? request.data.email.trim() : '';
+  let email = authEmail(request, record.email || providerEmail);
+  if (!email && hinted) {
+    try {
+      const match = await getAuth().getUserByEmail(hinted);
+      if (match.uid === uid) email = hinted;
+    } catch {
+      /* hinted email is not this account */
+    }
+  }
+  const tenant = tenantRef(uid);
+  const existed = (await tenant.get()).exists;
+  if (!canAdmitAccount(email, existed)) {
+    await writeAccessLog({ type: 'denied', email, uid });
+    assertInvitedEmail(email);
+  }
   await ensureTenant(uid, nowIso());
+  await getAuth().setCustomUserClaims(uid, { allowlisted: true });
+  if (!existed) await writeAccessLog({ type: 'signup', email, uid });
   return { ok: true };
 });
 

@@ -1,5 +1,7 @@
 # Logic map
 
+Google sign-in is invite-only. Add emails to `src/domain/allowlist.ts` and deploy functions. An existing tenant is always admitted (setup is never wiped). New accounts need an allowlisted email. Firestore reads require the `allowlisted` claim or an allowlisted email. First allowed signup and every denial write `accessLogs`.
+
 Timelord packs **productive** time only. `dayMinutes` splits into three equal sections (`floor(dayMinutes / 3)`, remainder on evening). Personal (Morning Routine, Break, Evening Routine) pauses productivity and is not in weekly capacity. Assignable week hours = `dayMinutes × 7`. The packer uses section timers and bucket caps, not a clock.
 
 Buckets pack by **weight** (lower number = higher priority) inside their slot. Each bucket’s assigned hours are a **cap**: items compete only for that bucket’s time. A bucket does not expand to fill the section. Going over on a bucket does not steal from later buckets or later sections. Unused section time is dropped; starting the next stretch does not carry it forward.
@@ -42,7 +44,7 @@ Events list items are **scheduled only**: date + duration, no cadence. They pack
 
 ## Calendar and list
 
-The 2-week Sunday board and side list stay. Days before today are blank on the board (date number only) and omitted from the side list. Hours marks at the top of each list day and cell count **productive** packed minutes (no Personal), colored vs `dayMinutes` (green under 50%, gold 50–85%, red above). The side list also shows leftover morning / midday / evening minutes (section thirds minus packed items in that slot; leftover eat applies). Event days omit that row. Chips are `title · duration` (title only if 0). No clocks. Appointments are visually distinct and first in the cell and list. Event items look like other list chips; the day outline marks the Events range. Other list items follow section, then weight. Evening chips stay in the last third, before Evening Routine; a missing packed slot uses the bucket’s slot. Falling-off stays at the bottom of that day. Event days outline the cell and list day in the Events color even when empty. Event items also show on a normal day on their date.
+The 2-week Sunday board and side list stay. Days before today are blank on the board (date number only) and omitted from the side list. Hours marks at the top of each list day and cell count **productive** packed minutes (no Personal), colored vs `dayMinutes` (green under 50%, gold 50–85%, red above). The side list also shows leftover morning / midday / evening minutes (section thirds minus packed items in that slot; leftover eat applies). Those leftover numbers use the same load colors by time used (green under 50%, gold through 85%, red when little or none is left). Event days omit that row. Chips are `title · duration` (title only if 0). No clocks. Appointments are visually distinct and first in the cell and list. Event items look like other list chips; the day outline marks the Events range. Other list items follow section, then weight. Evening chips stay in the last third, before Evening Routine; a missing packed slot uses the bucket’s slot. Falling-off stays at the bottom of that day. Event days outline the cell and list day in the Events color even when empty. Event items also show on a normal day on their date.
 
 ## Lists
 
