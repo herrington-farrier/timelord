@@ -688,10 +688,7 @@ function ListsForm({
         if (!rows.length) return null;
         const ids = rows.map((r) => r.id);
         return (
-          <div key={b.id}>
-            <h3 className="group-h" style={{ ['--bcolor' as string]: `#${b.color}` }}>
-              {b.name}
-            </h3>
+          <CollapsibleBucket key={b.id} title={b.name} hours={String(rows.length)} color={b.color}>
             <SortableList ids={ids} onReorder={(next) => onReorder(next)}>
               {(id) => {
                 const row = rows.find((r) => r.id === id);
@@ -712,7 +709,7 @@ function ListsForm({
                 );
               }}
             </SortableList>
-          </div>
+          </CollapsibleBucket>
         );
       })}
     </div>

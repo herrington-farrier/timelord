@@ -48,6 +48,8 @@ The 2-week Sunday board and side list stay. Days before today are blank on the b
 
 ## Lists
 
+Edit → Lists groups items by bucket. Groups start collapsed; the count is on the row. Add New stays open at the top.
+
 Recurring = cadence forever. Scheduled = due date + cadence. A list item’s weekday pickers only allow days the bucket runs; unchecked bucket days are disabled. Every-N-days may include an optional start date; no hits before it. Duration cannot exceed that bucket’s daily hours (week-mode share, or the day-mode hours). 0-duration reminders are exempt. Events items have no hours cap. Skip scheduled → next assigned day for that bucket. Skip recurring → no makeup. Skip-push is scheduled-only.
 
 End Day: leftover scheduled skip-push; leftover recurring drop. Next day starts clean.

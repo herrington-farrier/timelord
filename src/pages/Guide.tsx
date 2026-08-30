@@ -47,7 +47,7 @@ const CARDS = [
     id: 'lists',
     kicker: 'Page',
     title: 'Lists',
-    body: 'What gets packed. Duration cannot exceed the bucket’s daily hours. Zero-duration items are reminders and never drop.',
+    body: 'What gets packed, grouped by bucket. Duration cannot exceed the bucket’s daily hours. Zero-duration items are reminders and never drop.',
   },
 ] as const;
 

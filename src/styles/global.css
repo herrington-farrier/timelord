@@ -539,6 +539,8 @@ button.skip:hover:not(:disabled) {
 }
 .bucket-card.is-open > .bucket-toggle::after { content: "▾"; }
 .bucket-body { margin-top: 10px; }
+.bucket-body .edit-card { margin-bottom: 8px; }
+.bucket-body .sortable-row:last-child .edit-card { margin-bottom: 0; }
 .week-budget {
   position: sticky;
   top: 0;
