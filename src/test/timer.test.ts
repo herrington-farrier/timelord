@@ -11,6 +11,11 @@ describe('sectionRemainingNow', () => {
     const started = Date.parse('2026-08-29T12:00:00.000Z');
     expect(sectionRemainingNow(10, '2026-08-29T12:00:00.000Z', null, started + 3 * 60000)).toBe(7);
   });
+
+  it('uses wall-clock time after a long unattended gap', () => {
+    const started = Date.parse('2026-08-30T07:00:00.000Z');
+    expect(sectionRemainingNow(291, '2026-08-30T07:00:00.000Z', null, started + 6 * 60 * 60000)).toBe(0);
+  });
 });
 
 describe('elapsedSince', () => {

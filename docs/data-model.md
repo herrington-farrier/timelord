@@ -43,7 +43,7 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 
 ## logs/{id}
 
-Append-only: `type`, `at`, `date`, `itemId`, `bucketId`, `minutes`, optional `title` and `section`. Never overwritten. `rebuild` displays as Schedule packed (gold). Complete is green; skip is red.
+Append-only: `type`, `at`, `date`, `itemId`, `bucketId`, `minutes`, optional `title` and `section`. Never overwritten. `rebuild` displays as Schedule packed (gold). Complete is green; skip is red. Start Next Buckets writes one `skip` row per leftover item, then `start_next`.
 
 ## skipPushes/{id}
 

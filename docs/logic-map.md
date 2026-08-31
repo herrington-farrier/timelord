@@ -30,7 +30,7 @@ Buttons transform in place:
 - **Start Day** begins the morning countdown. Morning Routine happens on your own; there is no Start Routine step.
 - After Start Day, Today lists **this stretch only** (placed + falling-off) plus Personal pause controls.
 - Break: Start Break / End Break pauses/resumes the current timer.
-- After the list (and falling-off): **Start Next Buckets** + time remaining. Auto-skips unmarked items and opens the next stretch at its normal length. If the next stretch is 0, auto End Day.
+- After the list (and falling-off): **Start Next Buckets** + time remaining. Auto-skips leftover placed and falling-off items (same skip log rows as Skip), then opens the next stretch at its normal length. If the next stretch is 0, auto End Day. The countdown is wall-clock; hitting 0m sounds and does not start the next stretch.
 - Evening: **End Day** after the list.
 - Appointments sit at the top of the section list. Each has Start/Stop and counts **up**. On Stop, elapsed time is subtracted from the current section, then following sections; remaining sections repack. Appointments never sound.
 

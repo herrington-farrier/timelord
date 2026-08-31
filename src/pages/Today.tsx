@@ -39,8 +39,17 @@ export function TodayPage() {
 
   useEffect(() => {
     if (!started) return;
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(id);
+    const tick = () => setNowMs(Date.now());
+    const id = window.setInterval(tick, 1000);
+    window.addEventListener('visibilitychange', tick);
+    window.addEventListener('pageshow', tick);
+    window.addEventListener('focus', tick);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('pageshow', tick);
+      window.removeEventListener('focus', tick);
+    };
   }, [started]);
 
   const remaining = started && section

@@ -1,5 +1,39 @@
 import { addDaysKey, weekdayFromKey } from './cadence';
-import type { Bucket, ListItem } from './types';
+import { todaySectionDropped, todaySectionItems } from './today';
+import type { Bucket, ListItem, PackedBlock, Slot } from './types';
+
+function isLeftover(block: PackedBlock): boolean {
+  return (
+    Boolean(block.itemId) &&
+    block.kind !== 'personal' &&
+    block.kind !== 'appointment' &&
+    (block.status === 'pending' || block.status === 'dropped')
+  );
+}
+
+export function leftoverSectionBlocks(blocks: PackedBlock[], dropped: PackedBlock[], section: Slot): PackedBlock[] {
+  return [
+    ...todaySectionItems(blocks, section).filter(isLeftover),
+    ...todaySectionDropped(dropped, section).filter(isLeftover),
+  ];
+}
+
+export function markLeftoversSkipped(rows: PackedBlock[], leftovers: PackedBlock[]): PackedBlock[] {
+  const ids = new Set(leftovers.map((b) => b.id));
+  return rows.map((b) => (ids.has(b.id) ? { ...b, status: 'skipped' as const } : b));
+}
+
+export function skipLogBlocks(leftovers: PackedBlock[]): PackedBlock[] {
+  const seen = new Set<string>();
+  const out: PackedBlock[] = [];
+  for (const b of leftovers) {
+    const key = b.itemId || b.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(b);
+  }
+  return out;
+}
 
 export function nextAssignedDate(bucket: Bucket, afterDate: string): string {
   let key = addDaysKey(afterDate, 1);

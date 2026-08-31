@@ -11,7 +11,7 @@ import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, it
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
 import { PACK_RANGE_DAYS, packRange } from '../../src/domain/packWeek';
 import { eatFromSections, isEventDay, nextSlot, sectionCapacity, usedFromEat } from '../../src/domain/sections';
-import { skipPushDate } from '../../src/domain/skip';
+import { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate } from '../../src/domain/skip';
 import { elapsedSince, sectionRemainingNow } from '../../src/domain/timer';
 import { nextItemWeight } from '../../src/domain/order';
 import type { Appointment, Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Slot, Weekday } from '../../src/domain/types';
@@ -711,33 +711,41 @@ export const startNext = onCall(async (request) => {
   if (!section || section === 'event') throw new HttpsError('failed-precondition', 'No section to leave.');
   const next = nextSlot(section);
   const stamp = await stampLastUpdated(uid, nowIso());
-  const mark = (rows: PackedBlock[]) =>
-    rows.map((b) => {
-      if (b.slot === section && b.itemId && (b.status === 'pending' || b.status === 'dropped')) {
-        return { ...b, status: 'skipped' as const };
-      }
-      return b;
-    });
-  const blocks = mark(data.blocks || []);
-  const dropped = mark(data.dropped || []);
+  const leftovers = leftoverSectionBlocks(data.blocks || [], data.dropped || [], section);
+  const blocks = markLeftoversSkipped(data.blocks || [], leftovers);
+  const dropped = markLeftoversSkipped(data.dropped || [], leftovers);
   const loaded = await loadTenant(uid);
   const pushes = collectEndDaySkipPushes(
     date,
-    blocks.filter((b) => b.slot === section),
-    dropped.filter((b) => b.slot === section),
+    leftovers,
+    leftovers,
     loaded.items as ListItem[],
     loaded.buckets as Bucket[]
   );
   const extra = { ...(data.sectionExtra || {}) };
   const used = data.sectionUsed || {};
   const caps = sectionCapacity(loaded.settings as DaySettings, extra, used);
+  async function writeAutoSkips(): Promise<void> {
+    for (const b of skipLogBlocks(leftovers)) {
+      await writeLog(uid, {
+        type: 'skip',
+        date,
+        itemId: b.itemId,
+        bucketId: b.bucketId,
+        minutes: b.durationMinutes,
+        title: b.title,
+      });
+    }
+  }
   if (!next || caps[next] <= 0) {
     await dayRef.set({ blocks, dropped, endedAt: nowIso(), pausedAt: null, section: null, ...stamp }, { merge: true });
     await writeSkipPushes(uid, date, pushes);
+    await writeAutoSkips();
     await writeLog(uid, { type: 'end_day', date });
     return { ok: true };
   }
-  const result = domainCall(() => packDay(asPackInput(loaded, date, blocks, extra, used)));
+  const leftoverIds = new Set(leftovers.map((b) => b.itemId).filter(Boolean));
+  const result = domainCall(() => packDay(asPackInput(loaded, date, [...blocks, ...dropped], extra, used)));
   const merged = result.blocks.map((b) => {
     const prev = blocks.find((p) => p.itemId && p.itemId === b.itemId);
     return prev && (prev.status === 'complete' || prev.status === 'skipped') ? { ...b, status: prev.status } : b;
@@ -746,6 +754,9 @@ export const startNext = onCall(async (request) => {
     firestoreDoc({
       ...result,
       blocks: merged,
+      dropped: result.dropped.map((b) =>
+        b.itemId && leftoverIds.has(b.itemId) ? { ...b, status: 'skipped' as const } : b
+      ),
       startedAt: data.startedAt,
       section: next,
       sectionExtra: extra,
@@ -759,6 +770,7 @@ export const startNext = onCall(async (request) => {
     { merge: true }
   );
   await writeSkipPushes(uid, date, pushes);
+  await writeAutoSkips();
   await writeLog(uid, { type: 'start_next', date, section: next });
   return { ok: true };
 });

@@ -7,7 +7,7 @@ export { eventRanges, newEventRangeId, parseEventRanges } from './events';
 export { packDay, collectEndDaySkipPushes, daySections, sectionMinutes } from './packDay';
 export { PACK_RANGE_DAYS, packRange } from './packWeek';
 export { recomputeEtas } from './etas';
-export { skipPushDate, nextAssignedDate } from './skip';
+export { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate, nextAssignedDate } from './skip';
 export { SEED_BUCKETS, SEED_ITEMS, PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET, defaultSettings, canDeleteBucket, canRenameBucket, splitEditBuckets, listableBuckets, listCadenceDays, bucketsToBackfill } from './seed';
 export { applyBucketOrder, applyItemOrder, sortByWeight, nextItemWeight } from './order';
 export { eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity, usedFromEat } from './sections';

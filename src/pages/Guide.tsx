@@ -35,7 +35,7 @@ const CARDS = [
     id: 'today',
     kicker: 'Page',
     title: 'Today',
-    body: 'Run one stretch at a time. Start Next Buckets skips the rest and opens the next stretch. Leftover minutes do not come with you. End Day closes the evening.',
+    body: 'Run one stretch at a time. Start Next Buckets skips leftover items (logged as Skipped) and opens the next stretch. Leftover minutes do not come with you. End Day closes the evening.',
   },
   {
     id: 'calendar',
