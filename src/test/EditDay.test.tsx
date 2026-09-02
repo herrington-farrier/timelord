@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { EditPage } from '../pages/Edit';
 import { api } from '../services/api';
-import { ToastProvider } from '../shared/toast';
 
 vi.mock('../shared/auth', () => ({
   useAuth: () => ({ user: { uid: 'u1' } }),
@@ -32,11 +31,9 @@ describe('Edit Day', () => {
   it('resets today from the Day tab', async () => {
     const user = userEvent.setup();
     render(
-      <ToastProvider>
         <MemoryRouter>
           <EditPage />
         </MemoryRouter>
-      </ToastProvider>
     );
     await user.click(screen.getByRole('button', { name: 'Respawn' }));
     expect(api.resetToday).toHaveBeenCalled();
@@ -46,11 +43,9 @@ describe('Edit Day', () => {
     vi.clearAllMocks();
     const user = userEvent.setup();
     render(
-      <ToastProvider>
         <MemoryRouter>
           <EditPage />
         </MemoryRouter>
-      </ToastProvider>
     );
     await user.click(screen.getByRole('button', { name: 'Reroll Stats' }));
     expect(screen.getByText('Erase all Stats?')).toBeInTheDocument();

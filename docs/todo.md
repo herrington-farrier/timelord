@@ -271,13 +271,11 @@ end of `global.css`.
 Every row repeats its date. Grouping under `Sat Aug 29` headers, like the Quest
 Log list day blocks, would make 14 days much faster to scan.
 
-### D3. Reroll Stats during an active day — **decided: block it**
+### D3. Reroll Stats during an active day — **done**
 
-Rerolling mid-day would erase the day's own completes and skips while the day is
-still running, leaving the progress bar and the day disagreeing. Refuse it
-server-side when today has `startedAt` and no `endedAt`, and disable the button
-in Strategize with a reason. Server-side matters: the client check alone is a
-suggestion.
+`clearLogs` refuses when today has `startedAt` and no `endedAt`. Enforced on the
+server, since a client-side check is a suggestion. The message surfaces inline
+now that toasts are gone.
 
 ### D4. Should Respawn also delete today's log rows?
 

@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { APPOINTMENTS_BUCKET } from '../domain/seed';
 import { APPOINTMENTS_ID, DEFAULT_SETTINGS } from '../domain/types';
 import { EditPage } from '../pages/Edit';
-import { ToastProvider } from '../shared/toast';
 
 vi.mock('../shared/auth', () => ({
   useAuth: () => ({ user: { uid: 'u1' } }),
@@ -51,11 +50,9 @@ describe('appointment duration in Lists', () => {
   it('shows saved durations as stored, including a 0-duration reminder', async () => {
     const user = userEvent.setup();
     render(
-      <ToastProvider>
         <MemoryRouter>
           <EditPage />
         </MemoryRouter>
-      </ToastProvider>
     );
     await user.click(screen.getByRole('button', { name: 'Lists' }));
     await user.click(screen.getByRole('button', { name: /Appointments/ }));

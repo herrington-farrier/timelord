@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { EditPage } from '../pages/Edit';
-import { ToastProvider } from '../shared/toast';
 import { bucket, item, workBucket } from './fixtures';
 
 vi.mock('../shared/auth', () => ({
@@ -34,11 +33,9 @@ describe('Edit Lists collapse', () => {
   it('keeps list items collapsed by bucket until opened', async () => {
     const user = userEvent.setup();
     render(
-      <ToastProvider>
         <MemoryRouter>
           <EditPage />
         </MemoryRouter>
-      </ToastProvider>
     );
     await user.click(screen.getByRole('button', { name: 'Lists' }));
     expect(screen.getByRole('button', { name: 'Work, 2' })).toHaveAttribute('aria-expanded', 'false');
@@ -52,11 +49,9 @@ describe('Edit Lists collapse', () => {
   it('lets a Work item pick a section when Work has more than one', async () => {
     const user = userEvent.setup();
     render(
-      <ToastProvider>
         <MemoryRouter>
           <EditPage />
         </MemoryRouter>
-      </ToastProvider>
     );
     await user.click(screen.getByRole('button', { name: 'Lists' }));
     await user.click(screen.getByRole('button', { name: 'Work, 2' }));

@@ -4,15 +4,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
 import { Chrome } from '../components/Chrome';
-import { ToastProvider } from '../shared/toast';
 
 function renderChrome(path: string) {
   return render(
-    <ToastProvider>
       <MemoryRouter initialEntries={[path]}>
         <Chrome title="Strategize">body</Chrome>
       </MemoryRouter>
-    </ToastProvider>
   );
 }
 

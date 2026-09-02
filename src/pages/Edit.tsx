@@ -43,7 +43,7 @@ import { api } from '../services/api';
 import { useBuckets, useItems, useSettings } from '../services/live';
 import { useAuth } from '../shared/auth';
 import { formatActionError } from '../shared/formatActionError';
-import { useToast } from '../shared/toast';
+import { toActionError, type ActionError } from '../shared/actionError';
 import { Chrome } from '../components/Chrome';
 
 const TABS = ['day', 'buckets', 'lists'] as const;
@@ -54,15 +54,17 @@ export function EditPage() {
   const buckets = useBuckets(user?.uid);
   const items = useItems(user?.uid);
   const [tab, setTab] = useState<(typeof TABS)[number]>('day');
-  const { showToast } = useToast();
+  const [error, setError] = useState<ActionError | null>(null);
 
+  // No success message: the page re-renders from live data, which is the
+  // confirmation. Failures show where they happened instead.
   async function act(label: string, fn: () => Promise<unknown>, failed?: string) {
+    setError(null);
     try {
       await fn();
-      showToast(label, 'success');
     } catch (err) {
       console.error(err);
-      showToast(formatActionError(err, failed || label.replace(/\.$/, '')), 'error');
+      setError(toActionError(err, failed || label.replace(/\.$/, '')));
     }
   }
 
@@ -114,6 +116,7 @@ export function EditPage() {
         <ListsForm
           buckets={listableBuckets(buckets)}
           items={items}
+          error={error}
           onSaveAll={(rows) => act('Page saved.', () => api.saveItems({ rows }), 'Save')}
           onReorder={(ids) =>
             act('Order saved.', async () => {
@@ -221,14 +224,16 @@ function DurationFields({
   label,
   h,
   m,
+  invalid,
 }: {
   name: string;
   label: string;
   h: number;
   m: number;
+  invalid?: boolean;
 }) {
   return (
-    <div className="duration-fields">
+    <div className={`duration-fields${invalid ? ' is-invalid' : ''}`}>
       <span className="duration-fields__name">{label}</span>
       <div className="duration-fields__inputs">
         <FormField label="Hrs">
@@ -319,7 +324,7 @@ function BucketsForm({
   onReorder: (ids: string[]) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
 }) {
-  const { showToast } = useToast();
+  const [rangeError, setRangeError] = useState<string | null>(null);
   const { personal, appointments, work, events, weighted } = splitEditBuckets(buckets);
   const ids = weighted.map((b) => b.id);
   const saved = useMemo(
@@ -357,6 +362,7 @@ function BucketsForm({
         <BucketFields kind="new" />
       </div>
       <div className="page-save">
+        {rangeError ? <p className="err page-save__err">{rangeError}</p> : null}
         <button
           type="button"
           className="btn--gold"
@@ -399,7 +405,7 @@ function BucketsForm({
                   ids.map((id, i) => ({ id, name: names[i] || '', startDate: starts[i] || '', endDate: ends[i] || '' }))
                 );
               } catch (err) {
-                showToast(formatActionError(err, 'Events'), 'error');
+                setRangeError(formatActionError(err, 'Events'));
                 return;
               }
               rows.push({
@@ -755,12 +761,14 @@ function BucketFields({
 function ListsForm({
   buckets,
   items,
+  error,
   onSaveAll,
   onReorder,
   onRemove,
 }: {
   buckets: Bucket[];
   items: ListItem[];
+  error: ActionError | null;
   onSaveAll: (rows: Record<string, unknown>[]) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
@@ -779,7 +787,7 @@ function ListsForm({
     <div className="edit-page">
       <div className="edit-card add-card">
         <h3 className="group-h">Add New</h3>
-        <ItemFields buckets={buckets} />
+        <ItemFields buckets={buckets} error={error} />
       </div>
       {buckets.map((b) => {
         const rows = grouped[b.id] || [];
@@ -805,7 +813,7 @@ function ListsForm({
                 >
                   {eventRows.map((row) => (
                     <div key={row.id} className="edit-card" style={{ ['--bcolor' as string]: `#${b.color}` }}>
-                      <ItemFields buckets={buckets} item={row} />
+                      <ItemFields buckets={buckets} item={row} error={error} />
                       <div className="edit-acts">
                         <button type="button" className="btn--red" onClick={() => onRemove(row.id)}>
                           Remove
@@ -820,7 +828,7 @@ function ListsForm({
                 <CollapsibleBucket title="Unassigned" hours={String(orphans.length)} color={b.color}>
                   {orphans.map((row) => (
                     <div key={row.id} className="edit-card" style={{ ['--bcolor' as string]: `#${b.color}` }}>
-                      <ItemFields buckets={buckets} item={row} />
+                      <ItemFields buckets={buckets} item={row} error={error} />
                       <div className="edit-acts">
                         <button type="button" className="btn--red" onClick={() => onRemove(row.id)}>
                           Remove
@@ -841,7 +849,7 @@ function ListsForm({
                 if (!row) return null;
                 return (
                   <div className="edit-card" style={{ ['--bcolor' as string]: `#${b.color}` }}>
-                    <ItemFields buckets={buckets} item={row} />
+                    <ItemFields buckets={buckets} item={row} error={error} />
                     <div className="edit-acts">
                       <button type="button" className="btn--red" onClick={() => onRemove(row.id)}>
                         Remove
@@ -855,6 +863,7 @@ function ListsForm({
         );
       })}
       <div className="page-save">
+        {error ? <p className="err page-save__err">{error.message}</p> : null}
         <button
           type="button"
           className="btn--gold"
@@ -935,7 +944,19 @@ function itemPayloadFromForm(form: HTMLFormElement, buckets: Bucket[]): Record<s
   };
 }
 
-function ItemFields({ buckets, item }: { buckets: Bucket[]; item?: ListItem }) {
+function ItemFields({
+  buckets,
+  item,
+  error,
+}: {
+  buckets: Bucket[];
+  item?: ListItem;
+  error?: ActionError | null;
+}) {
+  // Only the row the server named is marked, so one bad row does not light up
+  // the whole page.
+  const failed = error && error.itemId && error.itemId === item?.id ? error : null;
+  const invalid = (field: string) => (failed?.field === field ? ' is-invalid' : '');
   const dur = durationInputs(item?.durationMinutes, { hours: 0, minutes: 30 });
   const [bucketId, setBucketId] = useState(item?.bucketId || buckets[0]?.id);
   const currentBucket = buckets.find((b) => b.id === bucketId);
@@ -954,7 +975,12 @@ function ItemFields({ buckets, item }: { buckets: Bucket[]; item?: ListItem }) {
   const [kind, setKind] = useState(item?.type || 'recurring');
   const [cadenceKind, setCadenceKind] = useState(item?.cadence.kind || 'daily');
   return (
-    <form data-kind="item" data-id={item?.id} onSubmit={(e) => e.preventDefault()}>
+    <form
+      data-kind="item"
+      data-id={item?.id}
+      className={failed ? 'is-invalid-row' : undefined}
+      onSubmit={(e) => e.preventDefault()}
+    >
       <div className="fields">
         <FormField label="Title" wide>
           <input name="title" defaultValue={item?.title || ''} required />
@@ -972,11 +998,11 @@ function ItemFields({ buckets, item }: { buckets: Bucket[]; item?: ListItem }) {
             ))}
           </select>
         </FormField>
-        <DurationFields name="i" label="Duration" h={dur.hours} m={dur.minutes} />
+        <DurationFields name="i" label="Duration" h={dur.hours} m={dur.minutes} invalid={Boolean(invalid('iH'))} />
         {apptItem && currentBucket ? (
           <div className="field field--wide">
             <span>Sections it spans</span>
-            <div className="pills" role="group" aria-label="Sections it spans">
+            <div className={`pills${invalid('slots')}`} role="group" aria-label="Sections it spans">
               {slotOptions.map((s) => (
                 <label key={s}>
                   <input
@@ -992,7 +1018,12 @@ function ItemFields({ buckets, item }: { buckets: Bucket[]; item?: ListItem }) {
           </div>
         ) : slotPick && currentBucket ? (
           <FormField label="Time of day">
-            <select key={bucketId} name="slot" defaultValue={itemWorkSlot(item || {}, currentBucket)}>
+            <select
+              key={bucketId}
+              name="slot"
+              className={invalid('slot').trim() || undefined}
+              defaultValue={itemWorkSlot(item || {}, currentBucket)}
+            >
               {slotOptions.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -1007,6 +1038,7 @@ function ItemFields({ buckets, item }: { buckets: Bucket[]; item?: ListItem }) {
               <FormField label="Event" wide>
                 <select
                   name="eventId"
+                  className={invalid('eventId').trim() || undefined}
                   value={eventId}
                   onChange={(e) => setEventId(e.target.value)}
                   required
@@ -1024,6 +1056,7 @@ function ItemFields({ buckets, item }: { buckets: Bucket[]; item?: ListItem }) {
               <input
                 name="dueAt"
                 type="date"
+                className={invalid('dueAt').trim() || undefined}
                 defaultValue={item?.dueAt || ''}
                 {...(chosenEvent ? { min: chosenEvent.startDate, max: chosenEvent.endDate } : {})}
                 required

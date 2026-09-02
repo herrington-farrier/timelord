@@ -23,7 +23,6 @@ import { useBuckets, useDay, useSettings } from '../services/live';
 import { useAuth } from '../shared/auth';
 import { todayKey } from '../shared/dates';
 import { formatActionError } from '../shared/formatActionError';
-import { useToast } from '../shared/toast';
 
 /** Feeds the list-assembly animation; each card starts a beat after the last. */
 function stagger(index?: number): Record<string, string> {
@@ -36,7 +35,7 @@ export function TodayPage() {
   const settings = useSettings(user?.uid);
   const buckets = useBuckets(user?.uid);
   const day = useDay(user?.uid, date);
-  const { showToast } = useToast();
+  const [error, setError] = useState<string | null>(null);
   const events = buckets.find((b) => b.id === EVENTS_ID || b.kind === 'event');
   const eventDay = isEventDay(events, date);
   const started = Boolean(day?.startedAt) && !day?.endedAt;
@@ -73,13 +72,15 @@ export function TodayPage() {
     wasPositive.current = remaining > 0;
   }, [remaining, started, eventDay, section, settings?.timerSound, settings?.timerVibrate]);
 
+  // The day re-renders from live data, so a success needs no announcement.
+  // A failure is shown under the header, where the day itself is.
   async function act(label: string, fn: () => Promise<unknown>) {
+    setError(null);
     try {
       await fn();
-      showToast(label, 'success');
     } catch (err) {
       console.error(err);
-      showToast(formatActionError(err, label.replace(/\.$/, '')), 'error');
+      setError(formatActionError(err, label.replace(/\.$/, '')));
     }
   }
 
@@ -119,6 +120,7 @@ export function TodayPage() {
         />
       )}
 
+      {error ? <p className="err">{error}</p> : null}
       {!day ? <p className="err">No packed day.</p> : null}
 
       {eventDay && day ? (

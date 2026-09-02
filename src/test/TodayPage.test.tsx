@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { TodayPage } from '../pages/Today';
-import { ToastProvider } from '../shared/toast';
 
 const dayState: { current: Record<string, unknown> } = {
   current: {
@@ -37,11 +36,9 @@ vi.mock('../services/api', () => ({ api }));
 
 function renderToday() {
   return render(
-    <ToastProvider>
       <MemoryRouter>
         <TodayPage />
       </MemoryRouter>
-    </ToastProvider>
   );
 }
 

@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { EVENTS_BUCKET, PERSONAL_BUCKET, WORK_BUCKET } from '../domain/seed';
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { EditPage } from '../pages/Edit';
-import { ToastProvider } from '../shared/toast';
 import { bucket } from './fixtures';
 
 vi.mock('../shared/auth', () => ({
@@ -32,11 +31,9 @@ describe('Edit Work sections', () => {
   it('lets Work pick multiple sections with toggles, not a dropdown', async () => {
     const user = userEvent.setup();
     render(
-      <ToastProvider>
         <MemoryRouter>
           <EditPage />
         </MemoryRouter>
-      </ToastProvider>
     );
     await user.click(screen.getByRole('button', { name: 'Buckets' }));
     await user.click(screen.getByRole('button', { name: /Work,/ }));

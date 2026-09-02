@@ -317,6 +317,14 @@ export const wipeAccount = onCall(async (request) => {
 export const clearLogs = onCall(async (request) => {
   const uid = requireUid(request);
   await ensureTenant(uid, nowIso());
+  // Rerolling mid-day would erase the day's own completes and skips while it is
+  // still running, leaving the day and its record disagreeing. Enforced here
+  // rather than only in the UI, where it would be a suggestion.
+  const today = await tenantRef(uid).collection('days').doc(todayKey()).get();
+  const day = today.exists ? (today.data() as DayState) : null;
+  if (day?.startedAt && !day.endedAt) {
+    throw new HttpsError('failed-precondition', 'Finish the day before rerolling Stats.');
+  }
   const removed = await deleteAllDocs(tenantRef(uid).collection('logs'));
   return { ok: true, removed };
 });
@@ -524,11 +532,17 @@ function buildItemPayload(
   const apptItem = bucketId === APPOINTMENTS_ID;
   const bucket = buckets.find((b) => b.id === bucketId);
   const title = asString(data.title, 'Title');
-  const label = (msg: string) => new HttpsError('invalid-argument', `${title}: ${msg}`);
+  const rowId = typeof data.id === 'string' ? data.id : '';
+  /**
+   * Errors carry the row and the field so the page can put the message beside
+   * the thing that is wrong, rather than in a toast over the top of it.
+   */
+  const label = (msg: string, field?: string) =>
+    new HttpsError('invalid-argument', `${title}: ${msg}`, { itemId: rowId, field });
 
   if (!eventItem) {
-    if (!bucket) throw new HttpsError('not-found', `${title}: that bucket was not found.`);
-    if (!itemFitsBucket(durationMinutes, bucket)) throw label(itemExceedsBucketMessage(bucket));
+    if (!bucket) throw new HttpsError('not-found', `${title}: that bucket was not found.`, { itemId: rowId, field: 'bucketId' });
+    if (!itemFitsBucket(durationMinutes, bucket)) throw label(itemExceedsBucketMessage(bucket), 'iH');
   }
   // Events and appointments are both date-keyed: they pack on their due date
   // and never run on a cadence.
@@ -539,9 +553,9 @@ function buildItemPayload(
     const ranges = eventRanges(bucket);
     eventId = typeof data.eventId === 'string' ? data.eventId.trim() : '';
     const range = ranges.find((r) => r.id === eventId);
-    if (!range) throw label('pick an event for this item.');
+    if (!range) throw label('pick an event for this item.', 'eventId');
     if (dueAt < range.startDate || dueAt > range.endDate) {
-      throw label(`${eventRangeName(range)} runs ${range.startDate} to ${range.endDate}.`);
+      throw label(`${eventRangeName(range)} runs ${range.startDate} to ${range.endDate}.`, 'dueAt');
     }
   }
   const payload: Record<string, unknown> = {
@@ -563,7 +577,7 @@ function buildItemPayload(
     const allowed = bucketSlots(bucket);
     const raw = Array.isArray(data.slots) ? data.slots : [];
     const picked = allowed.filter((slot) => raw.includes(slot));
-    if (!picked.length) throw label('pick at least one section.');
+    if (!picked.length) throw label('pick at least one section.', 'slots');
     payload.slots = picked;
     payload.slot = picked[0];
   }
@@ -572,8 +586,8 @@ function buildItemPayload(
     if (workShowsItemSlot(bucket)) {
       const allowed = bucketSlots(bucket);
       const slot = data.slot;
-      if (slot !== 'morning' && slot !== 'midday' && slot !== 'evening') throw label('pick a Work section.');
-      if (!allowed.includes(slot)) throw label('pick a Work section.');
+      if (slot !== 'morning' && slot !== 'midday' && slot !== 'evening') throw label('pick a Work section.', 'slot');
+      if (!allowed.includes(slot)) throw label('pick a Work section.', 'slot');
       payload.slot = slot;
     } else {
       payload.slot = itemWorkSlot({}, bucket);

@@ -1079,28 +1079,6 @@ button:disabled {
 .stat__value--ok { color: var(--ok); }
 .stat__value--mid { color: var(--gold); }
 .stat__value--hot { color: var(--danger); }
-.toast-region {
-  position: fixed;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: max(16px, env(safe-area-inset-bottom));
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 20;
-  max-width: calc(100vw - 32px);
-}
-.toast {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  min-width: 16rem;
-  display: flex;
-  gap: 10px;
-  align-items: start;
-}
-.toast--success { border-color: var(--ok); }
-.toast--error { border-color: var(--danger); }
 .drag-handle {
   min-height: 40px;
   min-width: 40px;
@@ -1217,16 +1195,7 @@ button:disabled {
   .cal-day { padding: 12px 14px 14px; }
   .cal-day-h { font-size: 0.92rem; }
   .cal-secs { font-size: 0.82rem; gap: 4px 14px; }
-  .toast-region {
-    left: 16px;
-    right: 16px;
-    bottom: max(16px, env(safe-area-inset-bottom));
-  }
-  .toast {
-    min-width: 0;
-    width: 100%;
-  }
-  .edit-card {
+      .edit-card {
     padding: 10px 12px;
   }
   .item-acts button {
@@ -1559,3 +1528,31 @@ button:disabled {
   gap: 10px;
 }
 .confirm__acts button { flex: 1 1 0; min-width: 0; }
+
+/* --- Invalid input -------------------------------------------------- *
+ * Errors are shown where they happened: the row is marked, the field is
+ * outlined, and the message sits by the control that failed.            */
+.err {
+  color: var(--danger);
+  min-height: 1em;
+}
+.page-save__err {
+  flex: 1 1 100%;
+  margin: 0 0 2px;
+  text-align: right;
+  font-size: 0.85rem;
+}
+.is-invalid-row {
+  outline: 2px solid var(--danger);
+  outline-offset: 8px;
+  border-radius: 6px;
+}
+.edit-page input.is-invalid,
+.edit-page select.is-invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+.pills.is-invalid label,
+.duration-fields.is-invalid input {
+  border-color: var(--danger);
+}

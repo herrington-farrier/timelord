@@ -7,7 +7,6 @@ import { EVENTS_BUCKET, PERSONAL_BUCKET, WORK_BUCKET } from '../domain/seed';
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { EditPage } from '../pages/Edit';
 import { api } from '../services/api';
-import { ToastProvider } from '../shared/toast';
 
 vi.mock('../shared/auth', () => ({
   useAuth: () => ({ user: { uid: 'u1' } }),
@@ -39,11 +38,9 @@ describe('Edit Events ranges', () => {
   it('adds and removes event ranges including a 1-day block', async () => {
     const user = userEvent.setup();
     render(
-      <ToastProvider>
         <MemoryRouter>
           <EditPage />
         </MemoryRouter>
-      </ToastProvider>
     );
     await user.click(screen.getByRole('button', { name: 'Buckets' }));
     await user.click(screen.getByRole('button', { name: /Events,/ }));
