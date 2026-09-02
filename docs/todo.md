@@ -24,9 +24,20 @@ adding them on top of the current repack cost multiplies the problem.
 
 ## Bugs
 
-### B1. Appointments: Start/Stop double-counts, and they never displace anything
+### B1. Appointments become a locked bucket
 
-Three separate defects, all verified.
+**Agreed shape.** Appointments stop being their own collection and become a
+locked bucket alongside Personal / Work / Events — a container with no hours, no
+days and no slot settings of its own, holding scheduled items. Highest priority:
+placed before every other bucket in its section. An "item list / bucket hybrid".
+
+Plus a new **Apt Time** field: optional, free text, **display only**. The packer
+never reads it. Write that down in the type comment, because the next person to
+see a time on an appointment will assume it schedules something.
+
+#### The three bugs this replaces
+
+All verified in the source.
 
 **The stopwatch double-counts.** In `stopAppointment`:
 
@@ -37,37 +48,81 @@ used    = fullCaps - eatFromSections(capsAfterPrevUsed, section, elapsed) // = p
 
 `elapsed` is cumulative across runs, but `used` already contains the previous
 runs. Stop #1 after 5m → used 5. Start, Stop #2 after 3m → elapsed 8, used
-5 + 8 = 13 instead of 8. Pressing Start then Stop with no real time still adds
-the whole prior total again. This matches "removes time every time I press STOP
-despite not changing the state."
+5 + 8 = 13 instead of 8. Start then Stop with no time in between still re-adds
+the whole prior total. That is "removes time every time I press STOP despite not
+changing the state".
 
-**Appointments never consume section capacity at pack time.** In `packDay`,
-appointments are pushed as blocks with `flexible: false`, but nothing subtracts
-`durationMinutes` from `caps[slot]` — only bucket items decrement `left`. So an
-appointment displaces nothing, and nothing shows in Falling Off. Time is only
-ever taken by the (broken) stopwatch path.
+**Appointments never consume section capacity.** `packDay` pushes them as blocks
+with `flexible: false`, but nothing subtracts `durationMinutes` from `caps[slot]`
+— only bucket items decrement `left`. So they displace nothing and nothing shows
+in Falling Off. As ordinary items they consume capacity like everything else, and
+falling-off starts working for free.
 
-**Appointment blocks carry no `slot`.** That is why `todaySectionItems` shows
-them in every section, and why `nextSectionMinutes` had to exclude them.
+**Appointment blocks carry no `slot`.** That is why `todaySectionItems` shows them
+in every section, and why `nextSectionMinutes` had to exclude them. Items already
+have `slot`, so this disappears.
 
-**Proposed shape** — remove the timer entirely, as requested:
+#### Why the proposal is worth doing beyond the bug fix
 
-- Drop `startAppointment` / `stopAppointment`, `appointmentRuns`,
-  `appointmentElapsed`, and the Start/Stop UI. Appointments get Complete / Skip
-  like every other item, behind the same tap-to-expand.
-- Give appointments a `slot` so they sit in one section.
-- At pack time, subtract `durationMinutes` from that section's capacity before
-  buckets are placed. That alone makes displaced items fall off correctly.
-- `durationMinutes === 0` is a checklist entry: no capacity math, never drops
-  (same rule as 0-duration list items).
-- Complete deducts the assigned duration and repacks the remaining sections by
-  weight, exactly like any other completion. Skip returns the time.
+- **F3 comes free.** Repeat / cadence was a separate request; list items already
+  have it.
+- **F1 gets simpler.** One Save covers appointments with no separate
+  `saveAppointments` callable.
+- **Less surface.** One collection, one live hook, one `Appointment` type and two
+  callables (`upsertAppointment`, `archiveAppointment`) all go away. `Appointment`
+  is referenced in 10 non-test files.
+- **F4 fits.** If every bucket gets the multi-section toggle, appointments inherit
+  section handling rather than needing their own.
+
+#### Shape
+
+- `APPOINTMENTS_ID = 'appointments'`, `kind: 'appointment'`, locked like Events:
+  cannot be deleted, renamed, or given hours / days / slots.
+- Its items are `type: 'scheduled'` with `dueAt`, matching the rule Events items
+  already use in `itemHitsDate`.
+- `itemFitsBucket` exempts it. There is already an exemption for Events on line
+  114 (`bucket.kind === 'event' || bucket.id === EVENTS_ID`) — this is one more
+  clause beside it, since appointments have no daily hours to cap against.
+- **Keep `kind: 'appointment'` on the packed block.** `isAccentChip` and
+  `.cal-chip--appt` key off it, so every Quest Log and Quest visual survives
+  untouched.
+- Placement: place this bucket before the Work branch inside each slot loop.
+  Do it **by kind, not by weight** — Personal and Events are both already weight
+  0, so a tie would resolve arbitrarily.
+- 0-duration appointments are checklist entries: no capacity math, never drop,
+  same as 0-duration list items.
+
+#### Behaviour change to accept
+
+Appointments have no `slot` today, so they appear at the top of *every* section.
+As slotted items they sit at the top of *one* section. Deriving that section from
+Apt Time would make Apt Time a calculation, which contradicts it being display
+only — so the section is picked by hand, like any other item.
+
+#### Migration
+
+- `appointments/{id}` → `items/{id}` with `bucketId: 'appointments'`,
+  `type: 'scheduled'`, `dueAt` from `date`, `durationMinutes` carried over,
+  `apptTime` blank.
+- Add the bucket to `bucketsToBackfill` so existing tenants get it.
+- Old day blocks carry `appointmentId`. A repack rebuilds them, but
+  `prevStatus(previous, itemId, appointmentId)` matches on either key — check that
+  a migrated item's completed/skipped status survives the switch, or accept that
+  in-flight days reset.
+- Delete `appointmentRuns` from day docs, plus `appointmentElapsed`,
+  `startAppointment`, `stopAppointment` and the `appointments` input to `packDay`.
 - `sectionExtra` / `sectionUsed` / `eatFromSections` / `usedFromEat` may become
-  dead once the stopwatch is gone — check before deleting; `Reset Today` and the
-  Quest Log leftover row also read them.
+  dead once the stopwatch is gone — check first: `Reset Today` and the Quest Log
+  leftover row also read them.
 
-**Migration:** existing day docs hold `appointmentRuns`. Harmless if ignored,
-but a repack should stop writing it. No stored appointment field changes.
+#### Two decisions
+
+- **Per-appointment colour?** Each appointment has its own `color` today; a bucket
+  gives them all one. Either keep a per-item colour override, or accept a single
+  appointment colour. See D7.
+- **Where do they live in Organize?** Keep the dedicated Appointments tab, or drop
+  it and let them appear under Lists as another bucket group? A hybrid bucket
+  argues for Lists, and it removes a tab. See D8.
 
 ### B2. Events are unusable across multiple ranges
 
@@ -177,7 +232,7 @@ declare their scope. A rough map of what each write can touch:
 | `resetToday` | that one day (already single-day) |
 | item add / edit / remove, reorder | days the item's cadence hits, in range |
 | bucket hours / days / slots, settings | full range |
-| appointment add / edit / remove | that appointment's date |
+| appointment add / edit / remove | that appointment's date (after B1: same as any item) |
 | event range change | the affected ranges only |
 
 Even a coarse split — single-day vs full-range — removes most of the cost,
@@ -249,10 +304,12 @@ before touching the UI.
 
 ### F3. Appointments get list-item features
 
-After B1 lands (not before — B1 changes what an appointment *is*). Bring them
-closer to list items: repeat/cadence, and whatever else transfers. Once
-appointments have a cadence they stop being purely date-keyed, which affects
-`itemHitsDate` and the Quest Log chips.
+**Largely absorbed by B1.** Once appointments are items in a bucket they inherit
+cadence, weight and section handling directly. What remains is deciding which of
+those actually make sense for an appointment — a repeating dentist appointment is
+reasonable, a 0-duration repeating checklist entry probably is too. Once they
+carry a cadence they stop being purely date-keyed, which affects `itemHitsDate`
+and the Quest Log chips.
 
 ### F4. Multi-section toggle for every bucket
 
@@ -325,3 +382,16 @@ menu indicator. If they prove hard to discover, add a faint one.
 The Guide covers every bucket plus Quest, Quest Log and the Lists tab. Stats and
 Organize itself are missing, though the docs describe the Guide as a tour of what
 each bucket and page is for.
+
+### D7. One appointment colour, or per-appointment?
+
+B1 turns appointments into items in a bucket, and buckets carry one colour.
+Appointments each have their own today. Keeping a per-item override is a small
+addition to the item shape; dropping it is simpler but loses the visual
+distinction between, say, a dentist visit and a school run.
+
+### D8. Do appointments keep their own Organize tab?
+
+A hybrid bucket argues for showing them under Lists with the other bucket groups,
+which also removes a tab. Against: appointments are date-first and may deserve
+their own view.
