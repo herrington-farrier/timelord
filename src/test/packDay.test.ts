@@ -759,3 +759,15 @@ describe('skipPushDate', () => {
     expect(skipPushDate(appt, APPOINTMENTS_BUCKET, monday)).toBeNull();
   });
 });
+
+describe('packRange', () => {
+  it('packs each date once and returns them in order', () => {
+    const out = packRange(monday, 3, {
+      settings: settings(),
+      buckets: [workBucket({ weeklyMinutes: 0, days: ['Tue'] })],
+      items: [],
+    });
+    expect(out.map((r) => r.date)).toEqual(['2026-08-31', '2026-09-01', '2026-09-02']);
+    expect(out.every((r) => Array.isArray(r.result.blocks))).toBe(true);
+  });
+});

@@ -145,64 +145,37 @@ consistent answer for an app that wants no long-term history. See D4.
 The theme: **almost every write repacks 42 days**, and the repack itself is
 wasteful. This is the main cost driver.
 
-### E1. `writePackedRange` packs every day twice
+### E1–E5. Repack cost — **done**
 
-**Verified.** It calls `packRange(from, days, ...)` to build `packed`, then loops
-`packed` and calls `packDay` **again** for each date. `packed` is used only for
-`row.date`. That is 42 redundant `packDay` computations per call.
+`writePackedRange` used to: build a 42-day result with `packRange`, then loop and
+call `packDay` **again** per date using only the date from the first pass; read
+the 42 day docs one at a time; and write all 42 whether or not anything changed.
 
-Fix: use the `packRange` result, or replace it with a plain date list. Pure win,
-no behaviour change, no data change.
+Now it packs each day once, reads all 42 in a single `getAll`, and writes only
+the days whose content actually differs. The diff ignores `packedAt` and the
+audit stamps, and uses a key-sorted serialiser — a plain `JSON.stringify` would
+have reported every day as changed, because key order is not stable between what
+Firestore returns and what we build, and the whole optimisation would have been
+silently dead.
 
-### E2. 42 sequential reads, then 42 unconditional writes
+Skipping unchanged days is the part that should be felt in Quest: every save used
+to wake every `onSnapshot` listener for all 42 documents.
 
-**Verified.** The loop does `await daysCol.doc(row.date).get()` one at a time,
-then `batch.set()` for **every** day whether or not anything changed.
+**Scoped repacks (E3).** The single-day actions never called `writePackedRange`
+at all, so the win there was smaller than the backlog assumed. The real one is
+date-keyed items: `upsertItem` and `archiveItem` now repack only the dates an
+appointment or event entry touches — the old `dueAt` and the new one — instead of
+six weeks. Everything else runs on a cadence and genuinely can land anywhere in
+the range, so it still rebuilds the range.
 
-Fix in two parts:
-- One `getAll()` for the 42 docs instead of 42 round trips.
-- Diff before writing — skip days whose packed output is unchanged. Most edits
-  change a handful of days, not 42. This cuts billed writes and stops every save
-  waking every `onSnapshot` listener, which is likely a large part of why Quest
-  buttons feel slow.
+**`ensureTenant` (E4)** read settings and every bucket on all eight of its callers
+just to find nothing to backfill. A `schema` marker on the tenant doc — which was
+already being read — means the steady state is one read and out. Bump
+`TENANT_SCHEMA` to make every tenant re-run the backfill once.
 
-### E3. Repack the days that actually changed
-
-Right now every mutating write repacks this week's Sunday + 42 days. Completing
-an appointment affects **one day**.
-
-Fix: a `writePackedDay(uid, date)` for single-day effects, and let callers
-declare their scope. A rough map of what each write can touch:
-
-| Write | Real scope |
-| --- | --- |
-| complete / skip / appointment complete | that one day |
-| `startDay`, `startNext`, `endDay`, break | that one day |
-| `resetToday` | that one day (already single-day) |
-| item add / edit / remove, reorder | days the item's cadence hits, in range |
-| bucket hours / days / slots, settings | full range |
-| appointment add / edit / remove | that appointment's date (after B1: same as any item) |
-| event range change | the affected ranges only |
-
-Even a coarse split — single-day vs full-range — removes most of the cost,
-because the day-flow buttons in Quest are the ones that feel slow.
-
-### E4. `ensureTenant` re-reads the whole tenant on every call
-
-**Verified.** Called by 10 callables. On the existing-tenant path it runs
-`Promise.all([settings.get(), buckets.get()])` **every time** just to backfill
-missing buckets, so every callable pays 1 + 1 + N-buckets reads before doing any
-work.
-
-Fix: only run the backfill where it belongs (`bootstrap`), or gate it behind a
-cheap marker on the tenant doc.
-
-### E5. Every repack writes a `rebuild` log row
-
-**Verified**, last line of `writePackedRange`. Since nearly every write repacks,
-Stats fills with "Quest Log Packed" rows — which is most of what Reroll Stats
-exists to clear. Consider logging only explicit rebuilds, or dropping the row
-entirely once E3 lands.
+**Rebuild log rows (E5)** are gone. Since nearly every write repacked, Stats
+filled with "Quest Log Packed"; with no pack button left, the row recorded
+nothing a person did. `formatLogEvent` still renders existing rows.
 
 ### E6. Also open
 

@@ -9,14 +9,14 @@ import { eventRanges, parseEventRanges } from '../../src/domain/events';
 import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
-import { PACK_RANGE_DAYS, packRange } from '../../src/domain/packWeek';
+import { PACK_RANGE_DAYS } from '../../src/domain/packWeek';
 import { appointmentLoad, bucketSlots, capsAfterLoad, eatFromSections, isEventDay, itemWorkSlot, liveSectionState, nextSlot, parseBucketSlots, sectionCapacity, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
 import { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate } from '../../src/domain/skip';
 import { elapsedSince, sectionRemainingNow } from '../../src/domain/timer';
 import { nextItemWeight } from '../../src/domain/order';
 import type { Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Slot, Weekday } from '../../src/domain/types';
 import { APPOINTMENTS_ID, EVENTS_ID, WORK_ID } from '../../src/domain/types';
-import { weekStart } from '../../src/shared/dates';
+import { addDaysKey, weekStart } from '../../src/shared/dates';
 import { stampCreated, stampLastUpdated } from './actorAudit';
 import { asNumber, asString, authEmail, newId, requireSignedIn, requireUid } from './http';
 import { ensureTenant, loadTenant, tenantRef } from './tenant';
@@ -139,38 +139,87 @@ async function deleteAllDocs(col: FirebaseFirestore.CollectionReference): Promis
   return docs.length;
 }
 
+/**
+ * Rebuild `days` docs for a date range.
+ *
+ * Three things this deliberately does NOT do, each of which it used to:
+ *  - pack every day twice. It called packRange to build a result, then looped
+ *    and called packDay again per date, using only the date from the first pass.
+ *  - read the days one at a time. One getAll replaces N round trips.
+ *  - write every day whether or not it changed. Most edits touch a handful of
+ *    days; rewriting all of them bills writes and wakes every listener, which
+ *    is most of why the Quest buttons felt slow.
+ */
 async function writePackedRange(uid: string, start: string, days: number): Promise<void> {
-  const loaded = await loadTenant(uid);
   const from = weekStart(start);
-  const packed = domainCall(() => packRange(from, days, asPackInput(loaded, from)));
-  const batch = getFirestore().batch();
+  await writePackedDates(
+    uid,
+    Array.from({ length: days }, (_, i) => addDaysKey(from, i))
+  );
+}
+
+/**
+ * Repack exactly these dates. Editing a date-keyed item — an appointment or an
+ * event entry — changes one or two days, not the whole range, so it says so
+ * rather than rebuilding six weeks.
+ */
+async function writePackedDates(uid: string, dates: string[]): Promise<void> {
+  if (!dates.length) return;
+  const loaded = await loadTenant(uid);
   const daysCol = tenantRef(uid).collection('days');
-  for (const row of packed) {
-    const prevSnap = await daysCol.doc(row.date).get();
-    const prev = prevSnap.exists ? (prevSnap.data() as DayState) : null;
+  const prevSnaps = await getFirestore().getAll(...dates.map((d) => daysCol.doc(d)));
+
+  const batch = getFirestore().batch();
+  let changed = 0;
+  dates.forEach((date, i) => {
+    const snap = prevSnaps[i];
+    const prev = snap.exists ? (snap.data() as DayState) : null;
     const reusePrevious = Boolean(prev?.blocks && (prev.startedAt || prev.endedAt));
-    const result = reusePrevious && prev?.blocks
-      ? domainCall(() => packDay(asPackInput(loaded, row.date, prev.blocks)))
-      : domainCall(() => packDay(asPackInput(loaded, row.date)));
-    batch.set(
-      daysCol.doc(row.date),
-      firestoreDoc({
-        ...result,
-        startedAt: prev?.startedAt || null,
-        endedAt: prev?.endedAt || null,
-        packedAt: nowIso(),
-        section: prev?.section ?? null,
-        sectionStartedAt: prev?.sectionStartedAt ?? null,
-        sectionRemainingMinutes: prev?.sectionRemainingMinutes ?? null,
-        pausedAt: prev?.pausedAt ?? null,
-        sectionExtra: {},
-        sectionUsed: {},
-        eventStartedAt: prev?.eventStartedAt ?? null,
-      })
+    const result = domainCall(() =>
+      packDay(asPackInput(loaded, date, reusePrevious ? prev?.blocks : undefined))
     );
+    const next = firestoreDoc({
+      ...result,
+      startedAt: prev?.startedAt || null,
+      endedAt: prev?.endedAt || null,
+      packedAt: nowIso(),
+      section: prev?.section ?? null,
+      sectionStartedAt: prev?.sectionStartedAt ?? null,
+      sectionRemainingMinutes: prev?.sectionRemainingMinutes ?? null,
+      pausedAt: prev?.pausedAt ?? null,
+      sectionExtra: {},
+      sectionUsed: {},
+      eventStartedAt: prev?.eventStartedAt ?? null,
+    });
+    // packedAt changes every run, so compare everything else.
+    if (prev && unchangedDay(prev as Record<string, unknown>, next)) return;
+    batch.set(daysCol.doc(date), next);
+    changed += 1;
+  });
+  if (changed) await batch.commit();
+}
+
+const VOLATILE_DAY_KEYS = new Set(['packedAt', 'created_at', 'created_by', 'last_updated_at', 'last_updated_by']);
+
+/**
+ * Key order is not stable between what Firestore returns and what we build, so
+ * a plain JSON.stringify would report every day as changed and defeat the diff.
+ */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const row = value as Record<string, unknown>;
+    const keys = Object.keys(row).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableJson(row[k])}`).join(',')}}`;
   }
-  await batch.commit();
-  await writeLog(uid, { type: 'rebuild', date: start });
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+/** Same packed content, ignoring the stamps that move on every run. */
+function unchangedDay(prev: Record<string, unknown>, next: Record<string, unknown>): boolean {
+  const strip = (row: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(row).filter(([k]) => !VOLATILE_DAY_KEYS.has(k)));
+  return stableJson(strip(prev)) === stableJson(strip(next));
 }
 
 async function writeAccessLog(row: { type: 'signup' | 'denied'; email: string; uid: string }): Promise<void> {
@@ -392,6 +441,27 @@ export const reorderBuckets = onCall(async (request) => {
   return { ok: true };
 });
 
+/**
+ * Dates a date-keyed item affects. Appointments and events pack on their dueAt
+ * and nowhere else, so moving one touches the old date and the new one. Any
+ * other item runs on a cadence and can land anywhere in the range.
+ */
+function datesForItemEdit(
+  bucket: Bucket | undefined,
+  previousDueAt: string | undefined,
+  nextDueAt: string | undefined
+): string[] | null {
+  const dated =
+    bucket &&
+    (bucket.kind === 'event' ||
+      bucket.id === EVENTS_ID ||
+      bucket.kind === 'appointment' ||
+      bucket.id === APPOINTMENTS_ID);
+  if (!dated) return null;
+  const out = [previousDueAt, nextDueAt].filter((d): d is string => Boolean(d));
+  return out.length ? [...new Set(out)] : [];
+}
+
 export const upsertItem = onCall(async (request) => {
   const uid = requireUid(request);
   await ensureTenant(uid, nowIso());
@@ -455,8 +525,11 @@ export const upsertItem = onCall(async (request) => {
     payload.slot = null;
   }
   const stamp = existing.exists ? await stampLastUpdated(uid, nowIso()) : await stampCreated(uid, nowIso());
+  const previousDueAt = existing.exists ? (existing.data() as { dueAt?: string }).dueAt : undefined;
   await ref.set({ ...payload, ...stamp }, { merge: true });
-  await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
+  const scoped = datesForItemEdit(bucket, previousDueAt, dueAt || undefined);
+  if (scoped) await writePackedDates(uid, scoped);
+  else await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
   return { ok: true, id };
 });
 
@@ -482,8 +555,15 @@ export const archiveItem = onCall(async (request) => {
   const uid = requireUid(request);
   const id = asString(request.data?.id, 'Item');
   const stamp = await stampLastUpdated(uid, nowIso());
-  await tenantRef(uid).collection('items').doc(id).set({ archived: true, ...stamp }, { merge: true });
-  await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
+  const itemRef = tenantRef(uid).collection('items').doc(id);
+  const before = await itemRef.get();
+  const row = before.exists ? (before.data() as { bucketId?: string; dueAt?: string }) : undefined;
+  await itemRef.set({ archived: true, ...stamp }, { merge: true });
+  const loaded = await loadTenant(uid);
+  const bucket = (loaded.buckets as Bucket[]).find((b) => b.id === row?.bucketId);
+  const scoped = datesForItemEdit(bucket, row?.dueAt, undefined);
+  if (scoped) await writePackedDates(uid, scoped);
+  else await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
   return { ok: true };
 });
 

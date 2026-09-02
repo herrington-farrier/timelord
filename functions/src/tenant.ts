@@ -10,14 +10,26 @@ export function tenantRef(uid: string) {
   return getFirestore().collection('tenants').doc(uid);
 }
 
+/**
+ * Bump when a new locked bucket or a data migration lands: tenants whose stamp
+ * is older re-run the backfill once, then stop paying for it.
+ */
+const TENANT_SCHEMA = 2;
+
 export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
   const ref = tenantRef(uid);
   const snap = await ref.get();
+
+  // Steady state, and by far the common case: one read and out. This used to
+  // read settings and every bucket on all eight of its callers, just to find
+  // nothing to backfill.
+  if (snap.exists && (snap.data() as { schema?: number })?.schema === TENANT_SCHEMA) return;
+
   const stamp = await stampCreated(uid, nowIso);
 
   if (!snap.exists) {
     const batch = getFirestore().batch();
-    batch.set(ref, { ...stamp });
+    batch.set(ref, { ...stamp, schema: TENANT_SCHEMA });
     batch.set(ref.collection('settings').doc('current'), { ...DEFAULT_SETTINGS, ...stamp });
     for (const bucket of [PERSONAL_BUCKET, ...SEED_BUCKETS]) {
       batch.set(ref.collection('buckets').doc(bucket.id), { ...bucket, ...stamp });
@@ -35,11 +47,9 @@ export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
   ]);
 
   const batch = getFirestore().batch();
-  let needsCommit = false;
 
   if (!settingsSnap.exists) {
     batch.set(ref.collection('settings').doc('current'), { ...DEFAULT_SETTINGS, ...stamp });
-    needsCommit = true;
   }
 
   const existing = bucketsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Bucket[];
@@ -47,7 +57,6 @@ export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
 
   for (const bucket of missing) {
     batch.set(ref.collection('buckets').doc(bucket.id), { ...bucket, archived: false, ...stamp }, { merge: true });
-    needsCommit = true;
   }
 
   // Appointments used to be their own collection. Fold them into the new
@@ -72,8 +81,7 @@ export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
         ...stamp,
       });
       batch.delete(doc.ref);
-      needsCommit = true;
-    });
+      });
   }
 
   if (existing.filter((b) => !b.archived).length === 0) {
@@ -81,12 +89,14 @@ export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
     if (itemsSnap.empty) {
       for (const item of SEED_ITEMS) {
         batch.set(ref.collection('items').doc(item.id), { ...item, ...stamp });
-        needsCommit = true;
-      }
+          }
     }
   }
 
-  if (needsCommit) await batch.commit();
+  // Stamp the tenant even when nothing needed backfilling, so the next call
+  // takes the single-read path above.
+  batch.set(ref, { schema: TENANT_SCHEMA }, { merge: true });
+  await batch.commit();
 }
 
 export async function loadTenant(uid: string) {
