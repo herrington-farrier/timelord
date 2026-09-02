@@ -966,3 +966,58 @@ describe('assignable week', () => {
     expect(assignableWeekMinutes({ ...s, personalCountsAsDay: true })).toBe(0);
   });
 });
+
+describe('a repeating appointment', () => {
+  const weekly = (over = {}) =>
+    item({
+      id: 'therapy',
+      bucketId: APPOINTMENTS_ID,
+      title: 'Therapy',
+      type: 'recurring',
+      cadence: { kind: 'weekly', days: ['Mon'] },
+      durationMinutes: 60,
+      slots: ['midday'],
+      ...over,
+    });
+
+  it('packs on every day its cadence hits, not on a single date', () => {
+    const input = {
+      ...base(),
+      settings: settings({ dayMinutes: 900 }),
+      buckets: [APPOINTMENTS_BUCKET, workBucket({ weeklyMinutes: 0, days: ['Tue'] })],
+      items: [weekly()],
+    };
+    // monday is 2026-08-31
+    expect(packDay({ ...input, date: monday }).blocks.some((b) => b.itemId === 'therapy')).toBe(true);
+    expect(packDay({ ...input, date: '2026-09-01' }).blocks.some((b) => b.itemId === 'therapy')).toBe(false);
+    expect(packDay({ ...input, date: '2026-09-07' }).blocks.some((b) => b.itemId === 'therapy')).toBe(true);
+  });
+
+  it('still takes its hours out of the day when it repeats', () => {
+    const result = packDay({
+      ...base(),
+      date: monday,
+      settings: settings({ dayMinutes: 180 }),
+      buckets: [
+        APPOINTMENTS_BUCKET,
+        workBucket({ weeklyMinutes: 0, days: ['Tue'] }),
+        bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 600, days: ['Mon'], slots: ['midday'] }),
+      ],
+      items: [weekly(), item({ id: 'task', bucketId: 'house', title: 'Task', durationMinutes: 45, slot: 'midday' })],
+    });
+    expect(result.blocks.some((b) => b.itemId === 'therapy')).toBe(true);
+    expect(result.dropped.some((d) => d.itemId === 'task')).toBe(true);
+  });
+
+  it('keeps a one-off appointment on its date only', () => {
+    const input = {
+      ...base(),
+      settings: settings({ dayMinutes: 900 }),
+      buckets: [APPOINTMENTS_BUCKET, workBucket({ weeklyMinutes: 0, days: ['Tue'] })],
+      items: [weekly({ id: 'dentist', type: 'scheduled', dueAt: monday, cadence: { kind: 'daily' } })],
+    };
+    expect(packDay({ ...input, date: monday }).blocks.some((b) => b.itemId === 'dentist')).toBe(true);
+    // a daily cadence must not leak through on a scheduled appointment
+    expect(packDay({ ...input, date: '2026-09-01' }).blocks.some((b) => b.itemId === 'dentist')).toBe(false);
+  });
+});

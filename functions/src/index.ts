@@ -497,16 +497,19 @@ export const reorderBuckets = onCall(async (request) => {
  */
 function datesForItemEdit(
   bucket: Bucket | undefined,
+  type: string | undefined,
   previousDueAt: string | undefined,
   nextDueAt: string | undefined
 ): string[] | null {
-  const dated =
+  const datedBucket =
     bucket &&
     (bucket.kind === 'event' ||
       bucket.id === EVENTS_ID ||
       bucket.kind === 'appointment' ||
       bucket.id === APPOINTMENTS_ID);
-  if (!dated) return null;
+  // A repeating appointment runs on a cadence, so it can land anywhere in the
+  // range and cannot be scoped to a pair of dates.
+  if (!datedBucket || type !== 'scheduled') return null;
   const out = [previousDueAt, nextDueAt].filter((d): d is string => Boolean(d));
   return out.length ? [...new Set(out)] : [];
 }
@@ -547,7 +550,8 @@ function buildItemPayload(
   }
   // Events and appointments are both date-keyed: they pack on their due date
   // and never run on a cadence.
-  const type = eventItem || apptItem ? 'scheduled' : asString(data.type, 'Type');
+  // Events are pinned to a date. Appointments choose, like any other item.
+  const type = eventItem ? 'scheduled' : asString(data.type, 'Type');
   const dueAt = type === 'scheduled' ? asString(data.dueAt, 'Date') : '';
   let eventId = '';
   if (eventItem) {
@@ -565,7 +569,7 @@ function buildItemPayload(
     type,
     weight: isNew ? nextItemWeight(items, bucketId) : Number.isFinite(storedWeight) ? storedWeight : 1,
     durationMinutes,
-    cadence: eventItem || apptItem ? { kind: 'daily' } : data.cadence || { kind: 'daily' },
+    cadence: eventItem ? { kind: 'daily' } : data.cadence || { kind: 'daily' },
     dueAt,
     archived: false,
     // Display only. Never read by the packer.
@@ -646,6 +650,7 @@ export const saveItems = onCall(async (request) => {
   const scopes = prepared.map((row) =>
     datesForItemEdit(
       buckets.find((b) => b.id === row.payload.bucketId),
+      row.payload.type as string,
       row.previousDueAt,
       (row.payload.dueAt as string) || undefined
     )
@@ -686,7 +691,7 @@ export const archiveItem = onCall(async (request) => {
   await itemRef.set({ archived: true, ...stamp }, { merge: true });
   const loaded = await loadTenant(uid);
   const bucket = (loaded.buckets as Bucket[]).find((b) => b.id === row?.bucketId);
-  const scoped = datesForItemEdit(bucket, row?.dueAt, undefined);
+  const scoped = datesForItemEdit(bucket, before.exists ? (row as { type?: string })?.type : undefined, row?.dueAt, undefined);
   if (scoped) await writePackedDates(uid, scoped);
   else await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
   return { ok: true };

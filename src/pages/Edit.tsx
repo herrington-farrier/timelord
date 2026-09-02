@@ -901,13 +901,13 @@ function itemPayloadFromForm(form: HTMLFormElement, buckets: Bucket[]): Record<s
   const bucket = buckets.find((b) => b.id === bucketId);
   const eventItem = Boolean(bucket && (bucket.kind === 'event' || bucket.id === EVENTS_ID));
   const apptItem = isAppointmentBucket(bucket);
-  const datedItem = eventItem || apptItem;
   const openDays = listCadenceDays(bucket);
-  const type = datedItem ? 'scheduled' : String(fd.get('type') || 'recurring');
+  // Events are pinned to a date; an appointment repeats if it says so.
+  const type = eventItem ? 'scheduled' : String(fd.get('type') || 'recurring');
   const cadKind = String(fd.get('cadenceKind') || 'daily');
 
   let cadence: Cadence = { kind: 'daily' };
-  if (!datedItem) {
+  if (!eventItem) {
     if (cadKind === 'weekdays' || cadKind === 'weekends' || cadKind === 'daily') {
       cadence = { kind: cadKind };
     } else if (cadKind === 'weekly') {
@@ -964,8 +964,8 @@ function ItemFields({
   const currentBucket = buckets.find((b) => b.id === bucketId);
   const eventItem = Boolean(currentBucket && (currentBucket.kind === 'event' || currentBucket.id === EVENTS_ID));
   const apptItem = isAppointmentBucket(currentBucket);
-  /** Events and appointments both pack on a date rather than a cadence. */
-  const datedItem = eventItem || apptItem;
+  const [kind, setKind] = useState<ListItem['type']>(item?.type || 'recurring');
+  /** Events are always pinned to a date; an appointment only while scheduled. */
   const slotPick = currentBucket ? workShowsItemSlot(currentBucket) : false;
   const slotOptions = currentBucket ? bucketSlots(currentBucket) : [];
   const eventOptions = eventRanges(buckets.find((b) => b.kind === 'event' || b.id === EVENTS_ID));
@@ -974,7 +974,6 @@ function ItemFields({
   );
   const chosenEvent = eventOptions.find((r) => r.id === eventId);
   const openDays = listCadenceDays(currentBucket);
-  const [kind, setKind] = useState(item?.type || 'recurring');
   const [cadenceKind, setCadenceKind] = useState(item?.cadence.kind || 'daily');
   return (
     <form
@@ -1034,26 +1033,24 @@ function ItemFields({
             </select>
           </FormField>
         ) : null}
-        {datedItem ? (
+        {eventItem ? (
           <>
-            {eventItem ? (
-              <FormField label="Event" wide>
-                <select
-                  name="eventId"
-                  className={invalid('eventId').trim() || undefined}
-                  value={eventId}
-                  onChange={(e) => setEventId(e.target.value)}
-                  required
-                >
-                  <option value="">Pick an event</option>
-                  {eventOptions.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {eventRangeName(r)} · {r.startDate} to {r.endDate}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-            ) : null}
+            <FormField label="Event" wide>
+              <select
+                name="eventId"
+                className={invalid('eventId').trim() || undefined}
+                value={eventId}
+                onChange={(e) => setEventId(e.target.value)}
+                required
+              >
+                <option value="">Pick an event</option>
+                {eventOptions.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {eventRangeName(r)} · {r.startDate} to {r.endDate}
+                  </option>
+                ))}
+              </select>
+            </FormField>
             <FormField label="Date">
               <input
                 name="dueAt"
@@ -1064,11 +1061,6 @@ function ItemFields({
                 required
               />
             </FormField>
-            {apptItem ? (
-              <FormField label="Time (label only)">
-                <input name="apptTime" type="time" defaultValue={item?.apptTime || ''} />
-              </FormField>
-            ) : null}
           </>
         ) : (
           <>
@@ -1089,8 +1081,19 @@ function ItemFields({
               </select>
             </FormField>
             {kind === 'scheduled' ? (
-              <FormField label="Due">
-                <input name="dueAt" type="date" defaultValue={item?.dueAt || ''} required />
+              <FormField label={apptItem ? 'Date' : 'Due'}>
+                <input
+                  name="dueAt"
+                  type="date"
+                  className={invalid('dueAt').trim() || undefined}
+                  defaultValue={item?.dueAt || ''}
+                  required
+                />
+              </FormField>
+            ) : null}
+            {apptItem ? (
+              <FormField label="Time (label only)">
+                <input name="apptTime" type="time" defaultValue={item?.apptTime || ''} />
               </FormField>
             ) : null}
           </>

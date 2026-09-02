@@ -50,6 +50,10 @@ Tick as you go. Anything that fails, tell me the item number.
     under Strategize → Lists in the Appointments group. Their per-appointment
     colours are gone by design; the bucket colour applies.
 
+20b. **Repeating** — set an appointment to Recurring with a weekly cadence. It
+    should appear on every matching day in Quest Log, take its hours out of
+    those days, and keep its Time label and sections.
+
 ## Events
 
 21. **Naming** — each range has a name field in Strategize → Buckets.

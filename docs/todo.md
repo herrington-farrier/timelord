@@ -219,14 +219,21 @@ appointments. No branch on the setting is needed anywhere in the timers: Persona
 blocks carry 0 minutes when the toggle is off, so the same arithmetic is correct
 in both modes.
 
-### F3. Appointments get list-item features
+### F3. Repeating appointments — **done**
 
-**Largely absorbed by B1.** Once appointments are items in a bucket they inherit
-cadence, weight and section handling directly. What remains is deciding which of
-those actually make sense for an appointment — a repeating dentist appointment is
-reasonable, a 0-duration repeating checklist entry probably is too. Once they
-carry a cadence they stop being purely date-keyed, which affects `itemHitsDate`
-and the Quest Log chips.
+An appointment chooses Recurring or Scheduled like any other item, so a standing
+therapy slot every Tuesday is just a weekly cadence. Scheduled keeps a single
+date. Both keep the Time label and the sections they span.
+
+`itemHitsDate` only short-circuits to `dueAt` for an appointment that is
+**scheduled**; a recurring one falls through to `cadenceHitsDate` with everything
+else. Events stay pinned to a date, since they belong inside a range.
+
+One trap worth recording: `datesForItemEdit` scoped the repack to a pair of dates
+for anything in a dated bucket. A recurring appointment has no `dueAt`, so that
+would have returned an empty list and `writePackedDates` would have returned
+early — **no repack at all**. It takes the item's type now and returns null for
+recurring, which puts it back on the full range where a cadence belongs.
 
 ### F4. Multi-section for every bucket — **done**
 

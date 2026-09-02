@@ -61,8 +61,11 @@ function prevStatus(previous: PreviousBlock[] | undefined, itemId?: string, appo
 function itemHitsDate(item: ListItem, dateKey: string, skipPushes: SkipPush[]): boolean {
   if (item.archived) return false;
   if (skipPushes.some((p) => p.itemId === item.id && p.toDate === dateKey)) return true;
+  // Events always sit on one date inside their range.
   if (item.bucketId === EVENTS_ID) return item.dueAt === dateKey;
-  if (item.bucketId === APPOINTMENTS_ID) return item.dueAt === dateKey;
+  // An appointment is a one-off by default, but a standing one — therapy every
+  // Tuesday — runs on a cadence like any other recurring item.
+  if (item.bucketId === APPOINTMENTS_ID && item.type === 'scheduled') return item.dueAt === dateKey;
   return cadenceHitsDate(item.cadence, dateKey);
 }
 
