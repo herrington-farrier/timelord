@@ -190,5 +190,4 @@ validation. If you find yourself writing the same rule twice, put it in
 
 - `docs/logic-map.md` — behaviour, screen by screen. The closest thing to a spec.
 - `docs/data-model.md` — every field.
-- `docs/todo.md` — what was built and why, including decisions and their reasons.
 - `docs/verify.md` — the manual check list; a fast way to see what the app does.

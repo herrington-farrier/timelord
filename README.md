@@ -98,7 +98,6 @@ recoloured, and given one or more day sections.
 
 - [docs/logic-map.md](docs/logic-map.md) — behaviour, screen by screen
 - [docs/data-model.md](docs/data-model.md) — every Firestore field
-- [docs/todo.md](docs/todo.md) — what was built, and the reasoning behind it
 - [docs/verify.md](docs/verify.md) — the manual check list
 - [docs/porting.md](docs/porting.md) — read before forking or integrating
 
