@@ -47,6 +47,35 @@ describe('cadenceHitsDate', () => {
     expect(cadenceHitsDate(cadence, '2000-01-11')).toBe(false);
   });
 
+  it('counts from startDate, not from the weekday lattice', () => {
+    // 2026-09-03 is a Thursday. Every 28 days from it: Oct 1, Oct 29.
+    const cadence = { kind: 'everyNDays' as const, n: 28, startWeekday: 'Thu' as const, startDate: '2026-09-03' };
+    expect(cadenceHitsDate(cadence, '2026-09-03')).toBe(true);
+    expect(cadenceHitsDate(cadence, '2026-10-01')).toBe(true);
+    expect(cadenceHitsDate(cadence, '2026-10-29')).toBe(true);
+    // The right weekday in between is not a hit.
+    expect(cadenceHitsDate(cadence, '2026-09-10')).toBe(false);
+    expect(cadenceHitsDate(cadence, '2026-09-17')).toBe(false);
+    expect(cadenceHitsDate(cadence, '2026-09-24')).toBe(false);
+  });
+
+  it('keeps two streams on the same weekday and n apart', () => {
+    // The reported bug: four 28-day appointments with different start dates
+    // all landed on the same day, because only the weekday set the phase.
+    const a = { kind: 'everyNDays' as const, n: 28, startWeekday: 'Thu' as const, startDate: '2026-09-03' };
+    const b = { kind: 'everyNDays' as const, n: 28, startWeekday: 'Thu' as const, startDate: '2026-09-10' };
+    expect(cadenceHitsDate(a, '2026-09-03')).toBe(true);
+    expect(cadenceHitsDate(b, '2026-09-03')).toBe(false);
+    expect(cadenceHitsDate(a, '2026-09-10')).toBe(false);
+    expect(cadenceHitsDate(b, '2026-09-10')).toBe(true);
+  });
+
+  it('still uses the weekday lattice when no startDate is given', () => {
+    expect(cadenceHitsDate({ kind: 'everyNDays', n: 28, startWeekday: 'Tue' }, '2000-01-04')).toBe(true);
+    expect(cadenceHitsDate({ kind: 'everyNDays', n: 28, startWeekday: 'Tue' }, '2000-02-01')).toBe(true);
+    expect(cadenceHitsDate({ kind: 'everyNDays', n: 28, startWeekday: 'Tue' }, '2000-01-11')).toBe(false);
+  });
+
   it('hits the first of the month for monthly cadence', () => {
     expect(cadenceHitsDate({ kind: 'monthly', dayOfMonth: 1 }, '2026-09-01')).toBe(true);
   });

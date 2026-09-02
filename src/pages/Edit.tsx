@@ -19,6 +19,7 @@ import {
   weekBudgetSummary,
   type WeekBudgetSummary,
 } from '../domain/budget';
+import { weekdayFromKey } from '../domain/cadence';
 import { durationInputs, formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
 import { eventRangeForItem, eventRangeName, eventRanges, newEventRangeId, parseEventRanges } from '../domain/events';
 import { PACK_RANGE_DAYS } from '../domain/packWeek';
@@ -914,12 +915,15 @@ function itemPayloadFromForm(form: HTMLFormElement, buckets: Bucket[]): Record<s
       cadence = { kind: 'weekly', days: (fd.getAll('weeklyDays') as Weekday[]).filter((d) => openDays.includes(d)) };
     } else if (cadKind === 'everyNDays') {
       const startDate = String(fd.get('startDate') || '').trim();
+      const picked = String(fd.get('startWeekday'));
       cadence = {
         kind: 'everyNDays',
         n: Number(fd.get('everyN')) || 2,
-        startWeekday: (openDays.includes(String(fd.get('startWeekday')) as Weekday)
-          ? String(fd.get('startWeekday'))
-          : openDays[0] || 'Mon') as Weekday,
+        // The date is the anchor when there is one, so the weekday is read off
+        // it rather than trusted from a control the date has taken over.
+        startWeekday: startDate
+          ? weekdayFromKey(startDate)
+          : ((openDays.includes(picked as Weekday) ? picked : openDays[0] || 'Mon') as Weekday),
         ...(startDate ? { startDate } : {}),
       };
     } else if (cadKind === 'monthly') {
@@ -975,6 +979,11 @@ function ItemFields({
   const chosenEvent = eventOptions.find((r) => r.id === eventId);
   const openDays = listCadenceDays(currentBucket);
   const [cadenceKind, setCadenceKind] = useState(item?.cadence.kind || 'daily');
+  // A start date sets the weekday, so the two controls can never disagree about
+  // when the stream runs.
+  const [startDate, setStartDate] = useState(
+    item?.cadence.kind === 'everyNDays' ? item.cadence.startDate || '' : ''
+  );
   return (
     <form
       data-kind="item"
@@ -1114,28 +1123,34 @@ function ItemFields({
           <FormField label="Every N days">
             <input name="everyN" type="number" min={2} defaultValue={item?.cadence.kind === 'everyNDays' ? item.cadence.n : 2} />
           </FormField>
-          <FormField label="Start weekday">
-            <select
-              name="startWeekday"
-              defaultValue={
-                item?.cadence.kind === 'everyNDays' && openDays.includes(item.cadence.startWeekday)
-                  ? item.cadence.startWeekday
-                  : openDays[0] || 'Mon'
-              }
-            >
-              {WEEKDAYS.map((d) => (
-                <option key={d} value={d} disabled={!openDays.includes(d)}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </FormField>
           <FormField label="Start date">
             <input
               name="startDate"
               type="date"
-              defaultValue={item?.cadence.kind === 'everyNDays' ? item.cadence.startDate || '' : ''}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
             />
+          </FormField>
+          <FormField label="Start weekday">
+            <select
+              name="startWeekday"
+              // With a date set, the weekday follows it and is read-only.
+              key={startDate}
+              disabled={Boolean(startDate)}
+              defaultValue={
+                startDate
+                  ? weekdayFromKey(startDate)
+                  : item?.cadence.kind === 'everyNDays' && openDays.includes(item.cadence.startWeekday)
+                    ? item.cadence.startWeekday
+                    : openDays[0] || 'Mon'
+              }
+            >
+              {WEEKDAYS.map((d) => (
+                <option key={d} value={d} disabled={!startDate && !openDays.includes(d)}>
+                  {d}
+                </option>
+              ))}
+            </select>
           </FormField>
         </div>
       ) : null}

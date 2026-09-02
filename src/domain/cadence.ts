@@ -47,7 +47,11 @@ export function cadenceHitsDate(cadence: Cadence, dateKey: string): boolean {
     return d === cadence.dayOfMonth;
   }
   if (cadence.startDate && dateKey < cadence.startDate) return false;
-  const origin = phaseOrigin(cadence.startWeekday);
+  // A start date is the anchor, not just a floor: "every 28 days from the 4th"
+  // must land on the 4th, then 28 days later. Anchoring to the weekday lattice
+  // instead collapses every stream sharing a weekday and an n onto the same
+  // dates, whatever start dates they were given.
+  const origin = cadence.startDate || phaseOrigin(cadence.startWeekday);
   const diff = daysBetween(origin, dateKey);
   return ((diff % cadence.n) + cadence.n) % cadence.n === 0;
 }
