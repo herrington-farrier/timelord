@@ -48,7 +48,7 @@ Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show 
 - **Personal** always exists. Morning Routine, Break, and Evening Routine durations are editable. Color can change. Cannot be renamed, removed, or given a list. Does not consume week hours.
 - **Work** always exists, weight 1, first in each **selected** section (one or more; toggles on Edit). Cannot be deleted or drag-reordered. Break is always midday. If Work is in midday, Break sits in that Work block (2-hour split). Morning/evening Work is not split. If Work is not in midday, Break still lands once there. Each Work list item packs in one selected section.
 - **Appointments** always exists. A container, not a scheduled bucket: no hours, no days, no sections of its own, and it cannot be renamed or deleted. Only its colour is editable, on Organize → Buckets where it sits first. Its items are added under Lists.
-- **Events** always exists. One or more date ranges on the bucket (1-day ranges allowed). Add / remove ranges in Edit → Buckets; page Save writes them. Collapsed row summarises them (`2 ranges · 6d`) or `off` — the dates themselves live in the form. No slot, no week hours, no day sections. Cannot be deleted.
+- **Events** always exists. One or more **named** date ranges on the bucket (1-day ranges allowed). Add / remove / name them in Organize → Buckets; page Save writes them. An event whose last day has passed deletes itself, and its items with it. Collapsed row summarises them (`2 ranges · 6d`) or `off` — the dates themselves live in the form. No slot, no week hours, no day sections. Cannot be deleted.
 - **Weighted buckets** can be added, removed, renamed, recolored, reweighted, and given days / slot / Week or Day hours.
 
 ## Today (normal day)
@@ -68,7 +68,7 @@ Section timers show hours and minutes. They use the Day sound/vibrate toggles. G
 
 If today is inside any Events date range: **event day**. Show Events list items only, with Complete / Skip. No morning/midday/evening, no Break, no Start Day / End Day, no stopwatch.
 
-Events list items are **scheduled only**: date + duration, no cadence. They pack on that date. Calendar chips use the same filled treatment as appointments and pin to the top of the cell.
+Events list items are **scheduled only**: they pick an event, then a date inside that event's range, plus a duration. No cadence. Lists groups them under their event. Calendar chips use the same filled treatment as appointments and pin to the top of the cell.
 
 ## Calendar and list
 

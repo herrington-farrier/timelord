@@ -43,30 +43,28 @@ scheduled item, so a cancelled appointment (or event) reappeared the next day.
 Still open from this area: **F3** is now mostly a question of which list-item
 features make sense for an appointment, not new machinery.
 
-### B2. Events are unusable across multiple ranges
+### B2. Events redesign — **done**
 
-**Verified:** the Events bucket holds `ranges[]` (`id`, `startDate`, `endDate`),
-and Events list items are `scheduled` with a `dueAt`. `itemHitsDate` matches
-`item.dueAt === dateKey`. **There is no link between an item and a range.** So
-you define ranges in one place and then have to remember those dates while
-setting `dueAt` on each item — which is the reported mess.
+Events are named, items belong to an event, and a passed event deletes itself.
 
-**Proposed shape:** make an event a first-class named thing and hang items off it.
+Kept the ranges on the Events bucket rather than promoting them to their own
+collection. Ranges already carry stable ids, so an `eventId` on the item is the
+whole relationship — a new collection would have bought nothing for an app that
+keeps no event history, and cost a migration.
 
-- Ranges gain a `name`. Either keep them on the Events bucket or promote them to
-  an `events/{id}` collection — promoting is cleaner and makes the child
-  relationship obvious, but it is a data-model change with a migration.
-- Event list items gain `eventId` and pick a date *within* that event's range
-  (the date picker clamps to it), so you never retype a range.
-- Organize → Lists groups event items under their event name rather than under
-  one flat Events bucket.
-- **Auto-drop when the whole event has passed:** **decided — delete outright**
-  once `endDate < today`. No history is kept for events, so archiving would only
-  accumulate dead rows.
-
-**This is the largest item here.** It touches the data model, the packer's
-`itemHitsDate`, the Lists UI, and the Quest Log outline logic. Worth its own
-session, and worth writing the migration down before starting.
+- `EventRange` gains `name`; `ListItem` gains `eventId`.
+- An event item picks its **event** first, and the date input is then clamped to
+  that event's range with `min`/`max`. `upsertItem` re-checks the date server-side
+  and names the range in the error, since the client bound is only a hint.
+- Organize → Lists groups event items under their event, with the dates on the
+  group header, so nothing has to be remembered. Items whose event no longer
+  exists collect under **Unassigned** rather than disappearing.
+- `eventRangeForItem` matches by id and falls back to the range the date sits in,
+  so items saved before events had ids still land in the right group with no
+  migration step.
+- `pruneExpiredEvents` deletes a range and its items once `endDate` is past. It
+  runs off tenant data a repack has already loaded and writes only when there is
+  something to remove, so the common case costs nothing.
 
 ### B3. Controls went solid gold on press — **fixed**
 

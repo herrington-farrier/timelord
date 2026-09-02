@@ -19,7 +19,7 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 - `name`, `weight`, `hoursMode` (`week` | `day`, default `week`), `hoursMinutes` (the hours field)
 - `weeklyMinutes`: derived week total (`hoursMinutes` in week-mode; `hoursMinutes ×` checked days in day-mode)
 - `days[]`, `slot`, optional `slots[]` (Work: the sections it occupies; `slot` is the first of those. Weighted buckets keep a single `slot`.), `color`, `archived`
-- Events: `ranges[]` (`id`, `startDate`, `endDate`, inclusive; start === end is a 1-day block). Legacy `startDate` / `endDate` on the bucket still count as one range until the next Save. No slot, no week hours.
+- Events: `ranges[]` (`id`, `name`, `startDate`, `endDate`, inclusive; start === end is a 1-day block). A range whose `endDate` has passed is deleted with its items on the next repack. Legacy `startDate` / `endDate` on the bucket still count as one range until the next Save. No slot, no week hours.
 - Work id is `work` (weight 1). Personal id is `personal`. Events id is `events`. Morning Routine, Break, and Evening Routine durations live on settings. New accounts also get Home and Errands.
 
 ## items/{id}
@@ -27,7 +27,7 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 - `bucketId`, `title`, `type` (`recurring` | `scheduled`), `weight`, `durationMinutes` (0 is a reminder; never dropped). Timed duration cannot exceed the bucket’s daily hours.
 - `cadence` object, optional `dueAt`, `archived`. `everyNDays` may include `startDate`; no hits before it.
 - Work items may have `slot` when the Work bucket has more than one section. Each item packs in that one section.
-- Events items are always `scheduled`. `dueAt` is the date they pack; cadence is unused.
+- Events items are always `scheduled`, carry `eventId`, and their `dueAt` must fall inside that event's range. Cadence is unused. Items with no matching event show under Unassigned in Lists.
 
 ## Appointments
 
