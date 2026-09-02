@@ -1,5 +1,5 @@
 import { eventRanges } from './events';
-import { EVENTS_ID, SLOTS, type Bucket, type DaySettings, type Slot } from './types';
+import { EVENTS_ID, SLOTS, WORK_ID, type Bucket, type DaySettings, type Slot } from './types';
 
 export function daySections(settings: Pick<DaySettings, 'dayMinutes' | 'dayStartMinutes'>): {
   morning: { start: number; end: number };
@@ -28,6 +28,35 @@ export function nextSlot(slot: Slot): Slot | null {
   if (slot === 'morning') return 'midday';
   if (slot === 'midday') return 'evening';
   return null;
+}
+
+export function bucketSlots(bucket: { kind?: string; id?: string; slot?: Slot; slots?: Slot[] }): Slot[] {
+  const picked = (bucket.slots || []).filter((s): s is Slot => SLOTS.includes(s));
+  const ordered = SLOTS.filter((s) => picked.includes(s));
+  if (ordered.length) return ordered;
+  if (bucket.slot && SLOTS.includes(bucket.slot)) return [bucket.slot];
+  return bucket.kind === 'work' || bucket.id === WORK_ID ? ['midday'] : ['morning'];
+}
+
+export function parseBucketSlots(data: { slot?: unknown; slots?: unknown }, kind: string): Slot[] {
+  const fromList = Array.isArray(data.slots)
+    ? data.slots.filter((s): s is Slot => s === 'morning' || s === 'midday' || s === 'evening')
+    : [];
+  const ordered = SLOTS.filter((s) => fromList.includes(s));
+  if (ordered.length) return ordered;
+  if (data.slot === 'morning' || data.slot === 'midday' || data.slot === 'evening') return [data.slot];
+  if (kind === 'work') throw new Error('Work needs a time of day.');
+  return ['morning'];
+}
+
+export function workShowsItemSlot(work: { slot?: Slot; slots?: Slot[] }): boolean {
+  return bucketSlots(work).length > 1;
+}
+
+export function itemWorkSlot(item: { slot?: Slot }, work: { slot?: Slot; slots?: Slot[] }): Slot {
+  const allowed = bucketSlots(work);
+  if (item.slot && allowed.includes(item.slot)) return item.slot;
+  return allowed[0];
 }
 
 export function slotIndex(slot: Slot | undefined): number {

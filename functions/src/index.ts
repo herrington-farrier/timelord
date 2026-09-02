@@ -10,12 +10,12 @@ import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
 import { PACK_RANGE_DAYS, packRange } from '../../src/domain/packWeek';
-import { eatFromSections, isEventDay, nextSlot, sectionCapacity, usedFromEat } from '../../src/domain/sections';
+import { bucketSlots, eatFromSections, isEventDay, itemWorkSlot, liveSectionState, nextSlot, parseBucketSlots, sectionCapacity, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
 import { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate } from '../../src/domain/skip';
 import { elapsedSince, sectionRemainingNow } from '../../src/domain/timer';
 import { nextItemWeight } from '../../src/domain/order';
 import type { Appointment, Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Slot, Weekday } from '../../src/domain/types';
-import { EVENTS_ID } from '../../src/domain/types';
+import { EVENTS_ID, WORK_ID } from '../../src/domain/types';
 import { weekStart } from '../../src/shared/dates';
 import { stampCreated, stampLastUpdated } from './actorAudit';
 import { asNumber, asString, authEmail, newId, requireSignedIn, requireUid } from './http';
@@ -81,6 +81,7 @@ function bucketFields(data: Record<string, unknown>, resolvedKind: string, resol
   const hoursMode = hoursModeOf(data.hoursMode);
   const hoursMinutes = asNumber(data.hoursMinutes ?? data.weeklyMinutes, 'Hours');
   const days = Array.isArray(data.days) ? data.days.filter((d): d is string => typeof d === 'string') : [];
+  const slots = domainCall(() => parseBucketSlots(data, resolvedKind));
   return {
     kind: resolvedKind,
     name: resolvedName,
@@ -89,7 +90,8 @@ function bucketFields(data: Record<string, unknown>, resolvedKind: string, resol
     hoursMinutes,
     weeklyMinutes: derivedWeeklyMinutes(hoursMode, hoursMinutes, days as Weekday[]),
     days,
-    slot: asString(data.slot || 'morning', 'Time of day'),
+    slot: slots[0],
+    slots,
     color: asString(data.color, 'Color').replace(/^#/, ''),
     archived: false,
     startDate: '',
@@ -121,6 +123,22 @@ type DayState = {
   eventStartedAt?: string | null;
   appointmentRuns?: Record<string, { startedAt?: string; elapsedMinutes?: number }>;
 };
+
+/**
+ * Firestore caps a write batch at 500, and logs accumulate a row per
+ * complete / skip / pack, so a tenant can easily hold more than that.
+ * Delete in chunks rather than one batch.
+ */
+async function deleteAllDocs(col: FirebaseFirestore.CollectionReference): Promise<number> {
+  const docs = await col.listDocuments();
+  const db = getFirestore();
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = db.batch();
+    for (const doc of docs.slice(i, i + 400)) batch.delete(doc);
+    await batch.commit();
+  }
+  return docs.length;
+}
 
 async function writePackedRange(uid: string, start: string, days: number): Promise<void> {
   const loaded = await loadTenant(uid);
@@ -192,22 +210,28 @@ export const bootstrap = onCall(async (request) => {
   await ensureTenant(uid, nowIso());
   await getAuth().setCustomUserClaims(uid, { allowlisted: true });
   if (!existed) await writeAccessLog({ type: 'signup', email, uid });
+  const daysSnap = await tenant.collection('days').limit(1).get();
+  if (daysSnap.empty) await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
   return { ok: true };
 });
 
 export const wipeAccount = onCall(async (request) => {
   const uid = requireUid(request);
-  const db = getFirestore();
   const tenant = tenantRef(uid);
   const collections = ['settings', 'buckets', 'items', 'appointments', 'days', 'skipPushes', 'logs'];
   for (const col of collections) {
-    const snap = await tenant.collection(col).listDocuments();
-    const batch = db.batch();
-    for (const doc of snap) batch.delete(doc);
-    if (snap.length) await batch.commit();
+    await deleteAllDocs(tenant.collection(col));
   }
   await writeLog(uid, { type: 'wipe_account', date: todayKey() });
   return { ok: true };
+});
+
+/** Reroll Stats: erases the whole log. Deliberately irreversible. */
+export const clearLogs = onCall(async (request) => {
+  const uid = requireUid(request);
+  await ensureTenant(uid, nowIso());
+  const removed = await deleteAllDocs(tenantRef(uid).collection('logs'));
+  return { ok: true, removed };
 });
 
 export const saveSettings = onCall(async (request) => {
@@ -399,7 +423,7 @@ export const upsertItem = onCall(async (request) => {
       ? storedWeight
       : 1
     : nextItemWeight(loaded.items as ListItem[], bucketId);
-  const payload = {
+  const payload: Record<string, unknown> = {
     bucketId,
     title: asString(data.title, 'Title'),
     type,
@@ -409,6 +433,24 @@ export const upsertItem = onCall(async (request) => {
     dueAt,
     archived: false,
   };
+  const isWork = Boolean(bucket && (bucket.kind === 'work' || bucket.id === WORK_ID));
+  if (isWork && bucket) {
+    if (workShowsItemSlot(bucket)) {
+      const allowed = bucketSlots(bucket);
+      const slot = data.slot;
+      if (slot !== 'morning' && slot !== 'midday' && slot !== 'evening') {
+        throw new HttpsError('invalid-argument', 'Pick a Work section.');
+      }
+      if (!allowed.includes(slot)) {
+        throw new HttpsError('invalid-argument', 'Pick a Work section.');
+      }
+      payload.slot = slot;
+    } else {
+      payload.slot = itemWorkSlot({}, bucket);
+    }
+  } else {
+    payload.slot = null;
+  }
   const stamp = existing.exists ? await stampLastUpdated(uid, nowIso()) : await stampCreated(uid, nowIso());
   await ref.set({ ...payload, ...stamp }, { merge: true });
   await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);

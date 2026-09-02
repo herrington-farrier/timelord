@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assignWeeklyBudgets, assignableWeekMinutes, assignedDayBudget, assignedWeekMinutes, collapsedSlotHours, dailyBudgetFor, eventsRangeLabel, formatBucketHours, itemExceedsBucketMessage, itemFitsBucket, weekBudgetSummary, weeklyCapacity } from '../domain/budget';
+import { assignWeeklyBudgets, assignableWeekMinutes, assignedDayBudget, assignedWeekMinutes, collapsedSlotHours, dailyBudgetFor, formatBucketHours, itemExceedsBucketMessage, itemFitsBucket, weekBudgetSummary, weeklyCapacity } from '../domain/budget';
 import { PERSONAL_BUCKET, SEED_BUCKETS } from '../domain/seed';
 import { bucket, settings, workBucket } from './fixtures';
 
@@ -122,14 +122,9 @@ describe('weekly budget', () => {
 
   it('puts slot next to hours on collapsed Work and weighted rows', () => {
     expect(collapsedSlotHours('morning', '8h/wk')).toBe('morning · 8h/wk');
+    expect(collapsedSlotHours(['morning', 'midday'], '8h/wk')).toBe('morning+midday · 8h/wk');
   });
 
-  it('labels an Events range or off', () => {
-    expect(eventsRangeLabel('2026-12-12', '2027-09-17')).toBe('280d, Dec 12, 2026/Sep 17, 2027');
-    expect(eventsRangeLabel('2026-08-29', '2026-09-02')).toBe('5d, Aug 29/Sep 2');
-    expect(eventsRangeLabel('2026-12-12', '2026-12-12')).toBe('1d, Dec 12');
-    expect(eventsRangeLabel('', '')).toBe('off');
-  });
 });
 
 describe('item vs bucket daily hours', () => {

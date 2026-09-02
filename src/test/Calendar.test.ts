@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardShowsDay, boardStartFor, fallingChips, freeTone, isAccentChip, listChips, listKeysFrom, listShowsDay, loadTone, orderChips, placedChips, scheduledMinutes, sectionFreeMinutes, visibleChips } from '../pages/Calendar';
+import { freeTone, loadTone } from '../domain/budget';
+import { boardShowsDay, boardStartFor, fallingChips, isAccentChip, listChips, listKeysFrom, listShowsDay, orderChips, placedChips, scheduledMinutes, sectionFreeMinutes, visibleChips } from '../pages/Calendar';
 import { weekStart } from '../shared/dates';
 import type { PackedBlock } from '../domain/types';
 

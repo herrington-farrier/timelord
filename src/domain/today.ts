@@ -1,4 +1,5 @@
 import { formatDuration } from './duration';
+import { nextSlot } from './sections';
 import type { PackedBlock, Slot } from './types';
 
 export function formatCountdown(minutes: number): string {
@@ -12,8 +13,20 @@ export function slotLabel(section: Slot): string {
 }
 
 export function nextSectionAction(section: Slot): { label: string; kind: 'next' | 'end' } {
-  if (section === 'evening') return { label: 'End Day', kind: 'end' };
-  return { label: 'Start Next Buckets', kind: 'next' };
+  if (section === 'evening') return { label: 'Hearth', kind: 'end' };
+  return { label: 'Start Next Chapter', kind: 'next' };
+}
+
+/**
+ * Total packed bucket work waiting in the next stretch. Appointments carry no
+ * slot (they show in every section) and Break is personal, so neither counts.
+ */
+export function nextSectionMinutes(blocks: PackedBlock[], section: Slot): number {
+  const next = nextSlot(section);
+  if (!next) return 0;
+  return blocks
+    .filter((b) => b.slot === next && b.kind !== 'transition' && b.kind !== 'personal')
+    .reduce((sum, b) => sum + (Number(b.durationMinutes) || 0), 0);
 }
 
 export function appointmentElapsed(

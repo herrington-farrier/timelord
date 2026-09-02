@@ -128,32 +128,23 @@ export function formatBucketHours(bucket: Bucket): string {
   return formatHoursField(hoursModeOf(bucket), hoursMinutesOf(bucket));
 }
 
-export function collapsedSlotHours(slot: Slot, hours: string): string {
-  return `${slot} · ${hours}`;
+export function collapsedSlotHours(slot: Slot | Slot[], hours: string): string {
+  const label = Array.isArray(slot) ? slot.join('+') : slot;
+  return `${label} · ${hours}`;
 }
 
-function formatRangeDay(dateKey: string, withYear: boolean): string {
-  const [y, mo, d] = dateKey.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, mo - 1, d));
-  return dt.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-    ...(withYear ? { year: 'numeric' } : {}),
-  });
-}
-
-export function eventsRangeLabel(startDate?: string, endDate?: string): string {
-  if (!startDate || !endDate || endDate < startDate) return 'off';
-  const days = daysBetween(startDate, endDate) + 1;
-  if (days === 1) return `1d, ${formatRangeDay(startDate, false)}`;
-  const years = startDate.slice(0, 4) !== endDate.slice(0, 4);
-  return `${days}d, ${formatRangeDay(startDate, years)}/${formatRangeDay(endDate, years)}`;
-}
-
-export function eventsRangesLabel(ranges: { startDate: string; endDate: string }[]): string {
-  const parts = ranges.map((r) => eventsRangeLabel(r.startDate, r.endDate)).filter((s) => s !== 'off');
-  return parts.length ? parts.join(' · ') : 'off';
+/**
+ * The collapsed Events row. Spelling out every range ran off the side of the
+ * card, and the dates are already in the form below, so summarise instead.
+ */
+export function eventsSummaryLabel(ranges: { startDate?: string; endDate?: string }[]): string {
+  const live = ranges.filter(
+    (r): r is { startDate: string; endDate: string } =>
+      Boolean(r.startDate && r.endDate && r.endDate >= r.startDate)
+  );
+  if (!live.length) return 'off';
+  const days = live.reduce((sum, r) => sum + daysBetween(r.startDate, r.endDate) + 1, 0);
+  return `${live.length} ${live.length === 1 ? 'range' : 'ranges'} · ${days}d`;
 }
 
 export function dailyBudgets(buckets: Bucket[], dateKey: string): DailyBudgetMap {
@@ -162,4 +153,18 @@ export function dailyBudgets(buckets: Bucket[], dateKey: string): DailyBudgetMap
     out[b.id] = dailyBudgetFor(b, dateKey);
   }
   return out;
+}
+
+/** Colour band for packed-vs-capacity: green under half, gold to 85%, red over. */
+export function loadTone(scheduled: number, dayMinutes: number): 'ok' | 'mid' | 'hot' {
+  if (dayMinutes <= 0) return 'mid';
+  const part = scheduled / dayMinutes;
+  if (part < 0.5) return 'ok';
+  if (part <= 0.85) return 'mid';
+  return 'hot';
+}
+
+/** Same bands, read from time still free rather than time used. */
+export function freeTone(free: number, cap: number): 'ok' | 'mid' | 'hot' {
+  return loadTone(Math.max(0, cap - Math.max(0, free)), cap);
 }

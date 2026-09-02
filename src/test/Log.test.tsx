@@ -19,7 +19,7 @@ vi.mock('../services/live', () => ({
 }));
 
 describe('LogPage', () => {
-  it('shows Schedule packed instead of rebuild', () => {
+  it('reads events as quests and colours each row by tone', () => {
     const { container } = render(
       <ToastProvider>
         <MemoryRouter>
@@ -27,9 +27,13 @@ describe('LogPage', () => {
         </MemoryRouter>
       </ToastProvider>
     );
-    expect(screen.getByText('Schedule packed')).toBeInTheDocument();
+    expect(screen.getByText('Quest Log Packed')).toBeInTheDocument();
+    expect(screen.getByText('Quest Completed: Dishes')).toBeInTheDocument();
+    expect(screen.getByText('Quest Failed: Floors')).toBeInTheDocument();
     expect(screen.queryByText('rebuild')).not.toBeInTheDocument();
-    expect(container.querySelector('.log-row--pack')).toBeTruthy();
+    // every row carries the base class, so untoned system events pick up
+    // the gold default rather than falling back to plain body text
+    expect(container.querySelectorAll('.log-row')).toHaveLength(3);
     expect(container.querySelector('.log-row--ok')).toBeTruthy();
     expect(container.querySelector('.log-row--skip')).toBeTruthy();
   });

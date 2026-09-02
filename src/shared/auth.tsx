@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 import { api } from '../services/api';
 import { auth, googleProvider } from '../services/firebase';
-import { hasAllowlistClaim, shouldSignOutOnGateError } from './authGate';
+import { hasAllowlistClaim, shouldSignOutOnGateError, waitForAllowlistClaim } from './authGate';
 import { formatActionError } from './formatActionError';
 
 type AuthContextValue = {
@@ -41,11 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!hasAllowlistClaim(token.claims)) {
           const email = next.email || next.providerData.find((p) => p.email)?.email || '';
           await api.bootstrap({ email });
-          try {
-            await next.getIdToken(true);
-          } catch {
-            /* claim refresh can wait */
-          }
+          await waitForAllowlistClaim(() => next.getIdTokenResult(true));
         }
         setGateError(null);
         setUser(next);

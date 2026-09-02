@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { eventsRangeLabel, eventsRangesLabel } from '../domain/budget';
+import { eventsSummaryLabel } from '../domain/budget';
 import { eventRanges, parseEventRanges } from '../domain/events';
 import { isEventDay } from '../domain/sections';
 import { EVENTS_ID } from '../domain/types';
@@ -75,14 +75,23 @@ describe('parseEventRanges', () => {
   });
 });
 
-describe('eventsRangesLabel', () => {
-  it('joins range labels and shows off when empty', () => {
+describe('eventsSummaryLabel', () => {
+  it('counts ranges and total days instead of listing dates', () => {
     expect(
-      eventsRangesLabel([
-        { id: 'a', startDate: '2026-08-29', endDate: '2026-09-02' },
-        { id: 'b', startDate: '2026-09-10', endDate: '2026-09-10' },
+      eventsSummaryLabel([
+        { startDate: '2026-08-29', endDate: '2026-09-02' },
+        { startDate: '2026-09-10', endDate: '2026-09-10' },
       ])
-    ).toBe(`${eventsRangeLabel('2026-08-29', '2026-09-02')} · ${eventsRangeLabel('2026-09-10', '2026-09-10')}`);
-    expect(eventsRangesLabel([])).toBe('off');
+    ).toBe('2 ranges · 6d');
+  });
+
+  it('reads a single range in the singular', () => {
+    expect(eventsSummaryLabel([{ startDate: '2026-09-10', endDate: '2026-09-10' }])).toBe('1 range · 1d');
+  });
+
+  it('shows off with no usable ranges', () => {
+    expect(eventsSummaryLabel([])).toBe('off');
+    expect(eventsSummaryLabel([{ startDate: '2026-09-10', endDate: '' }])).toBe('off');
+    expect(eventsSummaryLabel([{ startDate: '2026-09-10', endDate: '2026-09-01' }])).toBe('off');
   });
 });

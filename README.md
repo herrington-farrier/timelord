@@ -1,20 +1,24 @@
 # Timelord
 
-Personal day packer. Invite-only Google sign-in. Each invited account owns its own schedule. Add a friend’s email to `src/domain/allowlist.ts` and deploy functions.
+Personal day packer. Invite-only Google sign-in. Each invited account owns its own schedule. Add a friend’s email to `src/domain/allowlist.ts` and `firestore.rules`, then deploy `bootstrap` and Firestore rules. First signup seeds buckets and packs 6 weeks.
 
 **App:** https://timelord-e0c80.web.app
 
-Today runs productive-day section timers. Personal pauses (Morning Routine, Break, Evening Routine) do not consume week hours. Start Day begins the morning countdown; Start Next Buckets opens the next stretch without carrying leftover time. Appointments are duration-only and count up. Events can turn one or more date ranges (including single days) into unsectioned event days with Complete / Skip only. Overflow is falling-off. Priorities are drag-and-drop.
+Quest runs productive-day section timers. Personal pauses (Morning Routine, Break, Evening Routine) do not consume week hours. Start Quest begins the morning countdown; Start Next Chapter opens the next stretch without carrying leftover time. Hearth closes the evening. Appointments are duration-only and count up. Events can turn one or more date ranges (including single days) into unsectioned event days with Complete / Skip only. Overflow is falling-off. Priorities are drag-and-drop.
 
 ## Screens
 
-- **Today** — section countdown, Start Next Buckets, End Day, Break pause, appointment stopwatches, Complete / Skip, Falling off
-- **Calendar** — 2-week board, Today / Next 2wks, packs 6 weeks from Sunday, packed-hours marks, duration chips
-- **Edit** — day length and timer sound/vibrate, Reset Today, weekly hours, Events date ranges, lists grouped by bucket, duration-only appointments
-- **Guide** — short tour of buckets, Today, the calendar, and lists
-- **Log** — append-only events (gold packed, green complete, red skip)
+Every screen hides its nav behind the page title — tap the title to open the menu.
 
-Work stays first in its slot and cannot be deleted. Events is locked and uses one or more date ranges. Other buckets can be added, removed, renamed, or recolored.
+- **Quest** (`/`) — section countdown, Start Next Chapter, Hearth, Rest pause, appointment stopwatches, Complete / Skip, Falling off
+- **Quest Log** (`/calendar`) — 2-week board, Today / Next 2wks, packs 6 weeks from Sunday, packed-hours marks, duration chips
+- **Organize** (`/edit`) — day length and timer sound/vibrate, Respawn, weekly hours, Events date ranges, lists grouped by bucket, duration-only appointments
+- **Guide** (`/guide`) — short tour of buckets, the day, the board, and lists
+- **Stats** (`/log`) — append-only events (gold packed, green complete, red skip)
+
+Work stays first in each section you pick and cannot be deleted. Events is locked and uses one or more date ranges. Other buckets can be added, removed, renamed, or recolored.
+
+Design and packing rules live in [docs/logic-map.md](docs/logic-map.md), the Firestore shape in [docs/data-model.md](docs/data-model.md), and deferred work in [docs/todo.md](docs/todo.md).
 
 ## Run locally
 

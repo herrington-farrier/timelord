@@ -5,11 +5,11 @@ export function formatLogEvent(row: {
   minutes?: number;
 }): string {
   const title = row.title?.trim();
-  if (row.type === 'rebuild') return 'Schedule packed';
-  if (row.type === 'complete') return title ? `Completed ${title}` : 'Completed';
-  if (row.type === 'skip') return title ? `Skipped ${title}` : 'Skipped';
+  if (row.type === 'rebuild') return 'Quest Log Packed';
+  if (row.type === 'complete') return title ? `Quest Completed: ${title}` : 'Quest Completed';
+  if (row.type === 'skip') return title ? `Quest Failed: ${title}` : 'Quest Failed';
   if (row.type === 'start_day') return 'Started the day';
-  if (row.type === 'start_next') return 'Started next buckets';
+  if (row.type === 'start_next') return 'Started next chapter';
   if (row.type === 'end_day') return 'Ended the day';
   if (row.type === 'start_break') return 'Started break';
   if (row.type === 'end_break') return 'Ended break';

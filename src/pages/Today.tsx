@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import { Chrome } from '../components/Chrome';
+import { loadTone } from '../domain/budget';
 import { formatDuration } from '../domain/duration';
 import { isEventDay } from '../domain/sections';
 import {
   appointmentElapsed,
   formatCountdown,
   nextSectionAction,
+  nextSectionMinutes,
   signalSectionEnd,
   slotLabel,
   todayEventItems,
@@ -21,6 +23,11 @@ import { useAuth } from '../shared/auth';
 import { todayKey } from '../shared/dates';
 import { formatActionError } from '../shared/formatActionError';
 import { useToast } from '../shared/toast';
+
+/** Feeds the list-assembly animation; each card starts a beat after the last. */
+function stagger(index?: number): Record<string, string> {
+  return index === undefined ? {} : { ['--i']: String(index) };
+}
 
 export function TodayPage() {
   const { user, logOut } = useAuth();
@@ -80,32 +87,35 @@ export function TodayPage() {
   const sectionItems = started && section ? todaySectionItems(placed, section) : [];
   const sectionDropped = started && section ? todaySectionDropped(dropped, section) : [];
   const eventItems = eventDay ? todayEventItems(placed) : [];
+  const appointments = sectionItems.filter((b) => b.kind === 'appointment');
+  const tasks = sectionItems.filter((b) => b.kind !== 'appointment');
 
   return (
     <Chrome
+      compact
       title="Timelord"
-      stamp={day?.packedAt ? 'Packed' : 'Not packed'}
       actions={
         <button type="button" className="chrome-btn" onClick={() => logOut()}>
           Sign Out
         </button>
       }
     >
-      <div className="day-totals">
-        {eventDay
-          ? `Event day · ${formatDuration(day?.packedMinutes || 0)}`
-          : `${formatDuration(settings?.dayMinutes || 0)} day · packed ${formatDuration(day?.packedMinutes || 0)}`}
-      </div>
+      <DayHead
+        eventDay={eventDay}
+        dayMinutes={settings?.dayMinutes || 0}
+        packedMinutes={day?.packedMinutes || 0}
+        running={started && !eventDay && Boolean(section)}
+        section={section}
+        remaining={remaining}
+        paused={paused}
+      />
 
       {eventDay ? null : (
         <NormalDayControls
           started={started}
           ended={ended}
-          section={section}
-          remaining={remaining}
-          paused={paused}
           ready={Boolean(day)}
-          onStartDay={() => act('Day started.', () => api.startDay({ date }))}
+          onStartDay={() => act('Quest started.', () => api.startDay({ date }))}
         />
       )}
 
@@ -113,8 +123,8 @@ export function TodayPage() {
 
       {eventDay && day ? (
         <div className="day">
-          {eventItems.map((b) => (
-            <ItemCard key={b.id} block={b} date={date} act={act} />
+          {eventItems.map((b, i) => (
+            <ItemCard key={b.id} block={b} date={date} act={act} index={i} />
           ))}
           {!eventItems.length ? <p className="hint">No Events items today.</p> : null}
         </div>
@@ -122,32 +132,30 @@ export function TodayPage() {
 
       {!eventDay && started && section ? (
         <div className="day">
-          {sectionItems
-            .filter((b) => b.kind === 'appointment')
-            .map((b) => (
-              <AppointmentCard
+          {appointments.map((b, i) => (
+            <AppointmentCard
+              key={b.id}
+              block={b}
+              date={date}
+              nowMs={nowMs}
+              run={day?.appointmentRuns?.[b.appointmentId || '']}
+              act={act}
+              index={i}
+            />
+          ))}
+          {tasks.map((b, i) =>
+            b.title === 'Break' ? (
+              <BreakControl
                 key={b.id}
-                block={b}
-                date={date}
-                nowMs={nowMs}
-                run={day?.appointmentRuns?.[b.appointmentId || '']}
-                act={act}
+                on={paused}
+                index={appointments.length + i}
+                onStart={() => act('Resting.', () => api.startBreak({ date }))}
+                onEnd={() => act('Rest over.', () => api.endBreak({ date }))}
               />
-            ))}
-          {sectionItems
-            .filter((b) => b.kind !== 'appointment')
-            .map((b) =>
-              b.title === 'Break' ? (
-                <BreakControl
-                  key={b.id}
-                  on={paused}
-                  onStart={() => act('Break started.', () => api.startBreak({ date }))}
-                  onEnd={() => act('Break ended.', () => api.endBreak({ date }))}
-                />
-              ) : (
-                <ItemCard key={b.id} block={b} date={date} act={act} />
-              )
-            )}
+            ) : (
+              <ItemCard key={b.id} block={b} date={date} act={act} index={appointments.length + i} />
+            )
+          )}
         </div>
       ) : null}
 
@@ -155,24 +163,7 @@ export function TodayPage() {
         <section className="fall-wrap">
           <h2>Falling off</h2>
           {sectionDropped.map((b) => (
-            <div key={b.id} className="fall-row" style={{ ['--bcolor' as string]: `#${b.color}` }}>
-              <span>
-                {b.title}
-                {b.durationMinutes ? ` · ${formatDuration(b.durationMinutes)}` : ''}
-              </span>
-              {b.status === 'dropped' || b.status === 'pending' ? (
-                <span className="item-acts">
-                  <button type="button" className="btn--success" onClick={() => act('Marked complete.', () => api.completeBlock({ date, id: b.id }))}>
-                    Complete
-                  </button>
-                  <button type="button" className="skip" onClick={() => act('Skipped.', () => api.skipBlock({ date, id: b.id }))}>
-                    Skip
-                  </button>
-                </span>
-              ) : (
-                <span>{b.status}</span>
-              )}
-            </div>
+            <FallRow key={b.id} block={b} date={date} act={act} />
           ))}
         </section>
       ) : null}
@@ -180,7 +171,7 @@ export function TodayPage() {
       {!eventDay && started && section ? (
         <SectionEndActs
           section={section}
-          remaining={remaining}
+          nextMinutes={nextSectionMinutes(placed, section)}
           onStartNext={() =>
             act(section === 'morning' ? 'Midday started.' : 'Evening started.', () => api.startNext({ date }))
           }
@@ -191,52 +182,88 @@ export function TodayPage() {
   );
 }
 
-function NormalDayControls({
-  started,
-  ended,
+function DayHead({
+  eventDay,
+  dayMinutes,
+  packedMinutes,
+  running,
   section,
   remaining,
   paused,
+}: {
+  eventDay: boolean;
+  dayMinutes: number;
+  packedMinutes: number;
+  running: boolean;
+  section: Slot | null;
+  remaining: number;
+  paused: boolean;
+}) {
+  return (
+    <header className="day-head">
+      {running && section ? (
+        <div className="day-head__now">
+          <span className={`section-timer${paused ? ' is-paused' : ''}`} aria-live="polite">
+            {formatCountdown(remaining)}
+          </span>
+          <span className="day-head__section">{paused ? 'Resting' : slotLabel(section)}</span>
+        </div>
+      ) : null}
+      <dl className="day-head__stats">
+        <div className="stat">
+          <dt className="stat__label">Day</dt>
+          <dd className="stat__value">{eventDay ? 'Event' : formatDuration(dayMinutes)}</dd>
+        </div>
+        <div className="stat">
+          <dt className="stat__label">Packed</dt>
+          <dd className={`stat__value${eventDay ? '' : ` stat__value--${loadTone(packedMinutes, dayMinutes)}`}`}>
+            {formatDuration(packedMinutes)}
+          </dd>
+        </div>
+      </dl>
+    </header>
+  );
+}
+
+function NormalDayControls({
+  started,
+  ended,
   ready,
   onStartDay,
 }: {
   started: boolean;
   ended: boolean;
-  section: Slot | null;
-  remaining: number;
-  paused: boolean;
   ready: boolean;
   onStartDay: () => void;
 }) {
-  if (ended) return <p className="hint">Day ended.</p>;
+  if (ended) {
+    return (
+      <div className="seal-wrap">
+        <img className="day-seal is-done" src="/icon-192.png" alt="Day ended" width={192} height={192} />
+      </div>
+    );
+  }
   if (!started) {
     return (
-      <div className="day-acts">
-        <button type="button" className="btn--success" disabled={!ready} onClick={onStartDay}>
-          Start Day
+      <div className="seal-wrap">
+        <button type="button" className="day-seal-btn" disabled={!ready} onClick={onStartDay}>
+          <img className="day-seal" src="/icon-192.png" alt="" width={192} height={192} />
+          <span className="day-seal-btn__label">Start Quest</span>
         </button>
       </div>
     );
   }
-  return (
-    <div className="day-totals">
-      <span className={`section-timer${paused ? ' is-paused' : ''}`} aria-live="polite">
-        {formatCountdown(remaining)}
-      </span>
-      {paused ? ' · paused' : ''}
-      {section ? ` · ${slotLabel(section)}` : ''}
-    </div>
-  );
+  return null;
 }
 
 function SectionEndActs({
   section,
-  remaining,
+  nextMinutes,
   onStartNext,
   onEvening,
 }: {
   section: Slot;
-  remaining: number;
+  nextMinutes: number;
   onStartNext: () => void;
   onEvening: () => void;
 }) {
@@ -244,32 +271,43 @@ function SectionEndActs({
   return (
     <div className="day-acts day-acts--end">
       {action.kind === 'end' ? (
-        <button type="button" className="danger" onClick={onEvening}>
+        <button type="button" className="btn--red" onClick={onEvening}>
           {action.label}
         </button>
       ) : (
-        <button type="button" className="btn--success" onClick={onStartNext}>
-          {action.label} · {formatCountdown(remaining)}
+        <button type="button" className="btn--quest" onClick={onStartNext}>
+          <span className="btn--quest__label">{action.label}</span>
+          <span className="btn--quest__time">{formatCountdown(nextMinutes)}</span>
         </button>
       )}
     </div>
   );
 }
 
-function BreakControl({ on, onStart, onEnd }: { on: boolean; onStart: () => void; onEnd: () => void }) {
+function BreakControl({
+  on,
+  index,
+  onStart,
+  onEnd,
+}: {
+  on: boolean;
+  index?: number;
+  onStart: () => void;
+  onEnd: () => void;
+}) {
   return (
-    <div className="item">
+    <div className="item" style={stagger(index)}>
       <div className="item-top">
         <div className="item-title">Break</div>
       </div>
       <div className="item-acts">
         {on ? (
-          <button type="button" className="danger" onClick={onEnd}>
-            End Break
+          <button type="button" className="btn--red" onClick={onEnd}>
+            End Rest
           </button>
         ) : (
-          <button type="button" className="skip" onClick={onStart}>
-            Start Break
+          <button type="button" className="btn--green" onClick={onStart}>
+            Rest ZZZ
           </button>
         )}
       </div>
@@ -283,18 +321,20 @@ function AppointmentCard({
   nowMs,
   run,
   act,
+  index,
 }: {
   block: PackedBlock;
   date: string;
   nowMs: number;
   run?: { startedAt?: string; elapsedMinutes?: number };
   act: (label: string, fn: () => Promise<unknown>) => Promise<void>;
+  index?: number;
 }) {
   const running = Boolean(run?.startedAt);
   const elapsed = appointmentElapsed(run, nowMs);
   const id = block.appointmentId || '';
   return (
-    <div className="item item--appt" style={{ ['--bcolor' as string]: `#${block.color}` }}>
+    <div className="item item--appt" style={{ ['--bcolor' as string]: `#${block.color}`, ...stagger(index) }}>
       <div className="item-top">
         <div className="item-title">
           <span className="item-tag">Appt</span>
@@ -305,11 +345,11 @@ function AppointmentCard({
       <div className="item-meta">{block.durationMinutes ? formatDuration(block.durationMinutes) : ''}</div>
       <div className="item-acts">
         {running ? (
-          <button type="button" className="danger" onClick={() => act('Appointment stopped.', () => api.stopAppointment({ date, id }))}>
+          <button type="button" className="btn--red" onClick={() => act('Appointment stopped.', () => api.stopAppointment({ date, id }))}>
             Stop
           </button>
         ) : (
-          <button type="button" className="btn--success" onClick={() => act('Appointment started.', () => api.startAppointment({ date, id }))}>
+          <button type="button" className="btn--gold" onClick={() => act('Appointment started.', () => api.startAppointment({ date, id }))}>
             Start
           </button>
         )}
@@ -318,7 +358,7 @@ function AppointmentCard({
   );
 }
 
-function ItemCard({
+function FallRow({
   block,
   date,
   act,
@@ -327,22 +367,92 @@ function ItemCard({
   date: string;
   act: (label: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
-  const cls = `${block.status === 'complete' ? ' complete' : block.status === 'skipped' ? ' skipped' : ''}`;
+  const [open, setOpen] = useState(false);
+  const actsId = useId();
+  const actionable = block.status === 'dropped' || block.status === 'pending';
+  const label = `${block.title}${block.durationMinutes ? ` · ${formatDuration(block.durationMinutes)}` : ''}`;
   return (
-    <div className={`item${cls}`} style={{ ['--bcolor' as string]: `#${block.color}` }}>
-      <div className="item-top">
-        <div className="item-title">
-          {block.kind === 'event' ? <span className="item-tag">Event</span> : null}
-          {block.title}
+    <div className={`fall-row${open ? ' is-open' : ''}`} style={{ ['--bcolor' as string]: `#${block.color}` }}>
+      {actionable ? (
+        <button
+          type="button"
+          className="item-open"
+          aria-expanded={open}
+          aria-controls={actsId}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span>{label}</span>
+        </button>
+      ) : (
+        <div className="item-top">
+          <span>{label}</span>
+          <span>{block.status}</span>
         </div>
-        {block.durationMinutes ? <div className="item-hours">{formatDuration(block.durationMinutes)}</div> : null}
-      </div>
-      {block.status === 'pending' ? (
-        <div className="item-acts">
-          <button type="button" className="btn--success" onClick={() => act('Marked complete.', () => api.completeBlock({ date, id: block.id }))}>
+      )}
+      {actionable ? (
+        <div id={actsId} className="item-acts" hidden={!open}>
+          <button type="button" className="btn--gold" onClick={() => act('Marked complete.', () => api.completeBlock({ date, id: block.id }))}>
             Complete
           </button>
-          <button type="button" className="skip" onClick={() => act('Skipped.', () => api.skipBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--red" onClick={() => act('Skipped.', () => api.skipBlock({ date, id: block.id }))}>
+            Skip
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ItemCard({
+  block,
+  date,
+  act,
+  index,
+}: {
+  block: PackedBlock;
+  date: string;
+  act: (label: string, fn: () => Promise<unknown>) => Promise<void>;
+  index?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const actsId = useId();
+  const cls = `${block.status === 'complete' ? ' complete' : block.status === 'skipped' ? ' skipped' : ''}`;
+  const pending = block.status === 'pending';
+  const title = (
+    <>
+      {block.kind === 'event' ? <span className="item-tag">Event</span> : null}
+      {block.title}
+    </>
+  );
+  const hours = block.durationMinutes ? formatDuration(block.durationMinutes) : null;
+  return (
+    <div
+      className={`item${cls}${open ? ' is-open' : ''}`}
+      style={{ ['--bcolor' as string]: `#${block.color}`, ...stagger(index) }}
+    >
+      {pending ? (
+        <button
+          type="button"
+          className="item-open"
+          aria-expanded={open}
+          aria-controls={actsId}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className="item-title">{title}</span>
+          {hours ? <span className="item-hours">{hours}</span> : null}
+        </button>
+      ) : (
+        <div className="item-top">
+          <div className="item-title">{title}</div>
+          {hours ? <div className="item-hours">{hours}</div> : null}
+        </div>
+      )}
+      {pending ? (
+        <div id={actsId} className="item-acts" hidden={!open}>
+          <button type="button" className="btn--gold" onClick={() => act('Marked complete.', () => api.completeBlock({ date, id: block.id }))}>
+            Complete
+          </button>
+          <button type="button" className="btn--red" onClick={() => act('Skipped.', () => api.skipBlock({ date, id: block.id }))}>
             Skip
           </button>
         </div>

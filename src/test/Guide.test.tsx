@@ -18,8 +18,8 @@ describe('GuidePage', () => {
     expect(screen.getByRole('heading', { name: 'Work' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Events' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Your buckets' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Today' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Calendar' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Quest' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Quest Log' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Lists' })).toBeInTheDocument();
   });
 });

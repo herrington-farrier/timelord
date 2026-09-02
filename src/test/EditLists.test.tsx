@@ -14,9 +14,9 @@ vi.mock('../shared/auth', () => ({
 
 vi.mock('../services/live', () => ({
   useSettings: () => DEFAULT_SETTINGS,
-  useBuckets: () => [workBucket(), bucket({ id: 'house', name: 'House', weight: 4 })],
+  useBuckets: () => [workBucket({ slot: 'morning', slots: ['morning', 'midday'] }), bucket({ id: 'house', name: 'House', weight: 4 })],
   useItems: () => [
-    item({ id: 'standup', bucketId: 'work', title: 'Standup', weight: 1 }),
+    item({ id: 'standup', bucketId: 'work', title: 'Standup', weight: 1, slot: 'midday' }),
     item({ id: 'review', bucketId: 'work', title: 'Review', weight: 2 }),
     item({ id: 'dishes', bucketId: 'house', title: 'Dishes', weight: 1 }),
   ],
@@ -47,5 +47,24 @@ describe('Edit Lists collapse', () => {
     expect(screen.getByRole('button', { name: 'Work, 2' })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByDisplayValue('Standup')).toBeVisible();
     expect(screen.getByDisplayValue('Dishes')).not.toBeVisible();
+  });
+
+  it('lets a Work item pick a section when Work has more than one', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <EditPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+    await user.click(screen.getByRole('button', { name: 'Lists' }));
+    await user.click(screen.getByRole('button', { name: 'Work, 2' }));
+    const workCard = screen.getByDisplayValue('Standup').closest('form');
+    expect(workCard?.querySelector('select[name="slot"]')).toBeTruthy();
+    expect(workCard?.querySelector('select[name="slot"]')).toHaveValue('midday');
+    await user.click(screen.getByRole('button', { name: 'House, 1' }));
+    const houseCard = screen.getByDisplayValue('Dishes').closest('form');
+    expect(houseCard?.querySelector('select[name="slot"]')).toBeNull();
   });
 });

@@ -38,6 +38,7 @@ export type Bucket = {
   hoursMinutes?: number;
   days: Weekday[];
   slot: Slot;
+  slots?: Slot[];
   color: string;
   archived?: boolean;
   startDate?: string;
@@ -61,6 +62,7 @@ export type ListItem = {
   cadence: Cadence;
   dueAt?: string;
   archived?: boolean;
+  slot?: Slot;
 };
 
 export type Appointment = {

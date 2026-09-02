@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { FormField } from '../components/FormField';
 import { SortableList } from '../components/SortableList';
@@ -9,7 +9,7 @@ import {
   assignedWeekMinutes,
   collapsedSlotHours,
   derivedWeeklyMinutes,
-  eventsRangesLabel,
+  eventsSummaryLabel,
   formatBucketHours,
   formatHoursField,
   hoursMinutesOf,
@@ -24,9 +24,12 @@ import { durationInputs, formatDuration, hoursToMinutes, splitMinutes } from '..
 import { eventRanges, newEventRangeId, parseEventRanges } from '../domain/events';
 import { PACK_RANGE_DAYS } from '../domain/packWeek';
 import { canDeleteBucket, canRenameBucket, listCadenceDays, listableBuckets, splitEditBuckets } from '../domain/seed';
+import { bucketSlots, itemWorkSlot, workShowsItemSlot } from '../domain/sections';
 import {
   EVENTS_ID,
+  SLOTS,
   WEEKDAYS,
+  WORK_ID,
   type Appointment,
   type Bucket,
   type EventRange,
@@ -55,13 +58,13 @@ export function EditPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]>('day');
   const { showToast } = useToast();
 
-  async function act(label: string, fn: () => Promise<unknown>) {
+  async function act(label: string, fn: () => Promise<unknown>, failed?: string) {
     try {
       await fn();
       showToast(label, 'success');
     } catch (err) {
       console.error(err);
-      showToast(formatActionError(err, label.replace(/\.$/, '')), 'error');
+      showToast(formatActionError(err, failed || label.replace(/\.$/, '')), 'error');
     }
   }
 
@@ -70,7 +73,7 @@ export function EditPage() {
   }
 
   return (
-    <Chrome title="Edit">
+    <Chrome title="Organize">
       <nav className="tabs">
         {TABS.map((t) => (
           <button key={t} type="button" className={`tab${tab === t ? ' is-on' : ''}`} onClick={() => setTab(t)}>
@@ -87,7 +90,8 @@ export function EditPage() {
               await rebuild();
             })
           }
-          onResetToday={() => act('Today reset.', () => api.resetToday())}
+          onResetToday={() => act('Quests reset. +1 Life', () => api.resetToday(), 'Respawn')}
+          onReroll={() => act('Stats rerolled.', () => api.clearLogs(), 'Reroll Stats')}
         />
       ) : null}
       {tab === 'buckets' && settings ? (
@@ -98,7 +102,6 @@ export function EditPage() {
           onReorder={(ids) =>
             act('Order saved.', async () => {
               await api.reorderBuckets({ weightedOrderIds: ids });
-              await rebuild();
             })
           }
           onRemove={(id) =>
@@ -106,9 +109,6 @@ export function EditPage() {
               await api.archiveBucket({ id });
               await rebuild();
             })
-          }
-          onReset={(id) =>
-            act('Bucket reset.', () => api.resetBucket({ id }))
           }
         />
       ) : null}
@@ -119,19 +119,16 @@ export function EditPage() {
           onSave={(row) =>
             act('Item saved.', async () => {
               await api.upsertItem(row);
-              await rebuild();
             })
           }
           onReorder={(ids) =>
             act('Order saved.', async () => {
               await api.reorderItems({ orderedIds: ids });
-              await rebuild();
             })
           }
           onRemove={(id) =>
             act('Item removed.', async () => {
               await api.archiveItem({ id });
-              await rebuild();
             })
           }
         />
@@ -161,11 +158,20 @@ function DayForm({
   settings,
   onSave,
   onResetToday,
+  onReroll,
 }: {
   settings: DaySettings;
   onSave: (payload: Record<string, unknown>) => Promise<void>;
   onResetToday: () => Promise<void>;
+  onReroll: () => Promise<void>;
 }) {
+  // Erasing the log cannot be undone, so it takes two presses.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const id = window.setTimeout(() => setArmed(false), 4000);
+    return () => window.clearTimeout(id);
+  }, [armed]);
   const day = splitMinutes(settings.dayMinutes);
   const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
   const dayMinutes = liveMinutes ?? settings.dayMinutes;
@@ -196,21 +202,40 @@ function DayForm({
           <FormField label="Transition minutes">
             <input name="trans" type="number" min={0} defaultValue={settings.transitionMinutes} />
           </FormField>
-          <label className="check">
-            <input name="timerSound" type="checkbox" defaultChecked={settings.timerSound !== false} />
-            Timer sound
-          </label>
-          <label className="check">
-            <input name="timerVibrate" type="checkbox" defaultChecked={settings.timerVibrate === true} />
-            Timer vibrate
-          </label>
+          <div className="field">
+            <span>Timer alerts</span>
+            <div className="pills" role="group" aria-label="Timer alerts">
+              <label>
+                <input name="timerSound" type="checkbox" defaultChecked={settings.timerSound !== false} />
+                Sound
+              </label>
+              <label>
+                <input name="timerVibrate" type="checkbox" defaultChecked={settings.timerVibrate === true} />
+                Vibrate
+              </label>
+            </div>
+          </div>
         </div>
       </div>
       <div className="page-save">
-        <button type="button" className="skip" onClick={() => onResetToday()}>
-          Reset Today
+        <button type="button" className="btn--red" onClick={() => onResetToday()}>
+          Respawn
         </button>
-        <button type="submit" className="primary">
+        <button
+          type="button"
+          className="btn--red"
+          onClick={() => {
+            if (!armed) {
+              setArmed(true);
+              return;
+            }
+            setArmed(false);
+            onReroll();
+          }}
+        >
+          {armed ? 'Erase Stats?' : 'Reroll Stats'}
+        </button>
+        <button type="submit" className="btn--gold">
           Save
         </button>
       </div>
@@ -266,6 +291,16 @@ function formDays(form: HTMLFormElement): Weekday[] {
   );
 }
 
+function formSlots(form: HTMLFormElement): Slot[] {
+  const checked = [...form.querySelectorAll('input[name="slots"]:checked')].flatMap((el) =>
+    el instanceof HTMLInputElement && SLOTS.includes(el.value as Slot) ? [el.value as Slot] : []
+  );
+  if (checked.length) return SLOTS.filter((s) => checked.includes(s));
+  const one = inputValue(form, 'select[name="slot"]');
+  if (one === 'morning' || one === 'midday' || one === 'evening') return [one];
+  return [];
+}
+
 function liveWeekBudget(root: HTMLElement, settings: DaySettings): WeekBudgetSummary {
   const next = {
     ...settings,
@@ -292,7 +327,8 @@ function bucketPayloadFromForm(form: HTMLFormElement, fallback: { id?: string; k
     hoursMode: formHoursMode(form),
     hoursMinutes: hoursToMinutes(fd.get('wH'), fd.get('wM')),
     days: fd.getAll('days'),
-    slot: fd.get('slot'),
+    slots: fd.getAll('slots'),
+    slot: fd.get('slot') || fd.getAll('slots')[0],
     color: String(fd.get('color') || '').replace('#', ''),
   };
 }
@@ -303,14 +339,12 @@ function BucketsForm({
   onSave,
   onReorder,
   onRemove,
-  onReset,
 }: {
   settings: DaySettings;
   buckets: Bucket[];
   onSave: (payload: Record<string, unknown>) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
-  onReset: (id: string) => Promise<void>;
 }) {
   const { showToast } = useToast();
   const { personal, work, events, weighted } = splitEditBuckets(buckets);
@@ -335,13 +369,13 @@ function BucketsForm({
     >
       <WeekBudgetBar summary={live ?? saved} />
       <PersonalCard settings={settings} bucket={personal} />
-      <BucketCard bucket={work} onReset={onReset} />
+      <BucketCard bucket={work} />
       <EventsCard bucket={events} />
       <SortableList ids={ids} onReorder={(next) => onReorder(next)}>
         {(id) => {
           const bucket = weighted.find((b) => b.id === id);
           if (!bucket) return null;
-          return <BucketCard bucket={bucket} onRemove={onRemove} onReset={onReset} />;
+          return <BucketCard bucket={bucket} onRemove={onRemove} />;
         }}
       </SortableList>
       <div className="edit-card add-card">
@@ -351,7 +385,7 @@ function BucketsForm({
       <div className="page-save">
         <button
           type="button"
-          className="primary"
+          className="btn--gold"
           onClick={(e) => {
             const root = e.currentTarget.closest('.edit-page');
             if (!(root instanceof HTMLElement)) return;
@@ -411,6 +445,33 @@ function BucketsForm({
           Save
         </button>
       </div>
+    </div>
+  );
+}
+
+// The board, packing and weekStart all run Sunday-first; the picker follows.
+const DAY_PICKER_ORDER: Weekday[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function DayChips({
+  name,
+  isOn,
+  isOpen,
+}: {
+  name: string;
+  isOn: (d: Weekday) => boolean;
+  isOpen?: (d: Weekday) => boolean;
+}) {
+  return (
+    <div className="day-chips" role="group" aria-label="Days">
+      {DAY_PICKER_ORDER.map((d) => {
+        const open = isOpen ? isOpen(d) : true;
+        return (
+          <label key={d}>
+            <input name={name} type="checkbox" value={d} aria-label={d} disabled={!open} defaultChecked={open && isOn(d)} />
+            <span aria-hidden="true">{d[0]}</span>
+          </label>
+        );
+      })}
     </div>
   );
 }
@@ -490,29 +551,26 @@ function PersonalCard({ settings, bucket }: { settings: DaySettings; bucket: Buc
 function BucketCard({
   bucket,
   onRemove,
-  onReset,
 }: {
   bucket: Bucket;
   onRemove?: (id: string) => Promise<void>;
-  onReset?: (id: string) => Promise<void>;
 }) {
   return (
     <CollapsibleBucket
       title={bucket.name}
-      hours={collapsedSlotHours(bucket.slot, formatBucketHours(bucket))}
+      hours={collapsedSlotHours(bucketSlots(bucket), formatBucketHours(bucket))}
       color={bucket.color}
       liveHours={(root) => {
         const form = root.querySelector('form');
-        if (!(form instanceof HTMLFormElement)) return collapsedSlotHours(bucket.slot, formatBucketHours(bucket));
-        const slot = (inputValue(form, 'select[name="slot"]') || bucket.slot) as Slot;
-        return collapsedSlotHours(slot, formatHoursField(formHoursMode(form), durationFrom(form, 'w', 0)));
+        if (!(form instanceof HTMLFormElement)) return collapsedSlotHours(bucketSlots(bucket), formatBucketHours(bucket));
+        const slots = formSlots(form);
+        return collapsedSlotHours(slots.length ? slots : bucketSlots(bucket), formatHoursField(formHoursMode(form), durationFrom(form, 'w', 0)));
       }}
     >
       <BucketFields
         bucket={bucket}
         kind={bucket.kind === 'work' ? 'work' : 'weighted'}
         onRemove={onRemove && canDeleteBucket(bucket) ? () => onRemove(bucket.id) : undefined}
-        onReset={onReset ? () => onReset(bucket.id) : undefined}
       />
     </CollapsibleBucket>
   );
@@ -523,14 +581,14 @@ function EventsCard({ bucket }: { bucket: Bucket }) {
   return (
     <CollapsibleBucket
       title="Events"
-      hours={eventsRangesLabel(eventRanges(bucket))}
+      hours={eventsSummaryLabel(eventRanges(bucket))}
       color={bucket.color}
       liveHours={(root) => {
         const form = root.querySelector('form');
-        if (!(form instanceof HTMLFormElement)) return eventsRangesLabel(ranges);
+        if (!(form instanceof HTMLFormElement)) return eventsSummaryLabel(ranges);
         const starts = [...form.querySelectorAll<HTMLInputElement>('input[name="rangeStart"]')];
         const ends = [...form.querySelectorAll<HTMLInputElement>('input[name="rangeEnd"]')];
-        return eventsRangesLabel(starts.map((el, i) => ({ startDate: el.value, endDate: ends[i]?.value || '' })));
+        return eventsSummaryLabel(starts.map((el, i) => ({ startDate: el.value, endDate: ends[i]?.value || '' })));
       }}
     >
       <form
@@ -552,7 +610,7 @@ function EventsCard({ bucket }: { bucket: Bucket }) {
               </FormField>
               <button
                 type="button"
-                className="danger"
+                className="btn--red"
                 onClick={() => setRanges((cur) => cur.filter((row) => row.id !== range.id))}
               >
                 Remove
@@ -582,12 +640,10 @@ function BucketFields({
   bucket,
   kind,
   onRemove,
-  onReset,
 }: {
   bucket?: Bucket;
   kind: 'work' | 'weighted' | 'new';
   onRemove?: () => void;
-  onReset?: () => void;
 }) {
   const hours = splitMinutes(bucket ? hoursMinutesOf(bucket) : 0);
   const mode = bucket ? hoursModeOf(bucket) : 'week';
@@ -603,52 +659,71 @@ function BucketFields({
       }}
     >
       <div className="bucket-grid">
-        <div className="bucket-line">
+        <div className="bucket-row bucket-row--name">
           <FormField label="Name">
             <input name="name" defaultValue={bucket?.name || ''} readOnly={!rename} required={kind !== 'new'} />
           </FormField>
           <FormField label="Color">
             <input name="color" type="color" defaultValue={`#${bucket?.color || '94a3b8'}`} />
           </FormField>
+        </div>
+        <div className="bucket-row bucket-row--hours">
           <CompactHours name="w" h={hours.hours} m={hours.minutes} />
-          <div className="hours-mode" role="group" aria-label="Hours mode">
-            <label>
-              <input name="hoursMode" type="radio" value="week" defaultChecked={mode === 'week'} />
-              Week
-            </label>
-            <label>
-              <input name="hoursMode" type="radio" value="day" defaultChecked={mode === 'day'} />
-              Day
-            </label>
+          <div className="field">
+            <span>Per</span>
+            <div className="pills" role="group" aria-label="Hours mode">
+              <label>
+                <input name="hoursMode" type="radio" value="week" defaultChecked={mode === 'week'} />
+                Week
+              </label>
+              <label>
+                <input name="hoursMode" type="radio" value="day" defaultChecked={mode === 'day'} />
+                Day
+              </label>
+            </div>
           </div>
+        </div>
+        {kind === 'work' ? (
+          <div className="field">
+            <span>Time of day</span>
+            <div className="pills" role="group" aria-label="Time of day">
+              {SLOTS.map((s) => (
+                <label key={s}>
+                  <input
+                    name="slots"
+                    type="checkbox"
+                    value={s}
+                    defaultChecked={(bucket ? bucketSlots(bucket) : ['midday']).includes(s)}
+                  />
+                  {s}
+                </label>
+              ))}
+            </div>
+          </div>
+        ) : (
           <FormField label="Time of day">
             <select name="slot" defaultValue={bucket?.slot || 'morning'}>
-              {(['morning', 'midday', 'evening'] as Slot[]).map((s) => (
+              {SLOTS.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
             </select>
           </FormField>
+        )}
+        <div className="field">
+          <span>Days</span>
+          <DayChips name="days" isOn={(d) => (bucket ? bucket.days.includes(d) : true)} />
         </div>
-        <div className="bucket-days">
-          {WEEKDAYS.map((d) => (
-            <label key={d} className="check">
-              <input name="days" type="checkbox" value={d} defaultChecked={bucket ? bucket.days.includes(d) : true} />
-              {d}
-            </label>
-          ))}
-          {onReset ? (
-            <button type="button" className="skip bucket-remove" onClick={onReset}>
-              Reset
-            </button>
-          ) : null}
-          {onRemove ? (
-            <button type="button" className="danger bucket-remove" onClick={onRemove}>
-              Remove
-            </button>
-          ) : null}
-        </div>
+        {onRemove ? (
+          <div className="bucket-days">
+            {onRemove ? (
+              <button type="button" className="btn--red bucket-remove" onClick={onRemove}>
+                Remove
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </form>
   );
@@ -701,7 +776,7 @@ function ListsForm({
                       onSubmit={(payload) => onSave({ id: row.id, ...payload })}
                     />
                     <div className="edit-acts">
-                      <button type="button" className="danger" onClick={() => onRemove(row.id)}>
+                      <button type="button" className="btn--red" onClick={() => onRemove(row.id)}>
                         Remove
                       </button>
                     </div>
@@ -729,6 +804,9 @@ function ItemFields({
   const [bucketId, setBucketId] = useState(item?.bucketId || buckets[0]?.id);
   const currentBucket = buckets.find((b) => b.id === bucketId);
   const eventItem = Boolean(currentBucket && (currentBucket.kind === 'event' || currentBucket.id === EVENTS_ID));
+  const workItem = Boolean(currentBucket && (currentBucket.kind === 'work' || currentBucket.id === WORK_ID));
+  const workSlotPick = workItem && currentBucket ? workShowsItemSlot(currentBucket) : false;
+  const workSlotOptions = currentBucket && workItem ? bucketSlots(currentBucket) : [];
   const openDays = listCadenceDays(currentBucket);
   const [kind, setKind] = useState(item?.type || 'recurring');
   const [cadenceKind, setCadenceKind] = useState(item?.cadence.kind || 'daily');
@@ -775,11 +853,12 @@ function ItemFields({
           durationMinutes,
           cadence,
           dueAt: type === 'scheduled' ? fd.get('dueAt') : '',
+          ...(workSlotPick ? { slot: fd.get('slot') } : {}),
         });
       }}
     >
       <div className="fields">
-        <FormField label="Title">
+        <FormField label="Title" wide>
           <input name="title" defaultValue={item?.title || ''} required />
         </FormField>
         <FormField label="Bucket">
@@ -796,6 +875,17 @@ function ItemFields({
           </select>
         </FormField>
         <DurationFields name="i" label="Duration" h={dur.hours} m={dur.minutes} />
+        {workSlotPick && currentBucket ? (
+          <FormField label="Time of day">
+            <select key={bucketId} name="slot" defaultValue={itemWorkSlot(item || {}, currentBucket)}>
+              {workSlotOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </FormField>
+        ) : null}
         {eventItem ? (
           <FormField label="Date">
             <input name="dueAt" type="date" defaultValue={item?.dueAt || ''} required />
@@ -827,22 +917,13 @@ function ItemFields({
         )}
       </div>
       {!eventItem && cadenceKind === 'weekly' ? (
-        <div key={bucketId} className="fields" style={{ marginTop: '10px' }}>
-          {WEEKDAYS.map((d) => {
-            const open = openDays.includes(d);
-            return (
-              <label key={d} className="check">
-                <input
-                  name="weeklyDays"
-                  type="checkbox"
-                  value={d}
-                  disabled={!open}
-                  defaultChecked={open && item?.cadence.kind === 'weekly' ? item.cadence.days.includes(d) : false}
-                />
-                {d}
-              </label>
-            );
-          })}
+        <div key={bucketId} className="field" style={{ marginTop: '10px' }}>
+          <span>Days</span>
+          <DayChips
+            name="weeklyDays"
+            isOpen={(d) => openDays.includes(d)}
+            isOn={(d) => (item?.cadence.kind === 'weekly' ? item.cadence.days.includes(d) : false)}
+          />
         </div>
       ) : null}
       {!eventItem && cadenceKind === 'everyNDays' ? (
@@ -883,7 +964,7 @@ function ItemFields({
         </div>
       ) : null}
       <div className="edit-acts">
-        <button type="submit" className="primary">
+        <button type="submit" className="btn--gold">
           Save
         </button>
       </div>
@@ -912,7 +993,7 @@ function ApptForm({
             onSubmit={(payload) => onSave({ id: a.id, ...payload })}
           />
           <div className="edit-acts">
-            <button type="button" className="danger" onClick={() => onRemove(a.id)}>
+            <button type="button" className="btn--red" onClick={() => onRemove(a.id)}>
               Remove
             </button>
           </div>
@@ -944,7 +1025,7 @@ function ApptFields({
       }}
     >
       <div className="fields">
-        <FormField label="Title">
+        <FormField label="Title" wide>
           <input name="title" defaultValue={appointment?.title || ''} required />
         </FormField>
         <FormField label="Date">
@@ -956,7 +1037,7 @@ function ApptFields({
         </FormField>
       </div>
       <div className="edit-acts">
-        <button type="submit" className="primary">
+        <button type="submit" className="btn--gold">
           Save
         </button>
       </div>

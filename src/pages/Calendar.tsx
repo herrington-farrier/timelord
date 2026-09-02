@@ -1,15 +1,16 @@
 import { useState } from 'react';
 
+import { freeTone, loadTone } from '../domain/budget';
 import { formatDuration } from '../domain/duration';
-import { isEventDay, sectionCapacity, slotIndex } from '../domain/sections';
+import { bucketSlots, isEventDay, sectionCapacity, slotIndex } from '../domain/sections';
 import { isBreakBlock, isEventPacked } from '../domain/today';
-import { addDaysKey, todayKey, weekStart } from '../shared/dates';
+import { addDaysKey, formatDayLabel, todayKey, weekStart } from '../shared/dates';
 import { useAuth } from '../shared/auth';
 import { useBuckets, useDays, useSettings } from '../services/live';
 import { Chrome } from '../components/Chrome';
 import { EVENTS_ID, SLOTS, type Bucket, type DaySettings, type PackedBlock, type Slot } from '../domain/types';
 
-type SlotRef = Pick<Bucket, 'id' | 'slot'> & { kind?: Bucket['kind'] };
+type SlotRef = Pick<Bucket, 'id' | 'slot' | 'slots'> & { kind?: Bucket['kind'] };
 
 const BOARD_DAYS = 14;
 
@@ -39,7 +40,7 @@ export function CalendarPage() {
   const mark = (on: boolean) => (on && eventColor ? { ['--bcolor' as string]: eventColor } : undefined);
 
   return (
-    <Chrome title="Calendar" wide>
+    <Chrome title="Quest Log" wide>
       <div className="cal-layout">
         <div className="cal-list">
           {listKeys.map((key) => {
@@ -50,12 +51,13 @@ export function CalendarPage() {
             if (!listShowsDay(placed, falling, eventDay)) return null;
             const hours = scheduledMinutes(day?.blocks || []);
             return (
-              <div key={key}>
-                <div
-                  className={`cal-day-h${eventDay ? ' is-event' : ''}`}
-                  style={mark(eventDay)}
-                >
-                  {key}
+              <div
+                key={key}
+                className={`cal-day${key === today ? ' is-today' : ''}${eventDay ? ' is-event' : ''}`}
+                style={mark(eventDay)}
+              >
+                <div className="cal-day-h">
+                  {formatDayLabel(key)}
                   {key === today ? ' · today' : ''}
                   {hours > 0 ? (
                     <>
@@ -201,17 +203,6 @@ export function scheduledMinutes(blocks: PackedBlock[]): number {
     .reduce((sum, b) => sum + Math.max(0, b.durationMinutes), 0);
 }
 
-export function loadTone(scheduled: number, dayMinutes: number): 'ok' | 'mid' | 'hot' {
-  if (dayMinutes <= 0) return 'mid';
-  const part = scheduled / dayMinutes;
-  if (part < 0.5) return 'ok';
-  if (part <= 0.85) return 'mid';
-  return 'hot';
-}
-
-export function freeTone(free: number, cap: number): 'ok' | 'mid' | 'hot' {
-  return loadTone(Math.max(0, cap - Math.max(0, free)), cap);
-}
 
 export function boardShowsDay(key: string, today: string): boolean {
   return key >= today;
@@ -244,7 +235,7 @@ export function chipSlot(block: PackedBlock, buckets: SlotRef[] = []): Slot | un
   if (block.kind === 'appointment' || block.kind === 'event') return undefined;
   const bucket = buckets.find((b) => b.id === block.bucketId);
   if (!bucket || bucket.kind === 'event' || bucket.id === EVENTS_ID) return undefined;
-  return bucket.slot;
+  return bucketSlots(bucket)[0];
 }
 
 function chipSlotIndex(block: PackedBlock, buckets: SlotRef[] = []): number {

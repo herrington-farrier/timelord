@@ -41,7 +41,7 @@ export function CollapsibleBucket({
         aria-label={`${title}, ${displayLabel}`}
         onClick={() => setOpen((v) => !v)}
       >
-        <strong>{title}</strong>
+        <span className="bucket-toggle__name">{title}</span>
         <span className="bucket-hours">{displayLabel}</span>
       </button>
       <div id={bodyId} className="bucket-body" hidden={!open}>

@@ -1,6 +1,6 @@
 import { formatDuration } from '../domain/duration';
 import { formatLogEvent, logEventTone } from '../domain/log';
-import { addDaysKey, todayKey } from '../shared/dates';
+import { addDaysKey, formatClock, formatDayLabel, todayKey } from '../shared/dates';
 import { useItems, useLogs } from '../services/live';
 import { useAuth } from '../shared/auth';
 import { Chrome } from '../components/Chrome';
@@ -14,8 +14,7 @@ export function LogPage() {
   const logs = useLogs(user?.uid, start, today);
   const items = useItems(user?.uid);
   return (
-    <Chrome title="Log" stamp={`${LOG_DAYS} days`}>
-      <p className="hint">Append-only. Complete, skip, start, and end are never overwritten.</p>
+    <Chrome title="Stats" stamp={`${LOG_DAYS} days`}>
       {logs
         .slice()
         .sort((a, b) => String(b.at).localeCompare(String(a.at)))
@@ -23,11 +22,11 @@ export function LogPage() {
           const title = String(row.title || items.find((i) => i.id === row.itemId)?.title || '');
           const tone = logEventTone(String(row.type || ''));
           return (
-            <div key={String(row.id)} className={`item${tone ? ` log-row--${tone}` : ''}`}>
+            <div key={String(row.id)} className={`item log-row${tone ? ` log-row--${tone}` : ''}`}>
               <div className="item-title">{formatLogEvent({ ...row, title })}</div>
               <div className="item-meta">
-                {String(row.date || '')}
-                {row.at ? ` · ${String(row.at)}` : ''}
+                {row.date ? formatDayLabel(String(row.date)) : ''}
+                {row.at ? ` · ${formatClock(String(row.at))}` : ''}
                 {row.minutes ? ` · ${formatDuration(Number(row.minutes))}` : ''}
               </div>
             </div>

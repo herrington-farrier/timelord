@@ -1,33 +1,38 @@
 :root {
-  --bg: #05080d;
-  --bg-mid: #0c1016;
-  --panel: #14120e;
-  --panel-edge: rgba(244, 205, 138, 0.08);
-  --border: rgba(201, 160, 74, 0.2);
-  --text: #f6eedc;
-  --muted: #b5a47a;
-  --head: #8f7a52;
-  --gold: #e0b060;
-  --gold-bg: rgba(224, 176, 96, 0.16);
-  --accent: #c4923a;
-  --accent-hover: #e8c07a;
+  --bg: #070b12;
+  --bg-mid: #0d131e;
+  --panel: #121a29;
+  --panel-edge: rgba(158, 190, 232, 0.10);
+  --border: rgba(146, 173, 210, 0.22);
+  --text: #eef2f8;
+  --muted: #9db0ca;
+  --head: #8298b8;
+  --gold: #e6b968;
+  --gold-bg: rgba(230, 185, 104, 0.16);
+  --accent: #d4a24a;
+  --accent-hover: #f0cd8a;
   --danger: #f87171;
   --danger-bg: rgba(248, 113, 113, 0.16);
   --ok: #86efac;
   --ok-bg: rgba(134, 239, 172, 0.16);
-  --control: #1b1712;
-  --control-hover: #2a2318;
-  --glow: #2a1c08;
-  --glow-2: #161008;
+  --control: #18202f;
+  --control-hover: #243149;
+  --glow: #16294a;
+  --glow-2: #0b1220;
   --guide-rose: #f9a8d4;
   --guide-sky: #7dd3fc;
   --guide-lime: #bef264;
   --guide-violet: #c4b5fd;
-  --btn-radius: 8px;
+  --btn-radius: 999px;
   --btn-pad: 0.5em 0.95em;
   --btn-size: 0.9rem;
+  --wordmark-ink: linear-gradient(177deg, #fbeccb 0%, var(--gold) 46%, #a97a24 100%);
+  --tap: 44px;
+  --label-size: 0.78rem;
 }
 * { box-sizing: border-box; }
+/* Author display rules outrank the UA sheet, so `hidden` needs teeth. */
+[hidden] { display: none !important; }
 html, body {
   margin: 0;
   min-height: 100%;
@@ -50,12 +55,43 @@ html, body {
 }
 .cal-page.wrap { max-width: 1400px; }
 .title-row {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 10px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid var(--border);
+  gap: 8px;
+  padding-bottom: 8px;
+}
+/* A struck gold rule with a pip at centre, rather than a flat border —
+   it reads as the seal's edge and gives the page a real break. */
+.title-row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 18%,
+    #fbeccb 50%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 82%,
+    transparent 100%
+  );
+}
+.title-row::before {
+  content: "";
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  z-index: 1;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%) rotate(45deg);
+  background: linear-gradient(135deg, #fbeccb 0%, var(--gold) 55%, #a97a24 100%);
+  box-shadow: 0 0 12px -2px rgba(230, 185, 104, 0.85);
 }
 .title-left, .title-right {
   display: flex;
@@ -64,22 +100,26 @@ html, body {
   gap: 8px;
 }
 .title-right { justify-content: flex-end; }
-.pack-bar {
-  position: sticky;
-  top: 0;
-  z-index: 4;
-  display: flex;
-  justify-content: center;
-  padding: 4px 0 12px;
-  background: linear-gradient(var(--bg) 72%, transparent);
-}
-.pack-bar .primary { min-width: 12rem; }
 .title-heading {
   margin: 0;
-  font-size: clamp(1.4rem, 4vw, 2.4rem);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: clamp(1.5rem, 6vw, 2.4rem);
   text-align: center;
+}
+/* The wordmark echoes the icon: roman caps, wide tracking, struck in gold.
+   A system serif stack keeps it free — no webfont on the critical path. */
+.title-heading,
+.title-toggle {
+  font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    "Times New Roman", serif;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-indent: 0.24em;
+  text-transform: uppercase;
+  background-image: var(--wordmark-ink);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 button,
 .chrome-btn,
@@ -89,7 +129,7 @@ button,
   font-weight: 650;
   line-height: 1.2;
   padding: var(--btn-pad);
-  min-height: 2.35rem;
+  min-height: var(--tap);
   border-radius: var(--btn-radius);
   border: 1px solid var(--border);
   background: var(--control);
@@ -118,53 +158,129 @@ button:disabled {
   opacity: 0.42;
   cursor: not-allowed;
 }
-button.primary,
-.chrome-btn.is-on,
-.tab.is-on {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
+/* --- Pick controls -------------------------------------------------- *
+ * Nav links, Edit tabs, pills and day chips are all things you *choose*
+ * rather than press, so they share one shape and one voice: muted pill,
+ * tracked caps. Action buttons stay serif and outlined; these stay sans
+ * and filled, which is what keeps the two readable as different jobs.   */
+.chrome-btn,
+.tab,
+.pills label,
+.day-chips label {
+  min-height: var(--tap);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--control);
+  color: var(--muted);
+  font-size: 0.8rem;
   font-weight: 700;
+  letter-spacing: 0.1em;
+  text-indent: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-button.primary:hover:not(:disabled),
+/* Selected is a state, and every selected control wears the same one. */
+.chrome-btn.is-on,
+.tab.is-on,
+.pills label:has(input:checked),
+.day-chips label:has(input:checked) {
+  background: var(--gold-bg);
+  border-color: var(--accent);
+  color: var(--text);
+}
 .chrome-btn.is-on:hover,
 .tab.is-on:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: var(--bg);
-}
-.btn--success {
-  background: var(--ok-bg);
-  color: var(--ok);
-  border-color: var(--ok);
-  font-weight: 700;
-}
-.btn--success:hover:not(:disabled) {
-  background: var(--ok);
-  border-color: var(--ok);
-  color: var(--bg);
-}
-button.danger {
-  background: var(--danger-bg);
-  color: var(--danger);
-  border-color: var(--danger);
-}
-button.danger:hover:not(:disabled) {
-  background: var(--danger);
-  color: var(--bg);
-  border-color: var(--danger);
-}
-button.skip {
   background: var(--gold-bg);
-  border-color: var(--gold);
-  color: var(--gold);
+  border-color: var(--accent-hover);
+  color: var(--text);
 }
-button.skip:hover:not(:disabled) {
-  background: var(--gold);
-  color: var(--bg);
-  border-color: var(--gold);
+/* --- Action buttons ------------------------------------------------ *
+ * One family: outlined pill, wordmark caps, colour carries the meaning.
+ * Gold affirms and advances (Start, Complete, Save). Red stops, skips or
+ * destroys (Skip, End, Stop, Remove, Reset). Start Next Chapter is the
+ * gold button at hero size, with the seal's halo.                       */
+.btn--gold,
+.btn--quest {
+  --btn-ink: linear-gradient(177deg, #fbeccb 0%, var(--gold) 46%, #a97a24 100%);
+  --btn-edge: var(--accent);
+  --btn-edge-hot: var(--accent-hover);
 }
-.stamp { font-size: 0.75rem; color: var(--muted); }
+.btn--red {
+  --btn-ink: linear-gradient(177deg, #ffdcdc 0%, var(--danger) 48%, #a63535 100%);
+  --btn-edge: var(--danger);
+  --btn-edge-hot: #ffa8a8;
+}
+.btn--green {
+  --btn-ink: linear-gradient(177deg, #dcfae7 0%, var(--ok) 48%, #3d8f5d 100%);
+  --btn-edge: var(--ok);
+  --btn-edge-hot: #bdf7d3;
+}
+.btn--gold,
+.btn--red,
+.btn--green,
+.btn--quest {
+  border: 2px solid var(--btn-edge);
+  border-radius: 999px;
+  background-color: transparent;
+}
+.btn--gold:hover:not(:disabled),
+.btn--red:hover:not(:disabled),
+.btn--green:hover:not(:disabled),
+.btn--quest:hover:not(:disabled) {
+  background-color: transparent;
+  border-color: var(--btn-edge-hot);
+  filter: brightness(1.12);
+}
+.btn--gold:active:not(:disabled),
+.btn--red:active:not(:disabled),
+.btn--green:active:not(:disabled),
+.btn--quest:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn--gold:focus-visible,
+.btn--red:focus-visible,
+.btn--green:focus-visible,
+.btn--quest:focus-visible {
+  outline: 2px solid var(--btn-edge);
+  outline-offset: 3px;
+}
+/* The ink: wordmark caps, struck in the button's own gradient.
+   `background` is re-declared on hover because the base button:hover
+   shorthand would otherwise reset background-image to none. */
+.btn--gold,
+.btn--red,
+.btn--green,
+.btn--quest__label {
+  font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    "Times New Roman", serif;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-indent: 0.14em;
+  text-transform: uppercase;
+  background-image: var(--btn-ink);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.btn--gold:hover:not(:disabled),
+.btn--red:hover:not(:disabled),
+.btn--green:hover:not(:disabled) {
+  background-image: var(--btn-ink);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.stamp {
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-indent: 0.14em;
+  text-transform: uppercase;
+  color: var(--head);
+}
 .day-acts {
   display: flex;
   flex-wrap: wrap;
@@ -177,60 +293,58 @@ button.skip:hover:not(:disabled) {
 }
 .day-acts button {
   min-width: 8rem;
-  min-height: 2.6rem;
-  font-size: 0.95rem;
+  font-size: 1rem;
 }
 .hidden { display: none !important; }
 .err { color: var(--danger); min-height: 1em; }
-.setup {
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel);
-  color: var(--muted);
-  line-height: 1.5;
-}
-.setup code { color: var(--gold); }
-.budgets {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
-}
-.budget {
-  background: var(--panel);
-  border: 1px solid var(--panel-edge);
-  border-radius: 10px;
-  padding: 8px 10px;
-  border-top: 3px solid var(--bcolor, var(--gold));
-}
-.budget-name { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.budget-hrs { font-variant-numeric: tabular-nums; font-weight: 700; margin: 4px 0; }
-.budget-pick { display: flex; gap: 6px; align-items: center; }
-.budgets .budget-pick button {
-  width: 28px; height: 28px; border-radius: 6px;
-  border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer;
-}
 .day { display: flex; flex-direction: column; gap: 0; }
 .item {
-  background: var(--panel);
-  border: 1px solid var(--panel-edge);
-  border-left: 4px solid var(--bcolor, var(--head));
-  border-radius: 10px;
-  padding: 10px 12px;
+  padding: 8px 20px 10px 12px;
   margin-bottom: 8px;
 }
+.item.is-open { border-color: var(--border); }
+/* The row itself opens the card. Complete / Skip stay behind that tap so a
+   scroll never lands on them. */
+.item-open {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+.item-open:hover:not(:disabled),
+.item-open:focus-visible {
+  background: transparent;
+  border-color: transparent;
+  color: inherit;
+}
+.item-open:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.item-open > .item-title { flex: 1 1 auto; min-width: 0; }
+.item-open > .item-hours { flex: 0 0 auto; font-weight: 500; }
 .item.complete { opacity: 0.5; }
 .item.skipped { opacity: 0.45; text-decoration: line-through; }
-.log-row--ok { border-left-color: var(--ok); }
-.log-row--ok .item-title { color: var(--ok); }
-.log-row--skip { border-left-color: var(--danger); }
-.log-row--skip .item-title { color: var(--danger); }
-.log-row--pack { border-left-color: var(--gold); }
-.log-row--pack .item-title { color: var(--gold); }
+/* A Stats row's text is its own colour, always — set --bcolor and the
+   heading follows. Gold is the default, so packs and system events match
+   the gold edge they already had. */
+.log-row { --bcolor: var(--gold); }
+.log-row .item-title { color: var(--bcolor); }
+.log-row--ok { --bcolor: var(--ok); }
+.log-row--skip { --bcolor: var(--danger); }
 .item--appt {
-  border-left-width: 6px;
-  background: color-mix(in srgb, var(--bcolor) 18%, var(--panel));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bcolor) 40%, transparent);
+  border-top-width: 6px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bcolor) 45%, transparent);
 }
 .item-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 .item-title { font-weight: 650; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -242,45 +356,72 @@ button.skip:hover:not(:disabled) {
   background: color-mix(in srgb, var(--bcolor) 28%, var(--panel));
   border: 1px solid color-mix(in srgb, var(--bcolor) 70%, var(--border));
   color: var(--text);
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
+  text-indent: 0.1em;
   text-transform: uppercase;
 }
 .item-hours { color: var(--muted); font-variant-numeric: tabular-nums; }
 .item-meta { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
 .item-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.task-picks {
+/* --- Tap targets -------------------------------------------------- *
+ * One pattern for every multiple-choice control: the native input stays
+ * focusable and keeps the accessible name, but the label is the target
+ * and it is never smaller than --tap.                                  */
+.pills input,
+.day-chips input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+.pills label,
+.day-chips label {
+  position: relative;
+}
+.pills {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
-}
-.task-picks .check,
-.check {
-  display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  color: var(--text);
-  font-size: 0.9rem;
-  cursor: pointer;
 }
-.task-picks .check { min-height: 0; }
-.check:has(input:disabled) {
+.pills label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.95rem;
+}
+.pills label:has(input:focus-visible),
+.day-chips label:has(input:focus-visible) {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.pills label:has(input:disabled) {
+  opacity: 0.35;
   cursor: not-allowed;
-  color: var(--muted);
-  opacity: 0.45;
 }
-.buffer {
-  display: flex; align-items: center; gap: 10px;
-  color: var(--muted); font-size: 0.78rem;
-  margin: -2px 12px 8px;
+.day-chips {
+  display: flex;
+  gap: 4px;
+  width: 100%;
 }
-.buffer:before, .buffer:after {
-  content: ""; flex: 1; height: 1px; background: var(--border);
+/* Single letters: tracking would only push them off centre. */
+.day-chips label {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  letter-spacing: normal;
+  text-indent: 0;
 }
-.opts { font-size: 0.8rem; color: var(--accent); margin-top: 6px; }
+.day-chips label:has(input:disabled) {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
 .fall-wrap h2 {
   margin: 8px 0 8px;
   font-size: 0.85rem;
@@ -289,11 +430,10 @@ button.skip:hover:not(:disabled) {
   color: var(--head);
 }
 .fall-row {
-  display: flex; justify-content: space-between; gap: 8px;
-  padding: 8px 10px; border-left: 3px solid var(--bcolor, var(--danger));
-  background: rgba(248, 113, 113, 0.08);
-  border-radius: 8px; margin-bottom: 6px;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 6px 20px 8px 10px; margin-bottom: 6px;
 }
+.fall-row .item-top { display: flex; justify-content: space-between; gap: 8px; }
 .cal-layout {
   display: grid;
   grid-template-columns: minmax(240px, 320px) 1fr;
@@ -303,10 +443,14 @@ button.skip:hover:not(:disabled) {
 }
 @media (max-width: 860px) {
   .cal-layout { grid-template-columns: 1fr; }
-  .cal-list { max-height: 50vh; }
-  .title-row { grid-template-columns: 1fr; gap: 10px; }
-  .title-heading { justify-self: center; }
-  .title-left, .title-right { justify-content: center; }
+  /* One page scroll beats a 50vh list scrolling inside a 70vh board. */
+  .cal-list { max-height: none; overflow: visible; }
+  .cal-board { min-height: 0; }
+  .cal-weeks {
+    grid-template-rows: none;
+    grid-auto-rows: minmax(86px, auto);
+    flex: none;
+  }
 }
 .cal-list {
   background: var(--panel);
@@ -316,21 +460,39 @@ button.skip:hover:not(:disabled) {
   max-height: 80vh;
   overflow: auto;
 }
+/* Each day is its own block so the boundary between them is unmissable. */
+.cal-day {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.022);
+  padding: 10px 12px 12px;
+  margin-bottom: 10px;
+}
+.cal-day:last-child { margin-bottom: 0; }
+.cal-day.is-today {
+  border-color: var(--accent);
+  background: rgba(230, 185, 104, 0.07);
+}
+.cal-day.is-event {
+  outline: 2px solid var(--bcolor, var(--gold));
+  outline-offset: -2px;
+}
 .cal-day-h {
-  margin: 12px 0 6px;
-  font-size: 0.78rem;
+  margin: 0 0 8px;
+  font-size: 0.84rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--head);
   border-bottom: 1px solid var(--border);
-  padding-bottom: 4px;
+  padding-bottom: 6px;
 }
+.cal-day.is-today .cal-day-h { color: var(--gold); }
 .cal-secs {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 12px;
   margin: -2px 0 6px;
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -378,16 +540,9 @@ button.skip:hover:not(:disabled) {
 }
 .cal-cell.is-today { background: var(--gold-bg); }
 .cal-cell.is-past { color: var(--head); }
-.cal-cell.is-event,
-.cal-day-h.is-event {
+.cal-cell.is-event {
   outline: 2px solid var(--bcolor, var(--gold));
   outline-offset: -2px;
-}
-.cal-day-h.is-event {
-  outline-offset: 0;
-  border-radius: 6px;
-  padding: 4px 6px;
-  border-bottom: none;
 }
 .cal-cell-num {
   display: flex;
@@ -402,7 +557,7 @@ button.skip:hover:not(:disabled) {
 .cal-hrs {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
 }
 .cal-day-h .cal-hrs { font-size: 0.78rem; }
 .cal-hrs--ok { color: var(--ok); }
@@ -410,17 +565,16 @@ button.skip:hover:not(:disabled) {
 .cal-hrs--hot { color: var(--danger); }
 .cal-chip {
   margin-top: 4px;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 3px 7px;
+  border-radius: 6px;
   border-left: 3px solid var(--bcolor, var(--head));
   background: rgba(255,255,255,0.05);
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cal-chip.overflow { opacity: 0.45; }
-.cal-chip.buffer { color: var(--muted); border-left-color: var(--head); }
 .cal-chip--appt {
   font-weight: 750;
   border-left-width: 5px;
@@ -454,7 +608,6 @@ button.skip:hover:not(:disabled) {
   gap: 8px;
   margin: 4px 0 12px;
 }
-.tab { border-radius: 999px; }
 .totals {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
@@ -468,7 +621,7 @@ button.skip:hover:not(:disabled) {
   padding: 10px 12px;
   min-width: 0;
 }
-.total-card span { display: block; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.total-card span { display: block; font-size: var(--label-size); letter-spacing: 0.12em; text-transform: uppercase; color: var(--head); }
 .total-card b { display: block; font-size: 1.15rem; margin: 4px 0 2px; }
 .total-card em {
   font-style: normal;
@@ -478,64 +631,88 @@ button.skip:hover:not(:disabled) {
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
-.edit-card {
-  background: var(--panel);
+/* --- Cards ---------------------------------------------------------- *
+ * The Guide's treatment, used everywhere a record is shown: the item's
+ * own colour struck along the top edge and bleeding down into the panel.
+ * --bcolor is already set inline on these, so each one tints itself.
+ * Calendar chips deliberately keep their own denser style.             */
+.edit-card,
+.item,
+.fall-row,
+.guide-card {
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--bcolor, var(--gold)) 18%, var(--panel)) 0%, var(--panel) 55%),
+    var(--panel);
   border: 1px solid var(--panel-edge);
+  border-top: 4px solid var(--bcolor, var(--gold));
   border-radius: 12px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bcolor, var(--gold)) 22%, transparent);
+}
+.edit-card {
   padding: 12px 14px;
   margin-bottom: 10px;
-  border-left: 4px solid var(--bcolor, var(--border));
 }
-.add-card { border-left-color: var(--gold); }
-.meta-form { border-left-color: var(--accent); }
-.bucket-card { border-left-width: 5px; }
-.bucket-head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 4px 10px;
-  align-items: flex-start;
-  margin-bottom: 8px;
-}
-.bucket-head strong { min-width: 0; }
-.bucket-head span {
-  color: var(--muted);
-  font-size: 0.8rem;
-  flex: 1 1 12rem;
-  min-width: 0;
-  line-height: 1.35;
-}
+.add-card { --bcolor: var(--gold); }
+.meta-form { --bcolor: var(--accent); }
+.bucket-card { border-top-width: 5px; }
+/* Name on top, detail beneath, caret pinned right. The old single baseline row
+   let a long label (Events listed every date) push past the card edge. */
 .bucket-toggle {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name caret"
+    "meta caret";
+  column-gap: 10px;
+  row-gap: 1px;
+  align-items: center;
   width: 100%;
   margin: 0;
-  padding: 2px 0;
+  padding: 4px 0;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-weight: 650;
   text-align: left;
   cursor: pointer;
   border-radius: var(--btn-radius);
-  min-height: 2.2rem;
+  min-height: var(--tap);
 }
 .bucket-toggle:hover,
 .bucket-toggle:focus-visible {
   background: var(--control);
   border-color: transparent;
 }
-.bucket-hours {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
+/* Bucket names are curated headings, not free text, so they take the
+   same tracked caps the rest of the chrome uses. */
+.bucket-toggle__name {
+  grid-area: name;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 0.92rem;
+  letter-spacing: 0.11em;
+  text-indent: 0.11em;
+  text-transform: uppercase;
   color: var(--text);
+  overflow-wrap: anywhere;
+}
+.bucket-hours {
+  grid-area: meta;
+  min-width: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 .bucket-toggle::after {
+  grid-area: caret;
   content: "▸";
-  color: var(--muted);
+  color: var(--head);
   font-weight: 500;
+  font-size: 0.85rem;
+  width: 1.25rem;
+  text-align: center;
 }
 .bucket-card.is-open > .bucket-toggle::after { content: "▾"; }
 .bucket-body { margin-top: 10px; }
@@ -557,32 +734,33 @@ button.skip:hover:not(:disabled) {
 }
 .week-budget.is-over .total-card:nth-child(3) b,
 .week-budget.is-over .total-card:nth-child(4) b { color: var(--danger); }
+/* One purpose per row: name+color, hours, time of day, days, actions. */
 .bucket-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
-.bucket-line,
+.bucket-row,
 .personal-grid {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 8px 10px;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   align-items: end;
   min-width: 0;
 }
-.bucket-line > .field:has(input[name="name"]) {
-  flex: 1 1 8rem;
+.bucket-row--name > .field:has(input[name="name"]) {
+  flex: 1 1 10rem;
   min-width: 6rem;
 }
-.bucket-line > .field:has(input[type="color"]),
+.bucket-row > .field:has(input[type="color"]),
 .personal-grid > .field:has(input[type="color"]) {
   flex: 0 0 auto;
   min-width: 0;
   max-width: none;
 }
-.bucket-line > .field:has(select[name="slot"]) {
-  flex: 0 0 8rem;
-  min-width: 7.5rem;
+.bucket-row--hours > .field:has(.pills) {
+  flex: 0 0 auto;
+  min-width: 0;
 }
 .compact-hours {
   display: flex;
@@ -596,10 +774,10 @@ button.skip:hover:not(:disabled) {
   min-width: 0;
 }
 .compact-hours__label {
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
+  font-size: var(--label-size);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--head);
 }
 .compact-hours input {
   width: 3.6rem;
@@ -622,56 +800,30 @@ button.skip:hover:not(:disabled) {
   gap: 4px;
   flex: 0 0 auto;
 }
-.hours-mode {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  gap: 4px;
-  align-items: center;
-  flex: 0 0 auto;
-  min-height: 2.35rem;
-}
-.hours-mode label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 2.35rem;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-.hours-mode input { width: auto; }
-.hours-mode label:has(input:checked) {
-  border-color: var(--accent);
-  color: var(--text);
-  background: var(--control);
-}
 .bucket-days {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 10px;
+  gap: 8px;
   align-items: center;
 }
 .bucket-remove {
   margin-left: auto;
-  min-height: 2rem;
-  padding: 0.3em 0.7em;
-  font-size: 0.8rem;
+  min-height: 2.4rem;
+  padding: 0.3em 0.9em;
+  font-size: 0.82rem;
 }
 .duration-fields {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 12rem;
-  flex: 1 1 16rem;
+  min-width: 0;
 }
+.duration-fields__inputs { max-width: 22rem; }
 .duration-fields__name {
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
+  font-size: var(--label-size);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--head);
 }
 .duration-fields__inputs {
   display: grid;
@@ -682,25 +834,32 @@ button.skip:hover:not(:disabled) {
   min-width: 0;
   flex: none;
 }
+/* --- Forms ---------------------------------------------------------- *
+ * A left-aligned grid, not a wrapping flex row. Fields sit in even
+ * columns instead of stretching to fill whatever space is left over,
+ * which is what made Add New look ragged. Anything that needs a whole
+ * row says so, the way the bucket rows do.                             */
 .fields {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
   gap: 10px 12px;
   align-items: end;
 }
-.fields.stack { flex-direction: column; align-items: stretch; }
+.fields > .field--wide,
+.fields > .field:has(.pills) {
+  grid-column: 1 / -1;
+}
 .field {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 120px;
-  flex: 1 1 140px;
+  min-width: 0;
 }
-.field span {
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
+.field > span {
+  font-size: var(--label-size);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--head);
 }
 .edit-page input, .edit-page select, .edit-page textarea {
   font: inherit;
@@ -726,7 +885,7 @@ button.skip:hover:not(:disabled) {
   color: var(--muted);
   font-size: 0.85rem;
 }
-.edit-acts, .edit-page .budget-pick {
+.edit-acts {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -734,13 +893,7 @@ button.skip:hover:not(:disabled) {
   align-items: center;
 }
 .edit-card .sub { margin-top: 8px; font-size: 0.78rem; color: var(--muted); }
-.bucket-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 10px; }
-.bucket-card .fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
-  align-items: start;
-}
-.bucket-card .field { min-width: 0; flex: none; }
+.bucket-card .fields { align-items: start; }
 .bucket-card .field:has(input[type="color"]) {
   max-width: 5.5rem;
 }
@@ -760,6 +913,7 @@ button.skip:hover:not(:disabled) {
   flex: 1 1 8rem;
   min-width: 0;
 }
+.bucket-row > .field { flex: 0 1 auto; }
 .event-range .danger {
   margin-bottom: 1px;
 }
@@ -773,24 +927,86 @@ button.skip:hover:not(:disabled) {
   background: linear-gradient(transparent, var(--bg) 28%);
   z-index: 2;
 }
-.page-save .primary { min-width: 10rem; }
-.day-totals {
-  color: var(--muted);
-  font-size: 0.9rem;
-  padding: 4px 0 8px;
+.page-save button { min-width: 10rem; }
+/* --- Today header -------------------------------------------------- *
+ * The countdown is the hero, struck in the same gold as the wordmark;
+ * the day's numbers sit under it as labelled stats, not a run-on line.  */
+.day-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0 4px;
+}
+.day-head__now {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 .section-timer {
-  color: var(--gold);
+  display: block;
   font-variant-numeric: tabular-nums;
-  font-size: 1.5rem;
+  font-size: clamp(2.6rem, 15vw, 3.8rem);
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  background-image: linear-gradient(177deg, #fbeccb 0%, var(--gold) 46%, #a97a24 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 .section-timer.is-paused {
-  color: var(--muted);
+  background-image: linear-gradient(177deg, #d5dced 0%, var(--muted) 46%, #5d6c83 100%);
 }
-.kind-hourly, .kind-recurring { display: contents; }
-.kind-hourly.hidden, .kind-recurring.hidden { display: none; }
+.day-head__section {
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em;
+  text-transform: uppercase;
+  color: var(--head);
+}
+.day-head__stats {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  max-width: 22rem;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 9px 12px;
+}
+.stat + .stat { border-left: 1px solid var(--border); }
+.stat__label {
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-indent: 0.16em;
+  text-transform: uppercase;
+  color: var(--head);
+}
+.stat__value {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.stat__value--ok { color: var(--ok); }
+.stat__value--mid { color: var(--gold); }
+.stat__value--hot { color: var(--danger); }
 .toast-region {
   position: fixed;
   right: max(16px, env(safe-area-inset-right));
@@ -813,18 +1029,17 @@ button.skip:hover:not(:disabled) {
 }
 .toast--success { border-color: var(--ok); }
 .toast--error { border-color: var(--danger); }
-.toast__dismiss,
 .drag-handle {
-  min-height: 0;
-  padding: 4px 8px;
+  min-height: 40px;
+  min-width: 40px;
+  padding: 4px 10px;
   border: 0;
   background: transparent;
   color: var(--muted);
   font-weight: 500;
+  cursor: grab;
+  touch-action: none;
 }
-.toast__dismiss { margin-left: auto; }
-.drag-handle { cursor: grab; }
-.toast__dismiss:hover,
 .drag-handle:hover {
   background: transparent;
   border-color: transparent;
@@ -852,11 +1067,13 @@ button.skip:hover:not(:disabled) {
 .sign-in .primary { margin-top: 16px; min-width: 10rem; }
 .eta { color: var(--gold); font-variant-numeric: tabular-nums; font-size: 0.8rem; }
 .guide { display: flex; flex-direction: column; gap: 16px; }
-.guide-lede {
-  margin: 0;
-  font-size: 1.05rem;
-  color: var(--muted);
-  max-width: 42rem;
+.guide-card__lede {
+  margin: 0 0 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--bcolor) 28%, transparent);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
 }
 .guide-grid {
   display: grid;
@@ -864,15 +1081,8 @@ button.skip:hover:not(:disabled) {
   gap: 12px;
 }
 .guide-card {
-  --gcolor: var(--gold);
-  background:
-    linear-gradient(165deg, color-mix(in srgb, var(--gcolor) 18%, var(--panel)) 0%, var(--panel) 55%),
-    var(--panel);
-  border: 1px solid var(--panel-edge);
-  border-radius: 12px;
+  --bcolor: var(--gold);
   padding: 16px 18px 18px;
-  border-top: 4px solid var(--gcolor);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gcolor) 22%, transparent);
 }
 .guide-kicker {
   margin: 0 0 6px;
@@ -880,7 +1090,7 @@ button.skip:hover:not(:disabled) {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--gcolor);
+  color: var(--bcolor);
 }
 .guide-card h2 {
   margin: 0 0 8px;
@@ -892,36 +1102,19 @@ button.skip:hover:not(:disabled) {
   color: var(--text);
   line-height: 1.45;
 }
-.guide-card--pack-how { --gcolor: var(--gold); grid-column: 1 / -1; }
-.guide-card--personal { --gcolor: var(--ok); }
-.guide-card--work { --gcolor: var(--accent-hover); }
-.guide-card--events { --gcolor: var(--guide-violet); }
-.guide-card--weighted { --gcolor: var(--guide-sky); }
-.guide-card--today { --gcolor: var(--danger); }
-.guide-card--calendar { --gcolor: var(--guide-lime); }
-.guide-card--lists { --gcolor: var(--guide-rose); }
+.guide-card--pack-how { --bcolor: var(--gold); grid-column: 1 / -1; }
+.guide-card--personal { --bcolor: var(--ok); }
+.guide-card--work { --bcolor: var(--accent-hover); }
+.guide-card--events { --bcolor: var(--guide-violet); }
+.guide-card--weighted { --bcolor: var(--guide-sky); }
+.guide-card--today { --bcolor: var(--danger); }
+.guide-card--calendar { --bcolor: var(--guide-lime); }
+.guide-card--lists { --bcolor: var(--guide-rose); }
+@media (max-width: 400px) {
+  .fields { grid-template-columns: 1fr; }
+}
 @media (max-width: 700px) {
-  .title-row {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    padding-bottom: 14px;
-  }
-  .title-left {
-    order: 1;
-    justify-content: center;
-  }
-  .title-heading {
-    order: 0;
-    justify-self: center;
-    font-size: 1.3rem;
-  }
-  .title-right {
-    order: 2;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
   .chrome-btn, .tab {
-    min-height: 2.6rem;
     padding: 0.55em 1em;
   }
   .day-acts {
@@ -934,16 +1127,24 @@ button.skip:hover:not(:disabled) {
     justify-content: center;
   }
   .cal-cell {
-    min-height: 80px;
-    padding: 4px;
+    padding: 5px 4px;
+    overflow: visible;
   }
   .cal-cell-num {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
   }
   .cal-chip {
-    font-size: 0.65rem;
-    padding: 2px 4px;
+    font-size: 0.72rem;
+    padding: 3px 5px;
   }
+  .cal-list .cal-chip {
+    font-size: 0.84rem;
+    padding: 6px 8px;
+    margin-top: 6px;
+  }
+  .cal-day { padding: 12px 14px 14px; }
+  .cal-day-h { font-size: 0.92rem; }
+  .cal-secs { font-size: 0.82rem; gap: 4px 14px; }
   .toast-region {
     left: 16px;
     right: 16px;
@@ -953,54 +1154,25 @@ button.skip:hover:not(:disabled) {
     min-width: 0;
     width: 100%;
   }
-  .fields {
-    flex-direction: column;
-  }
-  .field {
-    min-width: 0;
-    flex: 1 1 auto;
-  }
   .edit-card {
     padding: 10px 12px;
   }
-  .bucket-forms {
-    grid-template-columns: 1fr;
-  }
-  .item-acts {
-    flex-direction: column;
-    gap: 6px;
-  }
   .item-acts button {
-    width: 100%;
-  }
-  .fall-row {
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
+    flex: 1 1 0;
+    min-width: 0;
   }
   .fall-row .item-acts {
     width: 100%;
-    flex-direction: row;
   }
-  .fall-row .item-acts button {
-    flex: 1;
-  }
-  .bucket-line,
-  .personal-grid {
-    flex-wrap: wrap;
-  }
-  .bucket-line > .field:has(input[name="name"]) {
+  .bucket-row--name > .field:has(input[name="name"]) {
     flex: 1 1 100%;
   }
-  .bucket-line > .field:has(select[name="slot"]) {
-    flex: 1 1 7rem;
-  }
-  .hours-mode {
-    flex: 0 0 100%;
-    justify-content: flex-start;
-  }
   .bucket-days {
-    gap: 4px 12px;
+    gap: 8px;
+  }
+  .bucket-days .bucket-remove {
+    flex: 1 1 auto;
+    margin-left: 0;
   }
   .duration-fields {
     min-width: 0;
@@ -1022,4 +1194,262 @@ button.skip:hover:not(:disabled) {
     min-width: 3rem;
     width: auto;
   }
+}
+
+/* --- The backdrop seal -------------------------------------------- *
+ * Fixed, so it holds the centre of the viewport while pages scroll over
+ * it. z-index pins it under .wrap rather than relying on paint order.  */
+.bg-seal {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  overflow: hidden;
+}
+.bg-seal img {
+  width: min(72vw, 480px);
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  filter: grayscale(1) contrast(1.05);
+  opacity: 0.07;
+}
+/* --- Today: the seal ---------------------------------------------- *
+ * Start Day is the app icon itself. It greys out once the day is done,
+ * which is the whole "day ended" message.                             */
+.seal-wrap {
+  --seal-size: clamp(210px, 66vw, 340px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: clamp(30px, 9vw, 60px) 0 clamp(12px, 3vw, 28px);
+}
+.day-seal-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.day-seal-btn:hover:not(:disabled),
+.day-seal-btn:focus-visible {
+  background: transparent;
+  border-color: transparent;
+}
+.day-seal {
+  display: block;
+  width: var(--seal-size);
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(230, 185, 104, 0.35), 0 0 44px -10px rgba(230, 185, 104, 0.4);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.3s ease;
+}
+.day-seal-btn:hover:not(:disabled) .day-seal,
+.day-seal-btn:focus-visible .day-seal {
+  transform: scale(1.03);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 66px -8px rgba(230, 185, 104, 0.55);
+}
+.day-seal-btn:active:not(:disabled) .day-seal { transform: scale(0.965); }
+.day-seal-btn:disabled { cursor: not-allowed; }
+.day-seal-btn:disabled .day-seal {
+  filter: grayscale(1) brightness(0.6);
+  box-shadow: none;
+}
+.day-seal-btn__label {
+  font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    "Times New Roman", serif;
+  font-size: clamp(1.15rem, 5vw, 1.5rem);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
+  text-transform: uppercase;
+  background-image: var(--wordmark-ink);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.day-seal-btn:disabled .day-seal-btn__label {
+  background-image: none;
+  color: var(--head);
+  -webkit-text-fill-color: var(--head);
+}
+/* a slow halo, so the seal reads as something you tap */
+.day-seal-btn:not(:disabled)::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--seal-size);
+  aspect-ratio: 1;
+  border: 2px solid var(--accent);
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  animation: seal-ring 3.2s ease-out infinite;
+}
+@keyframes seal-ring {
+  0% { transform: translateX(-50%) scale(1); opacity: 0.45; }
+  70%, 100% { transform: translateX(-50%) scale(1.24); opacity: 0; }
+}
+.day-seal.is-done {
+  filter: grayscale(1) brightness(0.5);
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+/* --- Today: the day assembling itself ------------------------------ */
+@keyframes item-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.day .item {
+  animation: item-in 0.42s cubic-bezier(0.22, 0.68, 0.28, 1) both;
+  animation-delay: calc(var(--i, 0) * 65ms);
+}
+
+/* --- Compact chrome: Today gets the screen ------------------------- */
+.wrap--compact {
+  padding: max(8px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-left))
+    max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-right));
+  gap: 6px;
+}
+.title-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 0 0.9rem;
+  border: 1px solid transparent;
+  font-size: inherit;
+  border-radius: 999px;
+  /* no background/color here: the gold gradient above owns both */
+}
+.title-toggle[aria-expanded="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 6px 22px -10px rgba(230, 185, 104, 0.9);
+}
+.title-toggle:hover:not(:disabled),
+.title-toggle:active {
+  /* base button:hover uses the `background` shorthand, which would reset
+     background-image to none and blank the gradient-clipped letters. */
+  background-image: var(--wordmark-ink);
+  background-color: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  border-color: var(--border);
+  filter: brightness(1.12);
+}
+.title-toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.menu-panel {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 11rem;
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 18px 44px -18px #000;
+}
+.menu-panel .chrome-btn,
+.menu-panel button {
+  width: 100%;
+  justify-content: flex-start;
+}
+.menu-panel__acts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .day .item { animation: none; }
+  .day-seal-btn:not(:disabled)::after { animation: none; }
+}
+
+/* --- Start Next Chapter ------------------------------------------- *
+ * The gold button at hero size, wearing the Start Day seal's halo.
+ * Shape, edge and ink all come from the .btn--gold family above.        */
+.btn--quest {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9em;
+  min-height: 3.5rem;
+  padding: 0.55em 0.75em 0.55em 1.4em;
+  font-size: 1rem;
+  animation: quest-glow 3.2s ease-out infinite;
+}
+.btn--quest__label {
+  font-size: 1em;
+  letter-spacing: 0.2em;
+  white-space: nowrap;
+}
+.btn--quest__time {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.1rem;
+  padding: 0 0.9em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--gold);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+/* the icon's halo, on a pill */
+@keyframes quest-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(230, 185, 104, 0.5), 0 0 20px -8px rgba(230, 185, 104, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(230, 185, 104, 0), 0 0 30px -6px rgba(230, 185, 104, 0.75);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(230, 185, 104, 0), 0 0 20px -8px rgba(230, 185, 104, 0.5);
+  }
+}
+.day-acts--end .btn--quest { min-width: 0; }
+@media (max-width: 700px) {
+  .day-acts .btn--quest {
+    width: 100%;
+    justify-content: space-between;
+    font-size: 0.92rem;
+    padding-left: 1.1em;
+  }
+}
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn--quest { animation: none; }
+}
+
+/* --- TRIAL: list item titles in caps -------------------------------- *
+ * Scoped to Today's day list and the falling-off rows. Log rows are left
+ * in sentence case: they are event sentences ("Completed Dishes"), not
+ * titles. Delete this whole block to revert.                           */
+.day .item-title,
+.fall-row .item-open > span {
+  font-size: 0.95rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }

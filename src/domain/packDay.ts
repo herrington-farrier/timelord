@@ -1,6 +1,6 @@
 import { assignWeeklyBudgets, dailyBudgetFor } from './budget';
 import { cadenceHitsDate } from './cadence';
-import { isEventDay, sectionCapacity, slotIndex } from './sections';
+import { bucketSlots, isEventDay, sectionCapacity, slotIndex, itemWorkSlot } from './sections';
 import { skipPushDate } from './skip';
 import {
   EVENTS_ID,
@@ -124,7 +124,7 @@ export function packDay(input: PackDayInput): PackDayResult {
       status: 'dropped',
       color: bucket.color,
       flexible: true,
-      ...(bucket.kind === 'event' ? {} : { slot: bucket.slot }),
+      ...(bucket.kind === 'event' ? {} : { slot: bucket.kind === 'work' ? itemWorkSlot(item, bucket) : bucket.slot }),
     });
   }
 
@@ -233,8 +233,13 @@ export function packDay(input: PackDayInput): PackDayResult {
     });
   }
 
-  function placeWorkInSlot(slot: Slot, sectionLeft: number): number {
-    const hitting = hittingFor(work);
+  function placeWorkInSlot(slot: Slot, sectionLeft: number, withBreak: boolean): number {
+    const hitting = hittingFor(work).filter(
+      (item) =>
+        itemWorkSlot(item, work) === slot &&
+        !blocks.some((b) => b.itemId === item.id) &&
+        !dropped.some((d) => d.itemId === item.id)
+    );
     const accepted: ListItem[] = [];
     let budget = remainingBudget[work.id] ?? 0;
     let left = sectionLeft;
@@ -251,7 +256,12 @@ export function packDay(input: PackDayInput): PackDayResult {
       budget -= item.durationMinutes;
       left -= item.durationMinutes;
     }
-    remainingBudget[work.id] = 0;
+    remainingBudget[work.id] = budget;
+
+    if (!withBreak) {
+      for (const item of accepted) placeItem(item, work, slot);
+      return left;
+    }
 
     if (!accepted.length) {
       placeBreak(slot);
@@ -321,13 +331,13 @@ export function packDay(input: PackDayInput): PackDayResult {
 
   for (const slot of SLOTS) {
     let left = caps[slot];
-    const inSlot = live.filter((b) => {
-      const slotOf = b.kind === 'work' || b.id === WORK_ID ? (SLOTS.includes(b.slot) ? b.slot : 'midday') : b.slot;
-      return slotOf === slot;
-    });
+    const inSlot = live.filter((b) => bucketSlots(b).includes(slot));
+    if (slot === 'midday' && !inSlot.some((b) => b.kind === 'work' || b.id === WORK_ID)) {
+      placeBreak('midday');
+    }
     for (const bucket of inSlot) {
       if (bucket.kind === 'work' || bucket.id === WORK_ID) {
-        left = placeWorkInSlot(slot, left);
+        left = placeWorkInSlot(slot, left, slot === 'midday');
         continue;
       }
       const hitting = hittingFor(bucket);

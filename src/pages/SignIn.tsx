@@ -24,7 +24,7 @@ export function SignInPage() {
         {gateError ? <p className="err">{gateError}</p> : null}
         <button
           type="button"
-          className="primary"
+          className="btn--gold"
           onClick={async () => {
             try {
               await signIn();

@@ -243,12 +243,78 @@ describe('packDay', () => {
     expect(result.blocks.some((b) => b.title === 'Break')).toBe(true);
   });
 
-  it('places Break in Work’s slot when Work has no items', () => {
+  it('places Break in midday even when Work is in another section', () => {
     const result = packDay({
       ...base(),
       buckets: [workBucket({ slot: 'evening', weeklyMinutes: 0, days: ['Tue'] })],
     });
-    expect(result.blocks.find((b) => b.title === 'Break')?.slot).toBe('evening');
+    expect(result.blocks.find((b) => b.title === 'Break')?.slot).toBe('midday');
+  });
+
+  it('does not split morning Work; Break and the 2-hour split stay in midday', () => {
+    const result = packDay({
+      ...base(),
+      buckets: [
+        workBucket({
+          slot: 'morning',
+          slots: ['morning'],
+          weeklyMinutes: 10 * 60,
+          hoursMinutes: 10 * 60,
+          days: ['Mon'],
+        }),
+      ],
+      items: [item({ id: 'deep', bucketId: 'work', title: 'Deep work', weight: 1, durationMinutes: 4 * 60 })],
+    });
+    expect(result.blocks.filter((b) => b.itemId === 'deep')).toHaveLength(1);
+    expect(result.blocks.find((b) => b.itemId === 'deep')?.slot).toBe('morning');
+    expect(result.blocks.find((b) => b.title === 'Break')?.slot).toBe('midday');
+  });
+
+  it('spreads Work across selected sections and keeps Break in midday', () => {
+    const result = packDay({
+      ...base(),
+      buckets: [
+        workBucket({
+          slot: 'morning',
+          slots: ['morning', 'midday'],
+          weeklyMinutes: 6 * 60,
+          hoursMinutes: 6 * 60,
+          days: ['Mon'],
+        }),
+      ],
+      items: [
+        item({ id: 'a', bucketId: 'work', title: 'A', weight: 1, durationMinutes: 4 * 60, slot: 'morning' }),
+        item({ id: 'b', bucketId: 'work', title: 'B', weight: 2, durationMinutes: 60, slot: 'midday' }),
+      ],
+    });
+    expect(result.blocks.find((b) => b.itemId === 'a')?.slot).toBe('morning');
+    expect(result.blocks.filter((b) => b.itemId === 'a')).toHaveLength(1);
+    expect(result.blocks.find((b) => b.itemId === 'b')?.slot).toBe('midday');
+    const breaks = result.blocks.filter((b) => b.title === 'Break');
+    expect(breaks).toHaveLength(1);
+    expect(breaks[0]?.slot).toBe('midday');
+  });
+
+  it('keeps a Work item in its assigned section instead of spilling to the next', () => {
+    const result = packDay({
+      ...base(),
+      buckets: [
+        workBucket({
+          slot: 'morning',
+          slots: ['morning', 'midday'],
+          weeklyMinutes: 6 * 60,
+          hoursMinutes: 6 * 60,
+          days: ['Mon'],
+        }),
+      ],
+      items: [
+        item({ id: 'a', bucketId: 'work', title: 'A', weight: 1, durationMinutes: 4 * 60, slot: 'morning' }),
+        item({ id: 'b', bucketId: 'work', title: 'B', weight: 2, durationMinutes: 60, slot: 'morning' }),
+      ],
+    });
+    expect(result.blocks.find((b) => b.itemId === 'a')?.slot).toBe('morning');
+    expect(result.dropped.some((d) => d.itemId === 'b')).toBe(true);
+    expect(result.blocks.some((b) => b.itemId === 'b')).toBe(false);
   });
 
   it('keeps appointments as duration-only blocks', () => {

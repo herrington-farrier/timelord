@@ -1,75 +1,83 @@
+import { useEffect, useId, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-
-import { PACK_RANGE_DAYS } from '../domain/packWeek';
-import { api } from '../services/api';
-import { todayKey } from '../shared/dates';
-import { formatActionError } from '../shared/formatActionError';
-import { useToast } from '../shared/toast';
 
 type Props = {
   title: string;
   stamp?: string;
   wide?: boolean;
+  /** Today alone runs the tighter page padding; the menu is on every page. */
+  compact?: boolean;
   actions?: ReactNode;
   children: ReactNode;
 };
 
+// No Pack entry: every write that changes the schedule repacks on its own,
+// either inside the callable or via the rebuild that follows it.
 const NAV = [
-  { to: '/', label: 'Today' },
-  { to: '/calendar', label: 'Calendar' },
-  { to: '/edit', label: 'Edit' },
+  { to: '/', label: 'Quest' },
+  { to: '/calendar', label: 'Quest Log' },
+  { to: '/edit', label: 'Organize' },
   { to: '/guide', label: 'Guide' },
-  { to: '/log', label: 'Log' },
+  { to: '/log', label: 'Stats' },
 ] as const;
 
-export function packBarVisible(pathname: string): boolean {
-  return pathname !== '/' && pathname !== '/guide';
-}
-
-export function Chrome({ title, stamp, wide, actions, children }: Props) {
+export function Chrome({ title, stamp, wide, compact, actions, children }: Props) {
   const { pathname } = useLocation();
-  const { showToast } = useToast();
-  const showPack = packBarVisible(pathname);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [lastPath, setLastPath] = useState(pathname);
+  const menuId = useId();
 
-  async function pack() {
-    try {
-      await api.rebuildRange({ start: todayKey(), days: PACK_RANGE_DAYS });
-      showToast('Packed.', 'success');
-    } catch (err) {
-      console.error(err);
-      showToast(formatActionError(err, 'Packed'), 'error');
-    }
+  // Navigating always lands with the menu shut.
+  if (lastPath !== pathname) {
+    setLastPath(pathname);
+    setMenuOpen(false);
   }
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
+
   return (
-    <div className={wide ? 'wrap cal-page' : 'wrap'}>
+    <div className={`wrap${wide ? ' cal-page' : ''}${compact ? ' wrap--compact' : ''}`}>
       <div className="title-row">
-        <nav className="title-left" aria-label="Pages">
+        <div className="title-left" />
+        <h1 className="title-heading">
+          <button
+            type="button"
+            className="title-toggle"
+            aria-expanded={menuOpen}
+            aria-controls={menuId}
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            {title}
+          </button>
+        </h1>
+        <div className="title-right">{stamp ? <span className="stamp">{stamp}</span> : null}</div>
+        <nav id={menuId} className="menu-panel" aria-label="Pages" hidden={!menuOpen}>
           {NAV.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === '/'}
+              onClick={() => setMenuOpen(false)}
               className={({ isActive }) => (isActive ? 'chrome-btn is-on' : 'chrome-btn')}
             >
               {item.label}
             </NavLink>
           ))}
+          {actions ? (
+            <div className="menu-panel__acts" onClick={() => setMenuOpen(false)}>
+              {actions}
+            </div>
+          ) : null}
         </nav>
-        <h1 className="title-heading">{title}</h1>
-        <div className="title-right">
-          {actions}
-          <span className="stamp">{stamp}</span>
-        </div>
       </div>
-      {showPack ? (
-        <div className="pack-bar">
-          <button type="button" className="primary" onClick={() => pack()}>
-            Pack the Day
-          </button>
-        </div>
-      ) : null}
       {children}
     </div>
   );

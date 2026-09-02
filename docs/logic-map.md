@@ -1,6 +1,33 @@
 # Logic map
 
-Google sign-in is invite-only. Add emails to `src/domain/allowlist.ts` and deploy functions. An existing tenant is always admitted (setup is never wiped). New accounts need an allowlisted email. Firestore reads require the `allowlisted` claim or an allowlisted email. First allowed signup and every denial write `accessLogs`. After the claim is set, refresh keeps the session and skips bootstrap. A server error on bootstrap does not sign the user out; only an invite denial does.
+## Screen names
+
+The routes never changed; only what the menu calls them.
+
+| Route | Screen | Called in this doc |
+| --- | --- | --- |
+| `/` | Quest | Today |
+| `/calendar` | Quest Log | Calendar / the board |
+| `/edit` | Organize | Edit |
+| `/log` | Stats | Log |
+| `/guide` | Guide | Guide |
+
+## Control names
+
+| Control | Reads as |
+| --- | --- |
+| Start Day | Start Quest |
+| Start Next Buckets | Start Next Chapter |
+| End Day | Hearth |
+| Start Break | Rest ZZZ (green) |
+| End Break | End Rest |
+| Reset Today | Respawn — toast `Quests reset. +1 Life` |
+| — | Reroll Stats — erases the log (`clearLogs`); two presses, second reads `Erase Stats?` |
+
+The rest of this document uses the functional names, because "today" also means
+the date being packed and renaming that would make the packing rules ambiguous.
+
+Google sign-in is invite-only. Add emails to `src/domain/allowlist.ts` and `firestore.rules`, then deploy `bootstrap` and Firestore rules. An existing tenant is always admitted (setup is never wiped). New accounts need an allowlisted email. Firestore reads require the `allowlisted` claim or an allowlisted email. First allowed signup seeds Personal / Work / Events plus generic Home and Errands (and a couple of sample list items), packs 6 weeks from this week’s Sunday if the tenant has no days yet, and writes `accessLogs`. After bootstrap, the client waits for the claim before reading. Refresh keeps the session and skips bootstrap when the claim is already present. A server error on bootstrap does not sign the user out; only an invite denial does.
 
 Timelord packs **productive** time only. `dayMinutes` splits into three equal sections (`floor(dayMinutes / 3)`, remainder on evening). Personal (Morning Routine, Break, Evening Routine) pauses productivity and is not in weekly capacity. Assignable week hours = `dayMinutes × 7`. The packer uses section timers and bucket caps, not a clock.
 
@@ -14,13 +41,13 @@ Edit → Day shows the live morning / midday / evening section lengths, plus tim
 
 Each Edit tab has one **Save** (Lists and Appointments keep row Save / Remove). After a successful write, this week’s Sunday + 6 weeks (42 days) rebuild. Buckets Save is `saveBuckets`: Personal settings + Work + Events + weighted buckets (Add New if named), cap check, then pack. Item Save keeps the stored list weight. Pack always uses fresh section thirds and clears leftover eat. Started or ended days keep Complete / Skip.
 
-Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show `slot · 8h/wk` (Personal: hours only). Packer daily budget: week-mode `floor(weeklyMinutes / days.length)` on a checked day; day-mode `hoursMinutes` on a checked day.
+Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show `slot · 8h/wk` (Work can show `morning+midday · 8h/wk`; Personal: hours only). Packer daily budget: week-mode `floor(weeklyMinutes / days.length)` on a checked day; day-mode `hoursMinutes` on a checked day.
 
 ## Locked vs customizable
 
 - **Personal** always exists. Morning Routine, Break, and Evening Routine durations are editable. Color can change. Cannot be renamed, removed, or given a list. Does not consume week hours.
-- **Work** always exists, weight 1, first in **its** slot (slot is editable). Cannot be deleted or drag-reordered. Break is tied to Work and centered in the Work block (2-hour split). Today, the 2-week board, and the side list keep Break between those Work halves. If Work has no items that day, Break still lands once in Work’s slot.
-- **Events** always exists. One or more date ranges on the bucket (1-day ranges allowed). Add / remove ranges in Edit → Buckets; page Save writes them. Collapsed row shows each range (`5d, Aug 29/Sep 2 · 1d, Sep 10`) or `off`. No slot, no week hours, no day sections. Cannot be deleted.
+- **Work** always exists, weight 1, first in each **selected** section (one or more; toggles on Edit). Cannot be deleted or drag-reordered. Break is always midday. If Work is in midday, Break sits in that Work block (2-hour split). Morning/evening Work is not split. If Work is not in midday, Break still lands once there. Each Work list item packs in one selected section.
+- **Events** always exists. One or more date ranges on the bucket (1-day ranges allowed). Add / remove ranges in Edit → Buckets; page Save writes them. Collapsed row summarises them (`2 ranges · 6d`) or `off` — the dates themselves live in the form. No slot, no week hours, no day sections. Cannot be deleted.
 - **Weighted buckets** can be added, removed, renamed, recolored, reweighted, and given days / slot / Week or Day hours.
 
 ## Today (normal day)
@@ -30,7 +57,7 @@ Buttons transform in place:
 - **Start Day** begins the morning countdown. Morning Routine happens on your own; there is no Start Routine step.
 - After Start Day, Today lists **this stretch only** (placed + falling-off) plus Personal pause controls.
 - Break: Start Break / End Break pauses/resumes the current timer.
-- After the list (and falling-off): **Start Next Buckets** + time remaining. Auto-skips leftover placed and falling-off items (same skip log rows as Skip), then opens the next stretch at its normal length. If the next stretch is 0, auto End Day. The countdown is wall-clock; hitting 0m sounds and does not start the next stretch.
+- After the list (and falling-off): **Start Next Chapter** + time remaining. Auto-skips leftover placed and falling-off items (same skip log rows as Skip), then opens the next stretch at its normal length. If the next stretch is 0, auto End Day. The countdown is wall-clock; hitting 0m sounds and does not start the next stretch.
 - Evening: **End Day** after the list.
 - Appointments sit at the top of the section list. Each has Start/Stop and counts **up**. On Stop, elapsed time is subtracted from the current section, then following sections; remaining sections repack. Appointments never sound.
 
@@ -50,10 +77,14 @@ The 2-week Sunday board and side list stay. Days before today are blank on the b
 
 Edit → Lists groups items by bucket. Groups start collapsed; the count is on the row. Add New stays open at the top.
 
-Recurring = cadence forever. Scheduled = due date + cadence. A list item’s weekday pickers only allow days the bucket runs; unchecked bucket days are disabled. Every-N-days may include an optional start date; no hits before it. Duration cannot exceed that bucket’s daily hours (week-mode share, or the day-mode hours). 0-duration reminders are exempt. Events items have no hours cap. Skip scheduled → next assigned day for that bucket. Skip recurring → no makeup. Skip-push is scheduled-only.
+Recurring = cadence forever. Scheduled = due date + cadence. A list item’s weekday pickers only allow days the bucket runs; unchecked bucket days are disabled. Every-N-days may include an optional start date; no hits before it. Duration cannot exceed that bucket’s daily hours (week-mode share, or the day-mode hours). 0-duration reminders are exempt. Events items have no hours cap. When Work has more than one section, each Work item picks one of those sections. Skip scheduled → next assigned day for that bucket. Skip recurring → no makeup. Skip-push is scheduled-only.
 
 End Day: leftover scheduled skip-push; leftover recurring drop. Next day starts clean.
 
 ## Controls
 
-Menu, Pack the Day, transforming Start/End, Start Next Buckets, End Day, Complete / Skip, Save, Reset Today, and Remove share high-contrast control styles. Log rows: gold packed, green complete, red skip. Pack the Day is a sticky bar under the title on Calendar, Edit, and Log — not Today or Guide. Guide is a short tour of what each bucket and page is for, plus the hard limits. The chrome is navy and antique gold from the app icon. The current page is marked in the menu.
+Menu, transforming Start/End, Start Next Chapter, End Day, Complete / Skip, Save, Reset Today, and Remove share high-contrast control styles. Log rows: gold packed, green complete, red skip. There is **no pack button**: every write that changes the schedule repacks 42 days on its own — inside the callable (`saveBuckets`, `resetBucket`, `upsertItem`, `reorderItems`, `archiveItem`, `reorderBuckets`) or via the client rebuild that follows it (`saveSettings`, `archiveBucket`, `upsertAppointment`, `archiveAppointment`). Guide is a short tour of what each bucket and page is for, plus the hard limits. The chrome is navy and antique gold from the app icon. The current page is marked in the menu.
+
+Selected is one treatment everywhere — gold wash, gold edge, normal text — shared by the current page, Edit tabs, day chips and pills. Solid gold is reserved for actions (Save). Every multiple-choice control is a label-sized tap target of at least 44px; the native input stays for focus, name and form value. A greyed copy of the app icon sits fixed behind every screen.
+
+**Every page** runs the same chrome: the page title *is* the menu button, and the nav sits hidden behind it, so each screen is title-only. Sign Out rides in that menu on Today. Today additionally uses tighter page padding, so it is nearly full screen. The menu closes on navigation, on Escape, and when you pick something. Start Day is the app icon, large and round, with a slow halo; pressing it starts the day and the list animates in one card at a time. When the day ends the same icon greys out — there is no “Day ended” text.

@@ -22,6 +22,7 @@ vi.mock('../services/live', () => ({
 vi.mock('../services/api', () => ({
   api: {
     resetToday: vi.fn().mockResolvedValue({ ok: true }),
+    clearLogs: vi.fn().mockResolvedValue({ ok: true, removed: 3 }),
     rebuildRange: vi.fn().mockResolvedValue({ ok: true }),
   },
 }));
@@ -36,7 +37,24 @@ describe('Edit Day', () => {
         </MemoryRouter>
       </ToastProvider>
     );
-    await user.click(screen.getByRole('button', { name: 'Reset Today' }));
+    await user.click(screen.getByRole('button', { name: 'Respawn' }));
     expect(api.resetToday).toHaveBeenCalled();
+  });
+
+  it('needs two presses to erase the log', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <EditPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+    await user.click(screen.getByRole('button', { name: 'Reroll Stats' }));
+    expect(api.clearLogs).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Erase Stats?' }));
+    expect(api.clearLogs).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Reroll Stats' })).toBeInTheDocument();
   });
 });
