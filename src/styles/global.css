@@ -1114,7 +1114,7 @@ button:disabled {
   max-width: 22rem;
   text-align: center;
 }
-.sign-in .primary { margin-top: 16px; min-width: 10rem; }
+.sign-in .btn--gold { margin-top: 16px; min-width: 10rem; }
 .eta { color: var(--gold); font-variant-numeric: tabular-nums; font-size: 0.8rem; }
 .guide { display: flex; flex-direction: column; gap: 16px; }
 .guide-card__lede {

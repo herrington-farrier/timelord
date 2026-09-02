@@ -2,6 +2,19 @@
 
 Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; only callables write. Google sign-in is invite-only (`src/domain/allowlist.ts`). Allowed users get an `allowlisted` auth claim. Firestore reads require that claim or an allowlisted email. Keep the email list in `firestore.rules` in sync when you add someone. First signup writes settings, seed buckets/items, then packs 6 weeks.
 
+## config/allowlist
+
+Function-only, and unreadable by clients — but the security rules `get()` it,
+and rules bypass rules. `emails[]` is the live invite list: adding someone is
+one edit here in the console, with no code change and no deploy.
+
+`ALLOWED_EMAILS` in `src/domain/allowlist.ts` is the seed and the floor. It is
+mirrored in `firestore.rules` deliberately, so a missing or mangled document
+cannot lock the owner out. Everyone else is added to the document only.
+
+The rules check the seed **first**, so the owners cost no extra reads; only an
+invited non-owner pays the document lookup.
+
 ## accessLogs/{id}
 
 Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `email`, `uid`, `at`. Watch this in the Firebase console to see new friends and blocked attempts.

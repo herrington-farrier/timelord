@@ -1,19 +1,43 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // The invite list lives at config/allowlist: adding someone is one edit to
+    // that document in the console, with no code change and no deploy. get()
+    // inside rules bypasses rules, so the document stays unreadable to clients.
+    //
+    // The owner addresses below are the floor, mirroring ALLOWED_EMAILS in
+    // src/domain/allowlist.ts. They exist so a missing or mangled document can
+    // never lock the owner out — the rules must not depend on data that a bad
+    // edit could remove. Everyone else is added to the document only.
+    function seedEmails() {
+      return [
+        'herrington.farrier@gmail.com',
+        'codygllc.office@gmail.com',
+        'codygllc465@gmail.com'
+      ];
+    }
+
+    function invitedList() {
+      return exists(/databases/$(database)/documents/config/allowlist)
+        ? get(/databases/$(database)/documents/config/allowlist).data.get('emails', [])
+        : [];
+    }
+
     function invited() {
       return request.auth != null && (
         request.auth.token.allowlisted == true
-        || request.auth.token.email in [
-          'herrington.farrier@gmail.com',
-          'codygllc.office@gmail.com',
-          'codygllc465@gmail.com'
-        ]
+        || request.auth.token.email in seedEmails()
+        || request.auth.token.email in invitedList()
       );
     }
 
     function isOwner(tenantId) {
       return invited() && request.auth.uid == tenantId;
+    }
+
+    match /config/{document=**} {
+      allow read, write: if false;
     }
 
     match /accessLogs/{id} {

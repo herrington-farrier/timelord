@@ -1,3 +1,9 @@
+/**
+ * The seed and the floor. The live invite list is the Firestore document
+ * `config/allowlist`, which both the sign-in gate and the security rules read,
+ * so adding someone needs no deploy. These addresses always work, so a bad edit
+ * to that document cannot lock everyone out.
+ */
 export const ALLOWED_EMAILS = [
   'herrington.farrier@gmail.com',
   'codygllc.office@gmail.com',

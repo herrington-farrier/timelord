@@ -136,6 +136,17 @@ Tick as you go. Anything that fails, tell me the item number.
     weekly errand, and an event a fortnight out with an item in it.
     *(Only testable on a fresh account.)*
 
+## Access
+
+52. **Adding someone** — put their address in `config/allowlist` (Firestore
+    console, lowercase). They can sign in within about five minutes; the
+    functions cache the list that long.
+53. **A stranger** — signing in with an uninvited Google account should refuse
+    with "This app is invite-only" and sign them straight back out.
+54. **You are never locked out** — the owner addresses are hardcoded as a floor
+    in both the rules and the code, so even an empty or deleted
+    `config/allowlist` leaves your own access intact.
+
 ## Known by design — not bugs
 
 - Completing an appointment does not change remaining time. The hours come out

@@ -2,8 +2,9 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { setGlobalOptions } from 'firebase-functions/v2/options';
+import { beforeUserCreated } from 'firebase-functions/v2/identity';
 
-import { canAdmitAccount, isAllowedEmail } from '../../src/domain/allowlist';
 
 import { eventRangeName, eventRanges, expiredEventRanges, parseEventRanges } from '../../src/domain/events';
 import { canDeleteBucket } from '../../src/domain/seed';
@@ -20,9 +21,14 @@ import { APPOINTMENTS_ID, EVENTS_ID, WORK_ID } from '../../src/domain/types';
 import { addDaysKey, weekStart } from '../../src/shared/dates';
 import { stampCreated, stampLastUpdated } from './actorAudit';
 import { asNumber, asString, authEmail, newId, requireSignedIn, requireUid } from './http';
+import { ensureAllowlistDoc, isInvited } from './allowlist';
 import { ensureTenant, loadTenant, tenantRef } from './tenant';
 
 initializeApp();
+
+// A spammed endpoint should cost a capped amount, not an open-ended one. Well
+// above what a handful of invited users need, well below a runaway bill.
+setGlobalOptions({ maxInstances: 10 });
 
 function domainCall<T>(fn: () => T): T {
   try {
@@ -271,13 +277,55 @@ async function writeAccessLog(row: { type: 'signup' | 'denied'; email: string; u
   });
 }
 
-function assertInvitedEmail(email: string | undefined): void {
-  if (isAllowedEmail(email)) return;
+/** The one refusal a stranger ever sees. Deliberately says nothing useful. */
+function refuseUninvited(): never {
   throw new HttpsError('permission-denied', 'This app is invite-only.');
 }
 
+/**
+ * Denials are worth seeing, but writing one per attempt turns a spammed sign-in
+ * into a billing problem. Each instance remembers who it has already turned
+ * away, so a hammered endpoint writes once rather than thousands of times.
+ */
+const deniedSeen = new Set<string>();
+
+async function logDenialOnce(email: string, uid: string): Promise<void> {
+  const key = `${uid}:${email}`;
+  if (deniedSeen.has(key)) return;
+  // Bounded: an instance that has seen a lot of strangers forgets the oldest.
+  if (deniedSeen.size > 500) deniedSeen.clear();
+  deniedSeen.add(key);
+  await writeAccessLog({ type: 'denied', email, uid });
+}
+
+/**
+ * The door. A non-invited Google account is refused here, before Firebase
+ * creates the user, so strangers never reach bootstrap and never appear in the
+ * account list at all. Everything after this is a second line rather than the
+ * only one — bootstrap still checks, in case this trigger is ever disabled.
+ *
+ * Fails open to the seed list rather than closed: an unreadable allowlist must
+ * not lock the owner out of their own app.
+ */
+export const gateSignUp = beforeUserCreated(async (event) => {
+  const email = event.data?.email;
+  if (await isInvited(email)) return;
+  throw new HttpsError('permission-denied', 'This app is invite-only.');
+});
+
 export const bootstrap = onCall(async (request) => {
   const uid = requireSignedIn(request);
+  const tenant = tenantRef(uid);
+
+  // Cheapest path first. A spammed sign-in should cost nothing, so the token's
+  // own email is checked against the cached invite list before any Auth or
+  // Firestore read happens. Only a plausible caller gets the expensive lookups.
+  const tokenEmail = authEmail(request, '');
+  if (tokenEmail && !(await isInvited(tokenEmail))) {
+    await logDenialOnce(tokenEmail, uid);
+    refuseUninvited();
+  }
+
   const record = await getAuth().getUser(uid);
   const providerEmail = record.providerData.map((p) => p.email).find(Boolean) || '';
   const hinted = typeof request.data?.email === 'string' ? request.data.email.trim() : '';
@@ -290,13 +338,13 @@ export const bootstrap = onCall(async (request) => {
       /* hinted email is not this account */
     }
   }
-  const tenant = tenantRef(uid);
   const existed = (await tenant.get()).exists;
-  if (!canAdmitAccount(email, existed)) {
-    await writeAccessLog({ type: 'denied', email, uid });
-    assertInvitedEmail(email);
+  if (!existed && !(await isInvited(email))) {
+    await logDenialOnce(email, uid);
+    refuseUninvited();
   }
   await ensureTenant(uid, nowIso());
+  await ensureAllowlistDoc();
   await getAuth().setCustomUserClaims(uid, { allowlisted: true });
   if (!existed) await writeAccessLog({ type: 'signup', email, uid });
   const daysSnap = await tenant.collection('days').limit(1).get();
