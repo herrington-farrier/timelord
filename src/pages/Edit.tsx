@@ -169,6 +169,7 @@ function DayForm({
           eveningMinutes: settings.eveningMinutes,
           timerSound: fd.get('timerSound') === 'on',
           timerVibrate: fd.get('timerVibrate') === 'on',
+          personalCountsAsDay: fd.get('personalCountsAsDay') === 'on',
         });
       }}
     >
@@ -179,6 +180,19 @@ function DayForm({
           <FormField label="Transition minutes">
             <input name="trans" type="number" min={0} defaultValue={settings.transitionMinutes} />
           </FormField>
+          <div className="field">
+            <span>Personal time</span>
+            <div className="pills" role="group" aria-label="Personal time">
+              <label>
+                <input
+                  name="personalCountsAsDay"
+                  type="checkbox"
+                  defaultChecked={settings.personalCountsAsDay === true}
+                />
+                Counts as day hours
+              </label>
+            </div>
+          </div>
           <div className="field">
             <span>Timer alerts</span>
             <div className="pills" role="group" aria-label="Timer alerts">

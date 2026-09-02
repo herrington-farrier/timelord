@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { assignableWeekMinutes } from '../domain/budget';
 import { collectEndDaySkipPushes, daySections, packDay, sectionMinutes } from '../domain/packDay';
 import { todaySectionItems } from '../domain/today';
 import { PACK_RANGE_DAYS, packRange } from '../domain/packWeek';
-import { appointmentLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity } from '../domain/sections';
+import { reservedLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity } from '../domain/sections';
 import { leftoverSectionBlocks, nextAssignedDate, skipPushDate } from '../domain/skip';
 import { APPOINTMENTS_BUCKET } from '../domain/seed';
 import { APPOINTMENTS_ID, EVENTS_ID, type PackedBlock } from '../domain/types';
@@ -794,16 +795,27 @@ describe('capsAfterLoad', () => {
   });
 });
 
-describe('appointmentLoad', () => {
-  it('totals appointment minutes per section and ignores everything else', () => {
-    const load = appointmentLoad([
+describe('reservedLoad', () => {
+  it('totals what a section owes before any bucket competes for it', () => {
+    const load = reservedLoad([
       { kind: 'appointment', slot: 'morning', durationMinutes: 60 },
       { kind: 'appointment', slot: 'morning', durationMinutes: 30 },
       { kind: 'appointment', slot: 'evening', durationMinutes: 45 },
       { kind: 'weighted', slot: 'morning', durationMinutes: 90 },
+      // Personal carries 0 unless it counts as day time, so it costs nothing here
       { kind: 'personal', slot: 'midday', durationMinutes: 0 },
     ]);
     expect(load).toEqual({ morning: 90, midday: 0, evening: 45 });
+  });
+
+  it('counts Personal once it carries minutes, and drops anything skipped', () => {
+    const load = reservedLoad([
+      { kind: 'personal', slot: 'morning', durationMinutes: 30 },
+      { kind: 'personal', slot: 'midday', durationMinutes: 15 },
+      { kind: 'personal', slot: 'evening', durationMinutes: 20, status: 'skipped' },
+      { kind: 'appointment', slot: 'morning', durationMinutes: 60 },
+    ]);
+    expect(load).toEqual({ morning: 90, midday: 15, evening: 0 });
   });
 });
 
@@ -896,5 +908,61 @@ describe('auto-skip when moving to the next section', () => {
       [APPOINTMENTS_BUCKET]
     );
     expect(pushes).toEqual([]);
+  });
+});
+
+describe('Personal counted as day time', () => {
+  const base3h = () => ({
+    date: monday,
+    buckets: [workBucket({ weeklyMinutes: 0, days: ['Tue'] }), bucket({
+      id: 'house',
+      name: 'House',
+      weight: 4,
+      weeklyMinutes: 600,
+      days: ['Mon'],
+      slots: ['morning', 'midday', 'evening'],
+    })],
+    items: [item({ id: 'am', bucketId: 'house', title: 'Morning task', durationMinutes: 45, slot: 'morning' })],
+  });
+
+  it('leaves the day alone when Personal sits beside it', () => {
+    const result = packDay({
+      ...base3h(),
+      settings: settings({ dayMinutes: 180, morningMinutes: 30, breakMinutes: 15, eveningMinutes: 30 }),
+    });
+    const routine = result.blocks.find((b) => b.title === 'Morning Routine');
+    expect(routine?.durationMinutes).toBe(0);
+    expect(result.blocks.some((b) => b.itemId === 'am')).toBe(true);
+  });
+
+  it('takes Personal minutes out of their sections when it counts as day time', () => {
+    const result = packDay({
+      ...base3h(),
+      settings: settings({
+        dayMinutes: 180,
+        morningMinutes: 45,
+        breakMinutes: 15,
+        eveningMinutes: 30,
+        personalCountsAsDay: true,
+      }),
+    });
+    const routine = result.blocks.find((b) => b.title === 'Morning Routine');
+    // the routine now carries its minutes and is a real item
+    expect(routine?.durationMinutes).toBe(45);
+    // morning is 60m; 45m of routine leaves 15m, so the 45m task falls off
+    expect(result.dropped.some((d) => d.itemId === 'am')).toBe(true);
+  });
+});
+
+describe('assignable week', () => {
+  it('comes off the top only when Personal counts as day time', () => {
+    const beside = settings({ dayMinutes: 180, morningMinutes: 30, breakMinutes: 15, eveningMinutes: 15 });
+    expect(assignableWeekMinutes(beside)).toBe(180 * 7);
+    expect(assignableWeekMinutes({ ...beside, personalCountsAsDay: true })).toBe((180 - 60) * 7);
+  });
+
+  it('never goes negative when Personal outgrows the day', () => {
+    const s = settings({ dayMinutes: 60, morningMinutes: 60, breakMinutes: 60, eveningMinutes: 60 });
+    expect(assignableWeekMinutes({ ...s, personalCountsAsDay: true })).toBe(0);
   });
 });

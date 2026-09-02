@@ -199,19 +199,25 @@ Row Save buttons are gone; Remove stays, being per-row and immediate.
 `upsertItem` was left with no caller and has been deleted, client binding and
 deployed function both.
 
-### F2. Count Personal hours as day hours (toggle)
+### F2. Personal counted as day time — **done**
 
-A setting on Strategize → Day. When on:
+A toggle on Strategize → Day. Off (the default) nothing changes: Personal is a
+pause beside the day and costs nothing.
 
-- Morning Routine and Evening Routine become completable / skippable items rather
-  than silent pauses.
-- Their minutes count against the day's capacity and against weekly capacity.
+On, three things follow from one idea — Personal time is inside the day:
 
-**Care needed:** `assignableWeekMinutes` is `dayMinutes × 7` and deliberately
-excludes Personal; the week-budget cap check on Buckets Save depends on that. The
-toggle changes that arithmetic, so `weekBudgetSummary`, `assignedWeekMinutes` and
-the Buckets cap check all need to read the flag. Get the budget maths right
-before touching the UI.
+- The routines and Break carry their real minutes instead of 0, so they come out
+  of their sections before any bucket competes for what is left.
+- `assignableWeekMinutes` takes Personal off the top, so the Buckets cap check
+  knows the week is smaller. Turning the toggle on with a full week is refused
+  by the existing cap check rather than silently overbooking.
+- The routines appear on Quest as items to complete or skip, because they now
+  cost something. Off, they carry 0 minutes and stay invisible markers.
+
+`appointmentLoad` became `reservedLoad` and counts Personal alongside
+appointments. No branch on the setting is needed anywhere in the timers: Personal
+blocks carry 0 minutes when the toggle is off, so the same arithmetic is correct
+in both modes.
 
 ### F3. Appointments get list-item features
 

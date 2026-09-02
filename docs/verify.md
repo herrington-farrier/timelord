@@ -81,6 +81,13 @@ Tick as you go. Anything that fails, tell me the item number.
     bucket, not a dropdown. Give a weighted bucket two sections; its items in
     Lists then get a section picker offering just those two.
 
+44. **Personal as day time** — Strategize → Day, tick "Counts as day hours".
+    Morning Routine and Evening Routine then appear on Quest as items with their
+    minutes, come out of their sections, and the assignable week in Buckets
+    shrinks by the Personal total. Untick it and they go back to invisible
+    markers. With a full week already assigned, turning it on should be refused
+    by the week cap rather than silently overbooking.
+
 ## Quest Log
 
 33. **Booked per day** — days with appointments show `2h booked` in the

@@ -45,10 +45,13 @@ export function todaySectionItems(blocks: PackedBlock[], section: Slot): PackedB
     // Appointments used to be slot-less and shown in every section. They are
     // bucket items now, so they belong to exactly one, like anything else.
     if (b.title === 'Break' && b.slot === section) return true;
+    // Personal routines are invisible markers until Personal counts as day
+    // time, at which point they carry minutes and are yours to complete.
+    if (b.kind === 'personal') return b.durationMinutes > 0 && b.slot === section;
     // A long appointment stays on the list through every section it spans,
     // rather than vanishing the moment the next stretch opens.
     if (b.slots?.length) return b.slots.includes(section);
-    return b.kind !== 'personal' && b.slot === section;
+    return b.slot === section;
   });
 }
 

@@ -2,7 +2,7 @@ export type { Bucket, Cadence, DaySettings, EventRange, HoursMode, ListItem, Pac
 export { DEFAULT_SETTINGS, EVENTS_ID, PERSONAL_ID, SLOTS, WEEKDAYS, WORK_ID } from './types';
 export { cadenceHitsDate, weekdayFromKey, addDaysKey } from './cadence';
 export { durationInputs, formatApptTime, formatDuration, formatClock, hoursToMinutes, splitMinutes } from './duration';
-export { assignWeeklyBudgets, assignableWeekMinutes, assignedDayBudget, assignedWeekMinutes, bucketAssignedMinutes, dailyBudgetFor, derivedWeeklyMinutes, formatBucketHours, formatHoursField, hoursMinutesOf, hoursModeOf, itemExceedsBucketMessage, itemFitsBucket, weekBudgetSummary, weeklyCapacity, collapsedSlotHours, eventsSummaryLabel, loadTone, freeTone } from './budget';
+export { assignWeeklyBudgets, assignableWeekMinutes, personalCountsAsDay, personalDayMinutes, assignedDayBudget, assignedWeekMinutes, bucketAssignedMinutes, dailyBudgetFor, derivedWeeklyMinutes, formatBucketHours, formatHoursField, hoursMinutesOf, hoursModeOf, itemExceedsBucketMessage, itemFitsBucket, weekBudgetSummary, weeklyCapacity, collapsedSlotHours, eventsSummaryLabel, loadTone, freeTone } from './budget';
 export { eventRanges, eventRangeForItem, eventRangeName, expiredEventRanges, liveEventRanges, newEventRangeId, parseEventRanges } from './events';
 export { packDay, collectEndDaySkipPushes, daySections, sectionMinutes } from './packDay';
 export { PACK_RANGE_DAYS, packRange } from './packWeek';
@@ -10,7 +10,7 @@ export { recomputeEtas } from './etas';
 export { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate, nextAssignedDate } from './skip';
 export { SEED_BUCKETS, seedItems, seedEventRanges, PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET, APPOINTMENTS_BUCKET, isAppointmentBucket, defaultSettings, canDeleteBucket, canRenameBucket, splitEditBuckets, listableBuckets, listCadenceDays, bucketsToBackfill } from './seed';
 export { applyBucketOrder, applyItemOrder, sortByWeight, nextItemWeight } from './order';
-export { appointmentLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity, usedFromEat, bucketSlots, parseBucketSlots, itemWorkSlot, itemSlots, workShowsItemSlot } from './sections';
+export { reservedLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity, usedFromEat, bucketSlots, parseBucketSlots, itemWorkSlot, itemSlots, workShowsItemSlot } from './sections';
 export { sectionRemainingNow, elapsedSince } from './timer';
 export { formatCountdown, nextSectionAction, nextSectionMinutes, openBlocks, bookedMinutes, slotLabel, todaySectionItems, todayEventItems, isEventPacked, isBreakBlock } from './today';
 export { formatLogEvent, logEventTone } from './log';

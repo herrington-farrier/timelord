@@ -10,7 +10,7 @@ import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
 import { PACK_RANGE_DAYS } from '../../src/domain/packWeek';
-import { appointmentLoad, bucketSlots, capsAfterLoad, eatFromSections, isEventDay, itemWorkSlot, liveSectionState, nextSlot, parseBucketSlots, sectionCapacity, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
+import { reservedLoad, bucketSlots, capsAfterLoad, eatFromSections, isEventDay, itemWorkSlot, liveSectionState, nextSlot, parseBucketSlots, sectionCapacity, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
 import { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate } from '../../src/domain/skip';
 import { elapsedSince, sectionRemainingNow } from '../../src/domain/timer';
 import { nextItemWeight } from '../../src/domain/order';
@@ -343,6 +343,7 @@ export const saveSettings = onCall(async (request) => {
     eveningMinutes: asNumber(data.eveningMinutes, 'Evening Routine'),
     timerSound: data.timerSound !== false,
     timerVibrate: data.timerVibrate === true,
+    personalCountsAsDay: data.personalCountsAsDay === true,
   };
   if (patch.dayMinutes < 60) {
     throw new HttpsError('invalid-argument', 'Day length must be at least 1 hour.');
@@ -819,8 +820,8 @@ async function refundSkippedAppointment(uid: string, date: string): Promise<void
   const loaded = await loadTenant(uid);
   const settings = loaded.settings as DaySettings;
   const base = sectionCapacity(settings, data.sectionExtra || {}, data.sectionUsed);
-  const before = capsAfterLoad(base, appointmentLoad((data.blocks || []).map((b) => ({ ...b, status: 'pending' }))));
-  const after = capsAfterLoad(base, appointmentLoad(data.blocks || []));
+  const before = capsAfterLoad(base, reservedLoad((data.blocks || []).map((b) => ({ ...b, status: 'pending' }))));
+  const after = capsAfterLoad(base, reservedLoad(data.blocks || []));
   const result = domainCall(() =>
     packDay(asPackInput(loaded, date, [...(data.blocks || []), ...(data.dropped || [])], data.sectionExtra, data.sectionUsed))
   );
@@ -928,7 +929,7 @@ async function beginSection(uid: string, date: string, section: Slot | 'event'):
   );
   // The timer counts down the time actually available, so it has to subtract
   // appointments the same way the packer does — including what spills forward.
-  const caps = capsAfterLoad(sectionCapacity(settings, extra, used), appointmentLoad(blocks));
+  const caps = capsAfterLoad(sectionCapacity(settings, extra, used), reservedLoad(blocks));
   await dayRef.set(
     {
       startedAt: prev.startedAt || nowIso(),
@@ -982,7 +983,7 @@ export const startNext = onCall(async (request) => {
   const used = data.sectionUsed || {};
   const caps = capsAfterLoad(
     sectionCapacity(loaded.settings as DaySettings, extra, used),
-    appointmentLoad(blocks)
+    reservedLoad(blocks)
   );
   async function writeAutoSkips(): Promise<void> {
     for (const b of skipLogBlocks(leftovers)) {

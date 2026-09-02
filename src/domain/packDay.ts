@@ -1,4 +1,4 @@
-import { assignWeeklyBudgets, dailyBudgetFor } from './budget';
+import { assignWeeklyBudgets, dailyBudgetFor, personalCountsAsDay } from './budget';
 import { cadenceHitsDate } from './cadence';
 import { isAppointmentBucket } from './seed';
 import { bucketSlots, capsAfterLoad, isEventDay, itemSlots, sectionCapacity, slotIndex, itemWorkSlot } from './sections';
@@ -145,13 +145,23 @@ export function packDay(input: PackDayInput): PackDayResult {
   }
 
   const personalColor = personal?.color || '5b9bd5';
+  // Personal is normally a pause beside the day and costs nothing. When it
+  // counts as day time, the routines and Break take real minutes.
+  const countsPersonal = personalCountsAsDay(settings);
+  const personalMins: Record<Slot, number> = countsPersonal
+    ? {
+        morning: Math.max(0, Number(settings.morningMinutes) || 0),
+        midday: Math.max(0, Number(settings.breakMinutes) || 0),
+        evening: Math.max(0, Number(settings.eveningMinutes) || 0),
+      }
+    : { morning: 0, midday: 0, evening: 0 };
   pushBlock({
     id: blockId(date, 'morning'),
     bucketId: PERSONAL_ID,
     title: 'Morning Routine',
     kind: 'personal',
     startMinutes: order++,
-    durationMinutes: 0,
+    durationMinutes: personalMins.morning,
     status: 'pending',
     color: personalColor,
     flexible: true,
@@ -163,7 +173,7 @@ export function packDay(input: PackDayInput): PackDayResult {
     title: 'Evening Routine',
     kind: 'personal',
     startMinutes: 900 + order++,
-    durationMinutes: 0,
+    durationMinutes: personalMins.evening,
     status: 'pending',
     color: personalColor,
     flexible: true,
@@ -240,7 +250,11 @@ export function packDay(input: PackDayInput): PackDayResult {
       apptLoad[itemSlots(appt, apptBucket)[0]] += Math.max(0, appt.durationMinutes);
     }
   }
-  const bucketCaps = capsAfterLoad(caps, apptLoad);
+  const bucketCaps = capsAfterLoad(caps, {
+    morning: apptLoad.morning + personalMins.morning,
+    midday: apptLoad.midday + personalMins.midday,
+    evening: apptLoad.evening + personalMins.evening,
+  });
 
   function placeBreak(slot: Slot): void {
     pushBlock({
@@ -249,7 +263,7 @@ export function packDay(input: PackDayInput): PackDayResult {
       title: 'Break',
       kind: 'personal',
       startMinutes: order++,
-      durationMinutes: 0,
+      durationMinutes: personalMins.midday,
       status: 'pending',
       color: personalColor,
       flexible: true,

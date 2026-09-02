@@ -27,7 +27,9 @@ describe('today section list', () => {
         block({ id: 'house', kind: 'weighted', title: 'Floors', slot: 'morning' }),
         block({ id: 'work', kind: 'work', title: 'Standup', slot: 'midday' }),
         block({ id: 'break', kind: 'personal', title: 'Break', slot: 'morning' }),
-        block({ id: 'morning', kind: 'personal', title: 'Morning Routine', slot: 'morning' }),
+        // 0 minutes: Personal is a pause beside the day, so the routine is a
+        // marker rather than something to complete.
+        block({ id: 'morning', kind: 'personal', title: 'Morning Routine', slot: 'morning', durationMinutes: 0 }),
       ],
       'morning'
     );
@@ -132,5 +134,19 @@ describe('booked time', () => {
       block({ id: 'd', kind: 'weighted', title: 'Floors', slot: 'morning', durationMinutes: 60 }),
     ];
     expect(bookedMinutes(blocks)).toBe(120);
+  });
+});
+
+describe('Personal counting as day time', () => {
+  it('puts the routine on the list once it carries minutes', () => {
+    const routine = (durationMinutes: number) =>
+      todaySectionItems(
+        [block({ id: 'morning', kind: 'personal', title: 'Morning Routine', slot: 'morning', durationMinutes })],
+        'morning'
+      );
+    // beside the day: a marker, not an item
+    expect(routine(0)).toEqual([]);
+    // inside the day: yours to complete or skip
+    expect(routine(30).map((b) => b.id)).toEqual(['morning']);
   });
 });

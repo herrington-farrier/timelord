@@ -10,7 +10,8 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 
 - `dayMinutes` (productive time; split into three packer sections), `dayStartMinutes` (unused by the packer), `transitionMinutes`, `timezone`
 - `morningMinutes`, `breakMinutes`, `eveningMinutes` (Personal pause lengths; not in weekly capacity)
-- `timerSound`, `timerVibrate` (section timers and event stopwatch)
+- `timerSound`, `timerVibrate` (section timers)
+- `personalCountsAsDay` — when true, Personal minutes come out of the day and its sections rather than sitting beside them
 - audit stamps
 
 ## buckets/{id}

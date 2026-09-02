@@ -13,12 +13,26 @@ export function weeklyCapacity(settings: DaySettings): number {
   return minutes(settings.dayMinutes) * 7;
 }
 
-export function personalWeekMinutes(settings: DaySettings): number {
-  return (minutes(settings.morningMinutes) + minutes(settings.breakMinutes) + minutes(settings.eveningMinutes)) * 7;
+export function personalDayMinutes(settings: DaySettings): number {
+  return minutes(settings.morningMinutes) + minutes(settings.breakMinutes) + minutes(settings.eveningMinutes);
 }
 
+export function personalWeekMinutes(settings: DaySettings): number {
+  return personalDayMinutes(settings) * 7;
+}
+
+/** True when Personal time is counted inside the day rather than beside it. */
+export function personalCountsAsDay(settings: DaySettings): boolean {
+  return settings.personalCountsAsDay === true;
+}
+
+/**
+ * Time the buckets may be given. Personal is normally beside the day and costs
+ * nothing; when it counts as day time, it comes off the top first.
+ */
 export function assignableWeekMinutes(settings: DaySettings): number {
-  return weeklyCapacity(settings);
+  const capacity = weeklyCapacity(settings);
+  return personalCountsAsDay(settings) ? Math.max(0, capacity - personalWeekMinutes(settings)) : capacity;
 }
 
 export function assignedWeekMinutes(buckets: Bucket[]): number {
@@ -62,7 +76,7 @@ export function weekBudgetSummary(settings: DaySettings, assignedMinutes: number
   const assigned = minutes(assignedMinutes);
   return {
     capacityMinutes,
-    personalMinutes: 0,
+    personalMinutes: personalCountsAsDay(settings) ? personalWeekMinutes(settings) : 0,
     assignableMinutes,
     assignedMinutes: assigned,
     leftoverMinutes: assignableMinutes - assigned,

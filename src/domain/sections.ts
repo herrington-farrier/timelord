@@ -113,15 +113,17 @@ export function eatFromSections(
 }
 
 /**
- * Appointment minutes owed by each section, taken from a packed day.
+ * Minutes each section owes before any bucket competes for it: appointments,
+ * plus Personal when it counts as day time. Personal blocks carry 0 minutes
+ * otherwise, so this needs no branch on the setting.
  */
-export function appointmentLoad(
+export function reservedLoad(
   blocks: { kind?: string; slot?: Slot; durationMinutes?: number; status?: string }[]
 ): Record<Slot, number> {
   const load: Record<Slot, number> = { morning: 0, midday: 0, evening: 0 };
   for (const b of blocks) {
-    if (b.kind !== 'appointment') continue;
-    // A cancelled appointment hands its hours back to the day.
+    if (b.kind !== 'appointment' && b.kind !== 'personal') continue;
+    // A cancelled appointment — or a skipped routine — hands its hours back.
     if (b.status === 'skipped') continue;
     const slot = b.slot && SLOTS.includes(b.slot) ? b.slot : 'morning';
     load[slot] += Math.max(0, Number(b.durationMinutes) || 0);

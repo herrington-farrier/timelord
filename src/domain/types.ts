@@ -26,6 +26,12 @@ export type DaySettings = {
   eveningMinutes: number;
   timerSound?: boolean;
   timerVibrate?: boolean;
+  /**
+   * When true, Personal time is part of the day rather than a pause beside it:
+   * the routines and Break take real minutes out of their sections and off the
+   * assignable week, and the routines become items you complete or skip.
+   */
+  personalCountsAsDay?: boolean;
 };
 
 export type Bucket = {
