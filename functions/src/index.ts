@@ -5,7 +5,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 import { canAdmitAccount, isAllowedEmail } from '../../src/domain/allowlist';
 
-import { eventRanges, parseEventRanges } from '../../src/domain/events';
+import { eventRangeName, eventRanges, expiredEventRanges, parseEventRanges } from '../../src/domain/events';
 import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
@@ -163,9 +163,49 @@ async function writePackedRange(uid: string, start: string, days: number): Promi
  * event entry — changes one or two days, not the whole range, so it says so
  * rather than rebuilding six weeks.
  */
+/**
+ * Delete events whose last day has passed, and everything scheduled inside
+ * them. Decided as delete rather than archive: no history is kept for events,
+ * so archiving would only accumulate rows nothing ever reads.
+ *
+ * Runs off the tenant data a repack has already loaded, and writes only when
+ * there is something to remove, so the common case costs nothing.
+ */
+async function pruneExpiredEvents(
+  uid: string,
+  loaded: Awaited<ReturnType<typeof loadTenant>>
+): Promise<Awaited<ReturnType<typeof loadTenant>>> {
+  const buckets = loaded.buckets as Bucket[];
+  const events = buckets.find((b) => !b.archived && (b.kind === 'event' || b.id === EVENTS_ID));
+  if (!events) return loaded;
+  const ranges = eventRanges(events);
+  const expired = expiredEventRanges(ranges, todayKey());
+  if (!expired.length) return loaded;
+
+  const gone = new Set(expired.map((r) => r.id));
+  const kept = ranges.filter((r) => !gone.has(r.id));
+  const items = loaded.items as ListItem[];
+  const doomed = items.filter(
+    (it) => it.bucketId === events.id && it.eventId && gone.has(it.eventId)
+  );
+
+  const batch = getFirestore().batch();
+  const stamp = await stampLastUpdated(uid, nowIso());
+  batch.set(tenantRef(uid).collection('buckets').doc(events.id), { ranges: kept, ...stamp }, { merge: true });
+  for (const it of doomed) batch.delete(tenantRef(uid).collection('items').doc(it.id));
+  await batch.commit();
+
+  return {
+    ...loaded,
+    buckets: buckets.map((b) => (b.id === events.id ? { ...b, ranges: kept } : b)),
+    items: items.filter((it) => !doomed.some((d) => d.id === it.id)),
+  };
+}
+
 async function writePackedDates(uid: string, dates: string[]): Promise<void> {
   if (!dates.length) return;
-  const loaded = await loadTenant(uid);
+  let loaded = await loadTenant(uid);
+  loaded = await pruneExpiredEvents(uid, loaded);
   const daysCol = tenantRef(uid).collection('days');
   const prevSnaps = await getFirestore().getAll(...dates.map((d) => daysCol.doc(d)));
 
@@ -489,6 +529,19 @@ export const upsertItem = onCall(async (request) => {
   // and never run on a cadence.
   const type = eventItem || apptItem ? 'scheduled' : asString(data.type, 'Type');
   const dueAt = type === 'scheduled' ? asString(data.dueAt, 'Date') : '';
+  let eventId = '';
+  if (eventItem) {
+    const ranges = eventRanges(bucket);
+    eventId = typeof data.eventId === 'string' ? data.eventId.trim() : '';
+    const range = ranges.find((r) => r.id === eventId);
+    if (!range) throw new HttpsError('invalid-argument', 'Pick an event for this item.');
+    if (dueAt < range.startDate || dueAt > range.endDate) {
+      throw new HttpsError(
+        'invalid-argument',
+        `${eventRangeName(range)} runs ${range.startDate} to ${range.endDate}.`
+      );
+    }
+  }
   const weight = existing.exists
     ? Number.isFinite(storedWeight)
       ? storedWeight
@@ -505,6 +558,7 @@ export const upsertItem = onCall(async (request) => {
     archived: false,
     // Display only. Never read by the packer.
     apptTime: apptItem && typeof data.apptTime === 'string' ? data.apptTime.trim().slice(0, 40) : '',
+    eventId,
   };
   const isWork = Boolean(bucket && (bucket.kind === 'work' || bucket.id === WORK_ID));
   if (isWork && bucket) {

@@ -21,7 +21,7 @@ import {
   type WeekBudgetSummary,
 } from '../domain/budget';
 import { durationInputs, formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
-import { eventRanges, newEventRangeId, parseEventRanges } from '../domain/events';
+import { eventRangeForItem, eventRangeName, eventRanges, newEventRangeId, parseEventRanges } from '../domain/events';
 import { PACK_RANGE_DAYS } from '../domain/packWeek';
 import { canDeleteBucket, canRenameBucket, listCadenceDays, listableBuckets, splitEditBuckets } from '../domain/seed';
 import { bucketSlots, itemWorkSlot, workShowsItemSlot } from '../domain/sections';
@@ -396,11 +396,14 @@ function BucketsForm({
             if (eventsForm) {
               const fd = new FormData(eventsForm);
               const ids = fd.getAll('rangeId').map(String);
+              const names = fd.getAll('rangeName').map(String);
               const starts = fd.getAll('rangeStart').map(String);
               const ends = fd.getAll('rangeEnd').map(String);
               let ranges: EventRange[] = [];
               try {
-                ranges = parseEventRanges(ids.map((id, i) => ({ id, startDate: starts[i] || '', endDate: ends[i] || '' })));
+                ranges = parseEventRanges(
+                  ids.map((id, i) => ({ id, name: names[i] || '', startDate: starts[i] || '', endDate: ends[i] || '' }))
+                );
               } catch (err) {
                 showToast(formatActionError(err, 'Events'), 'error');
                 return;
@@ -625,6 +628,9 @@ function EventsCard({ bucket }: { bucket: Bucket }) {
           {ranges.map((range) => (
             <div key={range.id} className="event-range">
               <input type="hidden" name="rangeId" value={range.id} />
+              <FormField label="Event" wide>
+                <input name="rangeName" type="text" placeholder="Conference" defaultValue={range.name || ''} />
+              </FormField>
               <FormField label="Start">
                 <input name="rangeStart" type="date" defaultValue={range.startDate} />
               </FormField>
@@ -785,6 +791,54 @@ function ListsForm({
         const rows = grouped[b.id] || [];
         if (!rows.length) return null;
         const ids = rows.map((r) => r.id);
+        // Events items are grouped under the event they belong to, so you read
+        // "Conference · 3" rather than one flat pile keyed by remembered dates.
+        if (b.kind === 'event' || b.id === EVENTS_ID) {
+          const ranges = eventRanges(b);
+          const byEvent = ranges.map((r) => ({
+            range: r,
+            rows: rows.filter((row) => eventRangeForItem(ranges, row)?.id === r.id),
+          }));
+          const orphans = rows.filter((row) => !eventRangeForItem(ranges, row));
+          return (
+            <div key={b.id}>
+              {byEvent.map(({ range, rows: eventRows }) => (
+                <CollapsibleBucket
+                  key={range.id}
+                  title={eventRangeName(range)}
+                  hours={`${range.startDate} to ${range.endDate} · ${eventRows.length}`}
+                  color={b.color}
+                >
+                  {eventRows.map((row) => (
+                    <div key={row.id} className="edit-card" style={{ ['--bcolor' as string]: `#${b.color}` }}>
+                      <ItemFields buckets={buckets} item={row} onSubmit={(payload) => onSave({ id: row.id, ...payload })} />
+                      <div className="edit-acts">
+                        <button type="button" className="btn--red" onClick={() => onRemove(row.id)}>
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {!eventRows.length ? <p className="hint">Nothing scheduled for this event yet.</p> : null}
+                </CollapsibleBucket>
+              ))}
+              {orphans.length ? (
+                <CollapsibleBucket title="Unassigned" hours={String(orphans.length)} color={b.color}>
+                  {orphans.map((row) => (
+                    <div key={row.id} className="edit-card" style={{ ['--bcolor' as string]: `#${b.color}` }}>
+                      <ItemFields buckets={buckets} item={row} onSubmit={(payload) => onSave({ id: row.id, ...payload })} />
+                      <div className="edit-acts">
+                        <button type="button" className="btn--red" onClick={() => onRemove(row.id)}>
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </CollapsibleBucket>
+              ) : null}
+            </div>
+          );
+        }
         return (
           <CollapsibleBucket key={b.id} title={b.name} hours={String(rows.length)} color={b.color}>
             <SortableList ids={ids} onReorder={(next) => onReorder(next)}>
@@ -832,6 +886,11 @@ function ItemFields({
   const datedItem = eventItem || apptItem;
   const slotPick = currentBucket ? workShowsItemSlot(currentBucket) : false;
   const slotOptions = currentBucket ? bucketSlots(currentBucket) : [];
+  const eventOptions = eventRanges(buckets.find((b) => b.kind === 'event' || b.id === EVENTS_ID));
+  const [eventId, setEventId] = useState(
+    item?.eventId || eventRangeForItem(eventOptions, item || {})?.id || ''
+  );
+  const chosenEvent = eventOptions.find((r) => r.id === eventId);
   const openDays = listCadenceDays(currentBucket);
   const [kind, setKind] = useState(item?.type || 'recurring');
   const [cadenceKind, setCadenceKind] = useState(item?.cadence.kind || 'daily');
@@ -880,6 +939,7 @@ function ItemFields({
           dueAt: type === 'scheduled' ? fd.get('dueAt') : '',
           ...(slotPick ? { slot: fd.get('slot') } : {}),
           ...(apptItem ? { apptTime: fd.get('apptTime') } : {}),
+          ...(eventItem ? { eventId: fd.get('eventId') } : {}),
         });
       }}
     >
@@ -914,8 +974,31 @@ function ItemFields({
         ) : null}
         {datedItem ? (
           <>
+            {eventItem ? (
+              <FormField label="Event" wide>
+                <select
+                  name="eventId"
+                  value={eventId}
+                  onChange={(e) => setEventId(e.target.value)}
+                  required
+                >
+                  <option value="">Pick an event</option>
+                  {eventOptions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {eventRangeName(r)} · {r.startDate} to {r.endDate}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            ) : null}
             <FormField label="Date">
-              <input name="dueAt" type="date" defaultValue={item?.dueAt || ''} required />
+              <input
+                name="dueAt"
+                type="date"
+                defaultValue={item?.dueAt || ''}
+                {...(chosenEvent ? { min: chosenEvent.startDate, max: chosenEvent.endDate } : {})}
+                required
+              />
             </FormField>
             {apptItem ? (
               <FormField label="Time (label only)">

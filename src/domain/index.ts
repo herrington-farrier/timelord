@@ -3,7 +3,7 @@ export { DEFAULT_SETTINGS, EVENTS_ID, PERSONAL_ID, SLOTS, WEEKDAYS, WORK_ID } fr
 export { cadenceHitsDate, weekdayFromKey, addDaysKey } from './cadence';
 export { durationInputs, formatApptTime, formatDuration, formatClock, hoursToMinutes, splitMinutes } from './duration';
 export { assignWeeklyBudgets, assignableWeekMinutes, assignedDayBudget, assignedWeekMinutes, bucketAssignedMinutes, dailyBudgetFor, derivedWeeklyMinutes, formatBucketHours, formatHoursField, hoursMinutesOf, hoursModeOf, itemExceedsBucketMessage, itemFitsBucket, weekBudgetSummary, weeklyCapacity, collapsedSlotHours, eventsSummaryLabel, loadTone, freeTone } from './budget';
-export { eventRanges, newEventRangeId, parseEventRanges } from './events';
+export { eventRanges, eventRangeForItem, eventRangeName, expiredEventRanges, liveEventRanges, newEventRangeId, parseEventRanges } from './events';
 export { packDay, collectEndDaySkipPushes, daySections, sectionMinutes } from './packDay';
 export { PACK_RANGE_DAYS, packRange } from './packWeek';
 export { recomputeEtas } from './etas';

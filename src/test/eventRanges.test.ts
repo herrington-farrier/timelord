@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { eventsSummaryLabel } from '../domain/budget';
-import { eventRanges, parseEventRanges } from '../domain/events';
+import { eventRangeForItem, eventRangeName, eventRanges, expiredEventRanges, liveEventRanges, parseEventRanges } from '../domain/events';
 import { isEventDay } from '../domain/sections';
 import { EVENTS_ID } from '../domain/types';
 import { bucket } from './fixtures';
@@ -93,5 +93,53 @@ describe('eventsSummaryLabel', () => {
     expect(eventsSummaryLabel([])).toBe('off');
     expect(eventsSummaryLabel([{ startDate: '2026-09-10', endDate: '' }])).toBe('off');
     expect(eventsSummaryLabel([{ startDate: '2026-09-10', endDate: '2026-09-01' }])).toBe('off');
+  });
+});
+
+describe('named events and their items', () => {
+  const ranges = [
+    { id: 'a', name: 'Conference', startDate: '2026-09-10', endDate: '2026-09-12' },
+    { id: 'b', name: '', startDate: '2026-10-01', endDate: '2026-10-01' },
+  ];
+
+  it('finds an item’s event by id', () => {
+    expect(eventRangeForItem(ranges, { eventId: 'b' })?.id).toBe('b');
+  });
+
+  it('falls back to the range the date sits in, for items saved before events had ids', () => {
+    expect(eventRangeForItem(ranges, { dueAt: '2026-09-11' })?.id).toBe('a');
+    expect(eventRangeForItem(ranges, { dueAt: '2026-12-25' })).toBeUndefined();
+  });
+
+  it('prefers the id when both point somewhere', () => {
+    expect(eventRangeForItem(ranges, { eventId: 'b', dueAt: '2026-09-11' })?.id).toBe('b');
+  });
+
+  it('names an unnamed event rather than showing a blank', () => {
+    expect(eventRangeName(ranges[0])).toBe('Conference');
+    expect(eventRangeName(ranges[1])).toBe('Event');
+    expect(eventRangeName(undefined)).toBe('Event');
+  });
+
+  it('keeps the name through a parse', () => {
+    const parsed = parseEventRanges([{ id: 'a', name: '  Conference  ', startDate: '2026-09-10', endDate: '2026-09-12' }]);
+    expect(parsed[0].name).toBe('Conference');
+  });
+});
+
+describe('event expiry', () => {
+  const ranges = [
+    { id: 'past', startDate: '2026-08-01', endDate: '2026-08-02' },
+    { id: 'today', startDate: '2026-09-01', endDate: '2026-09-02' },
+    { id: 'future', startDate: '2026-10-01', endDate: '2026-10-02' },
+  ];
+
+  it('treats an event as over only after its last day', () => {
+    expect(expiredEventRanges(ranges, '2026-09-02').map((r) => r.id)).toEqual(['past']);
+    expect(liveEventRanges(ranges, '2026-09-02').map((r) => r.id)).toEqual(['today', 'future']);
+  });
+
+  it('keeps an event on its final day', () => {
+    expect(expiredEventRanges([ranges[1]], '2026-09-02')).toEqual([]);
   });
 });

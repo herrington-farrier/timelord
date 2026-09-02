@@ -48,6 +48,8 @@ export type Bucket = {
 
 export type EventRange = {
   id: string;
+  /** What the event is called. Items hang off this rather than off raw dates. */
+  name?: string;
   startDate: string;
   endDate: string;
 };
@@ -63,6 +65,8 @@ export type ListItem = {
   dueAt?: string;
   archived?: boolean;
   slot?: Slot;
+  /** Events items only: the EventRange this belongs to. */
+  eventId?: string;
   /**
    * Appointments only. A label such as "2:30pm", shown on the card and the
    * Quest Log chip. DISPLAY ONLY — the packer never reads it. The section an
