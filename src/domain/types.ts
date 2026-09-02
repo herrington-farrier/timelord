@@ -13,7 +13,9 @@ export type Cadence =
   | { kind: 'weekdays' }
   | { kind: 'weekends' }
   | { kind: 'weekly'; days: Weekday[] }
-  | { kind: 'everyNDays'; n: number; startWeekday: Weekday; startDate?: string }
+  // startWeekday phased streams saved before start dates existed. New ones set
+  // startDate instead, which is the anchor; the old field is read, never written.
+  | { kind: 'everyNDays'; n: number; startWeekday?: Weekday; startDate?: string }
   | { kind: 'monthly'; dayOfMonth: number };
 
 export type DaySettings = {

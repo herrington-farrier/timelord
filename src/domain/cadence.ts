@@ -51,7 +51,7 @@ export function cadenceHitsDate(cadence: Cadence, dateKey: string): boolean {
   // must land on the 4th, then 28 days later. Anchoring to the weekday lattice
   // instead collapses every stream sharing a weekday and an n onto the same
   // dates, whatever start dates they were given.
-  const origin = cadence.startDate || phaseOrigin(cadence.startWeekday);
+  const origin = cadence.startDate || phaseOrigin(cadence.startWeekday || 'Mon');
   const diff = daysBetween(origin, dateKey);
   return ((diff % cadence.n) + cadence.n) % cadence.n === 0;
 }

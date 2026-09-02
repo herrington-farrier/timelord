@@ -19,7 +19,6 @@ import {
   weekBudgetSummary,
   type WeekBudgetSummary,
 } from '../domain/budget';
-import { weekdayFromKey } from '../domain/cadence';
 import { durationInputs, formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
 import { eventRangeForItem, eventRangeName, eventRanges, newEventRangeId, parseEventRanges } from '../domain/events';
 import { PACK_RANGE_DAYS } from '../domain/packWeek';
@@ -40,6 +39,7 @@ import {
   type Slot,
   type Weekday,
 } from '../domain/types';
+import { todayKey } from '../shared/dates';
 import { api } from '../services/api';
 import { useBuckets, useItems, useSettings } from '../services/live';
 import { useAuth } from '../shared/auth';
@@ -914,18 +914,10 @@ function itemPayloadFromForm(form: HTMLFormElement, buckets: Bucket[]): Record<s
     } else if (cadKind === 'weekly') {
       cadence = { kind: 'weekly', days: (fd.getAll('weeklyDays') as Weekday[]).filter((d) => openDays.includes(d)) };
     } else if (cadKind === 'everyNDays') {
-      const startDate = String(fd.get('startDate') || '').trim();
-      const picked = String(fd.get('startWeekday'));
-      cadence = {
-        kind: 'everyNDays',
-        n: Number(fd.get('everyN')) || 2,
-        // The date is the anchor when there is one, so the weekday is read off
-        // it rather than trusted from a control the date has taken over.
-        startWeekday: startDate
-          ? weekdayFromKey(startDate)
-          : ((openDays.includes(picked as Weekday) ? picked : openDays[0] || 'Mon') as Weekday),
-        ...(startDate ? { startDate } : {}),
-      };
+      // The start date is the whole definition of an every-N stream: it sets
+      // both the phase and the weekday. Blank means starting today.
+      const startDate = String(fd.get('startDate') || '').trim() || todayKey();
+      cadence = { kind: 'everyNDays', n: Number(fd.get('everyN')) || 2, startDate };
     } else if (cadKind === 'monthly') {
       cadence = { kind: 'monthly', dayOfMonth: Number(fd.get('monthDay')) || 1 };
     }
@@ -982,7 +974,7 @@ function ItemFields({
   // A start date sets the weekday, so the two controls can never disagree about
   // when the stream runs.
   const [startDate, setStartDate] = useState(
-    item?.cadence.kind === 'everyNDays' ? item.cadence.startDate || '' : ''
+    item?.cadence.kind === 'everyNDays' ? item.cadence.startDate || todayKey() : todayKey()
   );
   return (
     <form
@@ -1130,27 +1122,6 @@ function ItemFields({
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
-          </FormField>
-          <FormField label="Start weekday">
-            <select
-              name="startWeekday"
-              // With a date set, the weekday follows it and is read-only.
-              key={startDate}
-              disabled={Boolean(startDate)}
-              defaultValue={
-                startDate
-                  ? weekdayFromKey(startDate)
-                  : item?.cadence.kind === 'everyNDays' && openDays.includes(item.cadence.startWeekday)
-                    ? item.cadence.startWeekday
-                    : openDays[0] || 'Mon'
-              }
-            >
-              {WEEKDAYS.map((d) => (
-                <option key={d} value={d} disabled={!startDate && !openDays.includes(d)}>
-                  {d}
-                </option>
-              ))}
-            </select>
           </FormField>
         </div>
       ) : null}

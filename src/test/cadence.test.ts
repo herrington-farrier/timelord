@@ -76,6 +76,16 @@ describe('cadenceHitsDate', () => {
     expect(cadenceHitsDate({ kind: 'everyNDays', n: 28, startWeekday: 'Tue' }, '2000-01-11')).toBe(false);
   });
 
+  it('survives a cadence with no anchor at all', () => {
+    // startWeekday is no longer written, so the shape is reachable. It must
+    // still phase consistently rather than throwing or hitting every day.
+    const cadence = { kind: 'everyNDays' as const, n: 3 };
+    const hits = ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04'].filter((d) =>
+      cadenceHitsDate(cadence, d)
+    );
+    expect(hits).toHaveLength(2);
+  });
+
   it('hits the first of the month for monthly cadence', () => {
     expect(cadenceHitsDate({ kind: 'monthly', dayOfMonth: 1 }, '2026-09-01')).toBe(true);
   });
