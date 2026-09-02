@@ -1021,3 +1021,66 @@ describe('a repeating appointment', () => {
     expect(packDay({ ...input, date: '2026-09-01' }).blocks.some((b) => b.itemId === 'dentist')).toBe(false);
   });
 });
+
+describe('every-N-days items in the packer', () => {
+  // The cadence unit tests cover the rule; these cover the path an ordinary
+  // list item actually takes through packDay, which had no coverage at all.
+  const house = bucket({ id: 'house', name: 'House', weight: 4 });
+  const chore = (startDate?: string) =>
+    item({
+      id: 'deep-clean',
+      bucketId: 'house',
+      title: 'Deep clean',
+      cadence: { kind: 'everyNDays', n: 28, startWeekday: 'Mon', ...(startDate ? { startDate } : {}) },
+    });
+
+  function titlesOn(date: string, it: ReturnType<typeof item>) {
+    return packDay({ date, settings: settings(), buckets: [workBucket(), house], items: [it] })
+      .blocks.map((b: PackedBlock) => b.title);
+  }
+
+  it('lands on the start date and 28 days later, not the weeks between', () => {
+    const it = chore('2026-08-31'); // a Monday
+    expect(titlesOn('2026-08-31', it)).toContain('Deep clean');
+    expect(titlesOn('2026-09-28', it)).toContain('Deep clean');
+    expect(titlesOn('2026-09-07', it)).not.toContain('Deep clean');
+    expect(titlesOn('2026-09-14', it)).not.toContain('Deep clean');
+    expect(titlesOn('2026-09-21', it)).not.toContain('Deep clean');
+  });
+
+  it('never lands before its start date', () => {
+    const it = chore('2026-09-28');
+    expect(titlesOn('2026-08-31', it)).not.toContain('Deep clean');
+  });
+
+  it('two chores a week apart stay a week apart', () => {
+    const a = chore('2026-08-31');
+    const b = { ...chore('2026-09-07'), id: 'other' };
+    expect(titlesOn('2026-08-31', a)).toContain('Deep clean');
+    expect(titlesOn('2026-08-31', b)).not.toContain('Deep clean');
+    expect(titlesOn('2026-09-07', b)).toContain('Deep clean');
+  });
+
+  it('falls back to the weekday lattice with no start date', () => {
+    const it = chore();
+    // Phase origin is the Monday 2000-01-03; 2026-08-31 is 9737 days on,
+    // and 9737 % 28 is not 0, so this Monday is not a hit.
+    const hits = ['2026-08-31', '2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28'].filter(
+      (d) => titlesOn(d, it).includes('Deep clean')
+    );
+    expect(hits).toHaveLength(1);
+  });
+
+  it('packs across a range without the cadence drifting', () => {
+    const it = chore('2026-08-31');
+    const days = packRange('2026-08-31', 60, {
+      settings: settings(),
+      buckets: [workBucket(), house],
+      items: [it],
+    });
+    const hit = days
+      .filter((d) => d.result.blocks.some((b: PackedBlock) => b.title === 'Deep clean'))
+      .map((d) => d.date);
+    expect(hit).toEqual(['2026-08-31', '2026-09-28', '2026-10-26']);
+  });
+});
