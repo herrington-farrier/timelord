@@ -1,5 +1,7 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+
+import { ChunkBoundary, clearChunkReloadFlag } from './components/ChunkBoundary';
 
 import { SignInPage } from './pages/SignIn';
 import { TodayPage } from './pages/Today';
@@ -23,6 +25,9 @@ function BackdropSeal() {
 
 export default function App() {
   const { user, ready } = useAuth();
+  // Reaching here means the app loaded, so a later stale chunk is allowed its
+  // own one reload rather than inheriting this session's spent attempt.
+  useEffect(() => clearChunkReloadFlag(), []);
   return (
     <>
       <BackdropSeal />
@@ -31,7 +36,8 @@ export default function App() {
       ) : !user ? (
         <SignInPage />
       ) : (
-        <Suspense fallback={<p className="hint">Loading…</p>}>
+        <ChunkBoundary>
+          <Suspense fallback={<p className="hint">Loading…</p>}>
           <Routes>
             <Route path="/" element={<TodayPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
@@ -40,7 +46,8 @@ export default function App() {
             <Route path="/log" element={<LogPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </Suspense>
+          </Suspense>
+        </ChunkBoundary>
       )}
     </>
   );

@@ -147,6 +147,12 @@ Two front-end lessons worth carrying anyway, both of which cost hours here:
   never loads CSS, so no rendering test can.
 - **`hidden` loses to an author `display` rule.** `[hidden] { display: none
   !important }` is in the stylesheet for a reason.
+- **A code-split app on Firebase Hosting needs an error boundary.** The catch-all
+  rewrite serves `index.html` for a missing chunk, so a stale chunk arrives as
+  HTML with a 200 and fails to parse as a module. Without a boundary the routed
+  tree unmounts and the page goes blank. `ChunkBoundary` catches it and reloads
+  once. Any rewrite of the front end reintroduces this the moment it lazy-loads
+  a route.
 
 Naming is themed and shallow: Quest / Quest Log / Strategize / Stats are the
 routes `/`, `/calendar`, `/edit`, `/log`. `docs/logic-map.md` has the mapping.

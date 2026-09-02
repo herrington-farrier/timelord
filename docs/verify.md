@@ -147,6 +147,10 @@ Tick as you go. Anything that fails, tell me the item number.
     in both the rules and the code, so even an empty or deleted
     `config/allowlist` leaves your own access intact.
 
+55. **A page after a deploy** — with the app open, if a page is redeployed and
+    you then navigate to one you have not visited, it should reload itself
+    rather than showing a blank background. This is the Guide blank-page bug.
+
 ## Known by design — not bugs
 
 - Completing an appointment does not change remaining time. The hours come out
