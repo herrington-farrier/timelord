@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { EditPage } from '../pages/Edit';
@@ -28,6 +28,10 @@ vi.mock('../services/api', () => ({
 }));
 
 describe('Edit Day', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('resets today from the Day tab', async () => {
     const user = userEvent.setup();
     render(
@@ -41,7 +45,33 @@ describe('Edit Day', () => {
     expect(api.resetToday).toHaveBeenCalled();
   });
 
+  // fireEvent is synchronous, so it does not deadlock against fake timers
+  // the way userEvent's awaited waits do.
+  it('keeps the erase confirm armed instead of expiring', () => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <EditPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Reroll Stats' }));
+    expect(screen.getByRole('button', { name: 'Erase Stats?' })).toBeInTheDocument();
+
+    // A confirm that disarms itself mid-decision can never be completed.
+    act(() => {
+      vi.advanceTimersByTime(60000);
+    });
+    expect(screen.getByRole('button', { name: 'Erase Stats?' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Erase Stats?' }));
+    expect(api.clearLogs).toHaveBeenCalled();
+  });
+
   it('needs two presses to erase the log', async () => {
+    vi.clearAllMocks();
     const user = userEvent.setup();
     render(
       <ToastProvider>

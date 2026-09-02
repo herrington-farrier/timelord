@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { FormField } from '../components/FormField';
 import { SortableList } from '../components/SortableList';
@@ -165,13 +165,10 @@ function DayForm({
   onResetToday: () => Promise<void>;
   onReroll: () => Promise<void>;
 }) {
-  // Erasing the log cannot be undone, so it takes two presses.
+  // Erasing the log cannot be undone, so it takes two presses. It stays
+  // armed until pressed: a timer here would silently disarm mid-decision,
+  // which is exactly the hesitation a confirm is meant to allow.
   const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const id = window.setTimeout(() => setArmed(false), 4000);
-    return () => window.clearTimeout(id);
-  }, [armed]);
   const day = splitMinutes(settings.dayMinutes);
   const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
   const dayMinutes = liveMinutes ?? settings.dayMinutes;

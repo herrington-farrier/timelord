@@ -182,20 +182,31 @@ button:disabled {
   user-select: none;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-/* Selected is a state, and every selected control wears the same one. */
+/* Selected is a state, and every selected control wears the same one:
+   no fill — a solid wash fights the tracked caps and muddies the text.
+   Gold edge, gold letters, and a ring that pulses out once on pick. */
 .chrome-btn.is-on,
 .tab.is-on,
 .pills label:has(input:checked),
 .day-chips label:has(input:checked) {
-  background: var(--gold-bg);
+  background: transparent;
   border-color: var(--accent);
-  color: var(--text);
+  color: var(--gold);
+  animation: pick-on 0.5s ease-out;
 }
 .chrome-btn.is-on:hover,
 .tab.is-on:hover {
-  background: var(--gold-bg);
+  background: transparent;
   border-color: var(--accent-hover);
-  color: var(--text);
+  color: var(--gold);
+}
+@keyframes pick-on {
+  from {
+    box-shadow: 0 0 0 0 rgba(230, 185, 104, 0.55), 0 0 12px -4px rgba(230, 185, 104, 0.8);
+  }
+  to {
+    box-shadow: 0 0 0 10px rgba(230, 185, 104, 0), 0 0 12px -4px rgba(230, 185, 104, 0);
+  }
 }
 /* --- Action buttons ------------------------------------------------ *
  * One family: outlined pill, wordmark caps, colour carries the meaning.
@@ -921,6 +932,7 @@ button:disabled {
   position: sticky;
   bottom: 0;
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   padding: 10px 0 max(10px, env(safe-area-inset-bottom));
@@ -928,6 +940,14 @@ button:disabled {
   z-index: 2;
 }
 .page-save button { min-width: 10rem; }
+/* Three buttons need ~496px and a phone has ~362px. Let them share the
+   width and wrap rather than run off the edge. */
+@media (max-width: 700px) {
+  .page-save button {
+    min-width: 0;
+    flex: 1 1 8rem;
+  }
+}
 /* --- Today header -------------------------------------------------- *
  * The countdown is the hero, struck in the same gold as the wordmark;
  * the day's numbers sit under it as labelled stats, not a run-on line.  */
@@ -1452,4 +1472,11 @@ button:disabled {
   font-size: 0.95rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome-btn.is-on,
+  .tab.is-on,
+  .pills label:has(input:checked),
+  .day-chips label:has(input:checked) { animation: none; }
 }
