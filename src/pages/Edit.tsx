@@ -24,7 +24,7 @@ import { durationInputs, formatDuration, hoursToMinutes, splitMinutes } from '..
 import { eventRangeForItem, eventRangeName, eventRanges, newEventRangeId, parseEventRanges } from '../domain/events';
 import { PACK_RANGE_DAYS } from '../domain/packWeek';
 import { canDeleteBucket, canRenameBucket, listCadenceDays, listableBuckets, splitEditBuckets } from '../domain/seed';
-import { bucketSlots, itemWorkSlot, workShowsItemSlot } from '../domain/sections';
+import { bucketSlots, itemSlots, itemWorkSlot, workShowsItemSlot } from '../domain/sections';
 import { isAppointmentBucket } from '../domain/seed';
 import {
   APPOINTMENTS_ID,
@@ -937,7 +937,7 @@ function ItemFields({
           durationMinutes,
           cadence,
           dueAt: type === 'scheduled' ? fd.get('dueAt') : '',
-          ...(slotPick ? { slot: fd.get('slot') } : {}),
+          ...(apptItem ? { slots: fd.getAll('slots') } : slotPick ? { slot: fd.get('slot') } : {}),
           ...(apptItem ? { apptTime: fd.get('apptTime') } : {}),
           ...(eventItem ? { eventId: fd.get('eventId') } : {}),
         });
@@ -961,7 +961,24 @@ function ItemFields({
           </select>
         </FormField>
         <DurationFields name="i" label="Duration" h={dur.hours} m={dur.minutes} />
-        {slotPick && currentBucket ? (
+        {apptItem && currentBucket ? (
+          <div className="field field--wide">
+            <span>Sections it spans</span>
+            <div className="pills" role="group" aria-label="Sections it spans">
+              {slotOptions.map((s) => (
+                <label key={s}>
+                  <input
+                    name="slots"
+                    type="checkbox"
+                    value={s}
+                    defaultChecked={itemSlots(item || {}, currentBucket).includes(s)}
+                  />
+                  {s}
+                </label>
+              ))}
+            </div>
+          </div>
+        ) : slotPick && currentBucket ? (
           <FormField label="Time of day">
             <select key={bucketId} name="slot" defaultValue={itemWorkSlot(item || {}, currentBucket)}>
               {slotOptions.map((s) => (

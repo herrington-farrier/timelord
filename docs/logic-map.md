@@ -60,9 +60,9 @@ Buttons transform in place:
 - Break: Start Break / End Break pauses/resumes the current timer.
 - After the list (and falling-off): **Start Next Chapter** + time remaining. Auto-skips leftover placed and falling-off items (same skip log rows as Skip), then opens the next stretch at its normal length. If the next stretch is 0, auto End Day. The countdown is wall-clock; hitting 0m sounds and does not start the next stretch.
 - Evening: **End Day** after the list.
-- Appointments are items in the locked `appointments` bucket, packed before every other bucket in their section. They have no stopwatch: the duration you assign is what the day loses, its own section first and then spilling forward. Complete / Skip like any item; skipping cancels it and returns the hours. A cancelled appointment is not pushed to another day.
+- Appointments are items in the locked `appointments` bucket, packed before every other bucket in their section. Each declares the **sections it spans** (multi-select, at least one); its hours come out of the first of those and spill forward, and it stays on the list through every section it spans. Nothing is inferred from `apptTime`. They have no stopwatch: the duration you assign is what the day loses, its own section first and then spilling forward. Complete / Skip like any item; skipping cancels it and returns the hours. A cancelled appointment is not pushed to another day.
 
-Section timers show hours and minutes. They use the Day sound/vibrate toggles. Going over a bucket does not steal later time.
+The Quest header shows **Day / Booked / Packed**; Booked is time committed to appointments, coloured on the same load scale, and is how an overbooked day reads. Section timers show hours and minutes. They use the Day sound/vibrate toggles. Going over a bucket does not steal later time.
 
 ## Events
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatCountdown, isEventPacked, nextSectionAction, nextSectionMinutes, openBlocks, slotLabel, todayEventItems, todaySectionDropped, todaySectionItems } from '../domain/today';
+import { bookedMinutes, formatCountdown, isEventPacked, nextSectionAction, nextSectionMinutes, openBlocks, slotLabel, todayEventItems, todaySectionDropped, todaySectionItems } from '../domain/today';
 import type { PackedBlock } from '../domain/types';
 
 function block(partial: Partial<PackedBlock> & Pick<PackedBlock, 'id' | 'kind'>): PackedBlock {
@@ -120,5 +120,17 @@ describe('openBlocks', () => {
       block({ id: 'break', kind: 'personal', title: 'Break', slot: 'morning', status: 'complete' }),
     ]);
     expect(shown.map((b) => b.id)).toEqual(['break']);
+  });
+});
+
+describe('booked time', () => {
+  it('totals appointments and ignores cancelled ones', () => {
+    const blocks = [
+      block({ id: 'a', kind: 'appointment', title: 'Dentist', slot: 'morning', durationMinutes: 90 }),
+      block({ id: 'b', kind: 'appointment', title: 'Call', slot: 'evening', durationMinutes: 30 }),
+      block({ id: 'c', kind: 'appointment', title: 'Cancelled', slot: 'morning', durationMinutes: 240, status: 'skipped' }),
+      block({ id: 'd', kind: 'weighted', title: 'Floors', slot: 'morning', durationMinutes: 60 }),
+    ];
+    expect(bookedMinutes(blocks)).toBe(120);
   });
 });

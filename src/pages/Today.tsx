@@ -9,6 +9,7 @@ import {
   nextSectionAction,
   nextSectionMinutes,
   openBlocks,
+  bookedMinutes,
   signalSectionEnd,
   slotLabel,
   todayEventItems,
@@ -102,6 +103,7 @@ export function TodayPage() {
         eventDay={eventDay}
         dayMinutes={settings?.dayMinutes || 0}
         packedMinutes={day?.packedMinutes || 0}
+        bookedMinutes={bookedMinutes(placed)}
         running={started && !eventDay && Boolean(section)}
         section={section}
         remaining={remaining}
@@ -150,7 +152,6 @@ export function TodayPage() {
       {!eventDay && started && sectionDropped.length ? (
         <section className="fall-wrap">
           <h2>Falling off</h2>
-          <p className="hint fall-note">No room left in this stretch. Complete or skip to clear them.</p>
           {sectionDropped.map((b) => (
             <FallRow key={b.id} block={b} date={date} act={act} />
           ))}
@@ -175,6 +176,7 @@ function DayHead({
   eventDay,
   dayMinutes,
   packedMinutes,
+  bookedMinutes: booked,
   running,
   section,
   remaining,
@@ -183,6 +185,7 @@ function DayHead({
   eventDay: boolean;
   dayMinutes: number;
   packedMinutes: number;
+  bookedMinutes: number;
   running: boolean;
   section: Slot | null;
   remaining: number;
@@ -203,6 +206,14 @@ function DayHead({
           <dt className="stat__label">Day</dt>
           <dd className="stat__value">{eventDay ? 'Event' : formatDuration(dayMinutes)}</dd>
         </div>
+        {booked > 0 ? (
+          <div className="stat">
+            <dt className="stat__label">Booked</dt>
+            <dd className={`stat__value${eventDay ? '' : ` stat__value--${loadTone(booked, dayMinutes)}`}`}>
+              {formatDuration(booked)}
+            </dd>
+          </div>
+        ) : null}
         <div className="stat">
           <dt className="stat__label">Packed</dt>
           <dd className={`stat__value${eventDay ? '' : ` stat__value--${loadTone(packedMinutes, dayMinutes)}`}`}>

@@ -1,7 +1,7 @@
 import { assignWeeklyBudgets, dailyBudgetFor } from './budget';
 import { cadenceHitsDate } from './cadence';
 import { isAppointmentBucket } from './seed';
-import { bucketSlots, capsAfterLoad, isEventDay, sectionCapacity, slotIndex, itemWorkSlot } from './sections';
+import { bucketSlots, capsAfterLoad, isEventDay, itemSlots, sectionCapacity, slotIndex, itemWorkSlot } from './sections';
 import { skipPushDate } from './skip';
 import {
   APPOINTMENTS_ID,
@@ -85,7 +85,8 @@ function blockKind(bucket: Bucket): PackedBlock['kind'] {
 
 /** The section an item lands in. Multi-slot buckets let each item pick. */
 function slotForItem(item: ListItem, bucket: Bucket): Slot {
-  return bucketSlots(bucket).length > 1 ? itemWorkSlot(item, bucket) : bucket.slot;
+  if (bucketSlots(bucket).length <= 1) return bucket.slot;
+  return itemSlots(item, bucket)[0];
 }
 
 export function packDay(input: PackDayInput): PackDayResult {
@@ -173,7 +174,7 @@ export function packDay(input: PackDayInput): PackDayResult {
     return sortItems(items.filter((it) => it.bucketId === bucket.id && itemHitsDate(it, date, skipPushes)));
   }
 
-  function placeItem(item: ListItem, bucket: Bucket, slot?: Slot): void {
+  function placeItem(item: ListItem, bucket: Bucket, slot?: Slot, spans?: Slot[]): void {
     pushBlock({
       id: blockId(date, `item-${item.id}`),
       bucketId: bucket.id,
@@ -186,6 +187,7 @@ export function packDay(input: PackDayInput): PackDayResult {
       color: bucket.color,
       flexible: true,
       slot,
+      ...(spans && spans.length > 1 ? { slots: spans } : {}),
       ...(item.apptTime ? { apptTime: item.apptTime } : {}),
     });
   }
@@ -235,7 +237,7 @@ export function packDay(input: PackDayInput): PackDayResult {
     )) {
       // Skipped means cancelled: the day gets those hours back.
       if (prevStatus(previous, appt.id)?.status === 'skipped') continue;
-      apptLoad[slotForItem(appt, apptBucket)] += Math.max(0, appt.durationMinutes);
+      apptLoad[itemSlots(appt, apptBucket)[0]] += Math.max(0, appt.durationMinutes);
     }
   }
   const bucketCaps = capsAfterLoad(caps, apptLoad);
@@ -379,7 +381,7 @@ export function packDay(input: PackDayInput): PackDayResult {
         // off the section before anything else competes for what is left.
         // 0-duration entries are checklist items and cost nothing.
         for (const appt of hittingFor(bucket).filter((it) => slotForItem(it, bucket) === slot)) {
-          placeItem(appt, bucket, slot);
+          placeItem(appt, bucket, slot, itemSlots(appt, bucket));
         }
         continue;
       }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { daySections, packDay, sectionMinutes } from '../domain/packDay';
+import { todaySectionItems } from '../domain/today';
 import { PACK_RANGE_DAYS, packRange } from '../domain/packWeek';
 import { appointmentLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity } from '../domain/sections';
 import { nextAssignedDate, skipPushDate } from '../domain/skip';
@@ -670,6 +671,66 @@ describe('skip push', () => {
   it('finds the next assigned date after Tuesday for a Mon/Wed/Fri bucket', () => {
     const house = bucket({ id: 'house', name: 'House', weight: 4, days: ['Mon', 'Wed', 'Fri'] });
     expect(nextAssignedDate(house, '2026-09-01')).toBe('2026-09-02');
+  });
+});
+
+describe('an appointment spanning sections', () => {
+  it('stays on the list through every section it spans', () => {
+    const result = packDay({
+      ...base(),
+      settings: settings({ dayMinutes: 900 }),
+      buckets: [APPOINTMENTS_BUCKET, workBucket({ weeklyMinutes: 0, days: ['Tue'] })],
+      items: [
+        item({
+          id: 'long',
+          bucketId: APPOINTMENTS_ID,
+          title: 'All afternoon',
+          type: 'scheduled',
+          dueAt: monday,
+          durationMinutes: 240,
+          slots: ['midday', 'evening'],
+        }),
+      ],
+    });
+    const appt = result.blocks.find((b) => b.itemId === 'long');
+    // its time comes out of the first section it spans
+    expect(appt?.slot).toBe('midday');
+    expect(appt?.slots).toEqual(['midday', 'evening']);
+    expect(todaySectionItems(result.blocks, 'midday').some((b) => b.itemId === 'long')).toBe(true);
+    expect(todaySectionItems(result.blocks, 'evening').some((b) => b.itemId === 'long')).toBe(true);
+    expect(todaySectionItems(result.blocks, 'morning').some((b) => b.itemId === 'long')).toBe(false);
+  });
+
+  it('takes its hours from the first section it spans, not the morning', () => {
+    const house = bucket({
+      id: 'house',
+      name: 'House',
+      weight: 4,
+      weeklyMinutes: 600,
+      days: ['Mon'],
+      slots: ['morning', 'midday', 'evening'],
+    });
+    const result = packDay({
+      ...base(),
+      settings: settings({ dayMinutes: 180 }),
+      buckets: [APPOINTMENTS_BUCKET, workBucket({ weeklyMinutes: 0, days: ['Tue'] }), house],
+      items: [
+        item({ id: 'am', bucketId: 'house', title: 'Morning task', weight: 1, durationMinutes: 45, slot: 'morning' }),
+        item({ id: 'pm', bucketId: 'house', title: 'Evening task', weight: 2, durationMinutes: 45, slot: 'evening' }),
+        item({
+          id: 'evening-appt',
+          bucketId: APPOINTMENTS_ID,
+          title: 'Evening booking',
+          type: 'scheduled',
+          dueAt: monday,
+          durationMinutes: 60,
+          slots: ['evening'],
+        }),
+      ],
+    });
+    // the morning is untouched; the evening loses its whole hour
+    expect(result.blocks.some((b) => b.itemId === 'am')).toBe(true);
+    expect(result.dropped.some((d) => d.itemId === 'pm')).toBe(true);
   });
 });
 

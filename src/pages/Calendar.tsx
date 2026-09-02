@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { freeTone, loadTone } from '../domain/budget';
 import { formatApptTime, formatDuration } from '../domain/duration';
 import { bucketSlots, isEventDay, sectionCapacity, slotIndex } from '../domain/sections';
-import { isBreakBlock, isEventPacked } from '../domain/today';
+import { bookedMinutes, isBreakBlock, isEventPacked } from '../domain/today';
 import { addDaysKey, formatDayLabel, todayKey, weekStart } from '../shared/dates';
 import { useAuth } from '../shared/auth';
 import { useBuckets, useDays, useSettings } from '../services/live';
@@ -63,6 +63,14 @@ export function CalendarPage() {
                     <>
                       {' · '}
                       <HoursMark minutes={hours} dayMinutes={dayMinutes} />
+                    </>
+                  ) : null}
+                  {bookedMinutes(day?.blocks || []) > 0 ? (
+                    <>
+                      {' · '}
+                      <span className="cal-booked">
+                        {formatDuration(bookedMinutes(day?.blocks || []))} booked
+                      </span>
                     </>
                   ) : null}
                 </div>

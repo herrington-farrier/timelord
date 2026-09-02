@@ -68,6 +68,12 @@ export type ListItem = {
   /** Events items only: the EventRange this belongs to. */
   eventId?: string;
   /**
+   * Appointments only: the sections it spans. The first is where its time is
+   * taken from; any overflow spills forward as usual. Declared, never inferred
+   * from apptTime.
+   */
+  slots?: Slot[];
+  /**
    * Appointments only. A label such as "2:30pm", shown on the card and the
    * Quest Log chip. DISPLAY ONLY — the packer never reads it. The section an
    * appointment lands in is its `slot`, picked by hand like any other item.
@@ -94,6 +100,9 @@ export type PackedBlock = {
   color: string;
   flexible: boolean;
   slot?: Slot;
+  /** Appointments only: every section this spans, so a long one stays on the
+   *  list while you are still in it. `slot` is the first of these. */
+  slots?: Slot[];
   /** Appointments only, display only — see ListItem.apptTime. */
   apptTime?: string;
 };

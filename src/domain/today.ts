@@ -29,12 +29,25 @@ export function nextSectionMinutes(blocks: PackedBlock[], section: Slot): number
     .reduce((sum, b) => sum + (Number(b.durationMinutes) || 0), 0);
 }
 
+/**
+ * Minutes this day is committed to appointments. A cancelled one is not booked
+ * any more, so it does not count.
+ */
+export function bookedMinutes(blocks: PackedBlock[]): number {
+  return blocks
+    .filter((b) => b.kind === 'appointment' && b.status !== 'skipped')
+    .reduce((sum, b) => sum + (Number(b.durationMinutes) || 0), 0);
+}
+
 export function todaySectionItems(blocks: PackedBlock[], section: Slot): PackedBlock[] {
   return blocks.filter((b) => {
     if (b.kind === 'transition') return false;
     // Appointments used to be slot-less and shown in every section. They are
     // bucket items now, so they belong to exactly one, like anything else.
     if (b.title === 'Break' && b.slot === section) return true;
+    // A long appointment stays on the list through every section it spans,
+    // rather than vanishing the moment the next stretch opens.
+    if (b.slots?.length) return b.slots.includes(section);
     return b.kind !== 'personal' && b.slot === section;
   });
 }

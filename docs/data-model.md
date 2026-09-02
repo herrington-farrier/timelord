@@ -32,8 +32,8 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 ## Appointments
 
 Not a collection. Appointments are items in the locked `appointments` bucket:
-`type` is always `scheduled`, `dueAt` is the date they pack, `slot` is the
-section, and `apptTime` is a display-only label (`14:30`, shown as `2:30 PM`).
+`type` is always `scheduled`, `dueAt` is the date they pack, `slots[]` are the
+sections it spans (`slot` is the first of those), and `apptTime` is a display-only label (`14:30`, shown as `2:30 PM`).
 They have no per-appointment colour — the bucket's colour applies.
 
 An appointment costs the day its whole duration: its own section first, then

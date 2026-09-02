@@ -560,6 +560,16 @@ export const upsertItem = onCall(async (request) => {
     apptTime: apptItem && typeof data.apptTime === 'string' ? data.apptTime.trim().slice(0, 40) : '',
     eventId,
   };
+  if (apptItem && bucket) {
+    // An appointment declares the sections it spans. At least one, always —
+    // nothing lands in a section the user did not pick.
+    const allowed = bucketSlots(bucket);
+    const raw = Array.isArray(data.slots) ? data.slots : [];
+    const picked = allowed.filter((slot) => raw.includes(slot));
+    if (!picked.length) throw new HttpsError('invalid-argument', 'Pick at least one section.');
+    payload.slots = picked;
+    payload.slot = picked[0];
+  }
   const isWork = Boolean(bucket && (bucket.kind === 'work' || bucket.id === WORK_ID));
   if (isWork && bucket) {
     if (workShowsItemSlot(bucket)) {
@@ -575,7 +585,7 @@ export const upsertItem = onCall(async (request) => {
     } else {
       payload.slot = itemWorkSlot({}, bucket);
     }
-  } else {
+  } else if (!apptItem) {
     payload.slot = null;
   }
   const stamp = existing.exists ? await stampLastUpdated(uid, nowIso()) : await stampCreated(uid, nowIso());

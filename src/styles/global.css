@@ -484,10 +484,6 @@ button:disabled {
   margin-top: 10px;
   padding-top: 2px;
 }
-.fall-note {
-  margin: -4px 0 8px;
-  font-size: 0.8rem;
-}
 .cal-layout {
   display: grid;
   grid-template-columns: minmax(240px, 320px) 1fr;
@@ -541,6 +537,13 @@ button:disabled {
   padding-bottom: 6px;
 }
 .cal-day.is-today .cal-day-h { color: var(--gold); }
+/* Booked time is committed, not merely packed, so it reads in the
+   appointment colour rather than the load colours. */
+.cal-booked {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: #e85d4c;
+}
 .cal-secs {
   display: flex;
   flex-wrap: wrap;

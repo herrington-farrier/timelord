@@ -53,6 +53,18 @@ export function workShowsItemSlot(work: { slot?: Slot; slots?: Slot[] }): boolea
   return bucketSlots(work).length > 1;
 }
 
+/**
+ * The sections an item spans. Only appointments set more than one; everything
+ * else lands in exactly the section it picked.
+ */
+export function itemSlots(item: { slot?: Slot; slots?: Slot[] }, bucket: { slot?: Slot; slots?: Slot[] }): Slot[] {
+  const allowed = bucketSlots(bucket);
+  const picked = (item.slots || []).filter((s) => allowed.includes(s));
+  const ordered = SLOTS.filter((s) => picked.includes(s));
+  if (ordered.length) return ordered;
+  return [itemWorkSlot(item, bucket)];
+}
+
 export function itemWorkSlot(item: { slot?: Slot }, work: { slot?: Slot; slots?: Slot[] }): Slot {
   const allowed = bucketSlots(work);
   if (item.slot && allowed.includes(item.slot)) return item.slot;
