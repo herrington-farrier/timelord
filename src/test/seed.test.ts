@@ -9,10 +9,12 @@ import {
   canRenameBucket,
   listCadenceDays,
   listableBuckets,
+  seedEventRanges,
+  seedItems,
   splitEditBuckets,
 } from '../domain/seed';
 import { bucketSlots, itemWorkSlot, workShowsItemSlot } from '../domain/sections';
-import { APPOINTMENTS_ID, PERSONAL_ID, WORK_ID } from '../domain/types';
+import { APPOINTMENTS_ID, EVENTS_ID, PERSONAL_ID, WORK_ID } from '../domain/types';
 import { bucket, workBucket } from './fixtures';
 
 describe('locked buckets on Edit', () => {
@@ -94,5 +96,33 @@ describe('locked bucket rules', () => {
 
   it('does not allow removing Events', () => {
     expect(canDeleteBucket(EVENTS_BUCKET)).toBe(false);
+  });
+});
+
+describe('example seeds', () => {
+  const today = '2026-09-02';
+
+  it('demonstrates every mechanic on a new account', () => {
+    const items = seedItems(today);
+    const buckets = new Set(items.map((i) => i.bucketId));
+    // one or two of each thing, so nothing is invisible on day one
+    expect(buckets).toContain(APPOINTMENTS_ID);
+    expect(buckets).toContain(WORK_ID);
+    expect(buckets).toContain(EVENTS_ID);
+    expect(buckets).toContain('home');
+    expect(buckets).toContain('errands');
+    expect(items.some((i) => i.durationMinutes === 0)).toBe(true);
+    expect(items.some((i) => i.cadence.kind === 'weekly')).toBe(true);
+  });
+
+  it('dates the examples relative to the account, so they are live', () => {
+    const items = seedItems(today);
+    const appt = items.find((i) => i.bucketId === APPOINTMENTS_ID);
+    expect(appt?.dueAt).toBe(today);
+    // the event item lands inside the seeded range rather than nowhere
+    const range = seedEventRanges(today)[0];
+    const eventItem = items.find((i) => i.bucketId === EVENTS_ID);
+    expect(eventItem?.dueAt).toBe(range.startDate);
+    expect(range.startDate <= range.endDate).toBe(true);
   });
 });

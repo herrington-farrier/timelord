@@ -88,35 +88,27 @@ this class of bug.
 `background-clip`, `background-image`, `background-position` and the rest. On
 this codebase that silently breaks gradient text.
 
-### B4. The Personal colour picker does nothing
+### B4. Personal colour — **done, and the earlier diagnosis was wrong**
 
-**Verified.** The client sends `personal.color` in the `saveBuckets` payload
-(`Edit.tsx`, the personal form's colour input). `saveBuckets` reads only
-`morningMinutes`, `breakMinutes` and `eveningMinutes` from `data.personal` — it
-**never writes the colour**. The personal bucket is also not among the
-`form[data-kind="work"], form[data-kind="weighted"]` rows the client collects,
-so it falls through to `kept` untouched.
+The backlog said `saveBuckets` never wrote `personal.color`. It does — that was
+read from the first part of the function only. The colour was being saved and
+`packDay` was stamping personal blocks with it correctly.
 
-`packDay` does stamp blocks with `personal?.color`, so the pipeline is fine
-downstream — the colour simply never gets saved. Fixing `saveBuckets` to persist
-it should be enough; existing days restamp on the next pack.
+The actual bug was in `BreakControl`: it rendered `<div className="item">` with
+no `--bcolor`, so it fell back to gold. Break is the **only** Personal block Quest
+shows — `todaySectionItems` filters out Morning and Evening Routine — so the
+Personal colour appeared nowhere on the page. Fixed and covered by a test.
 
-Small, isolated, needs a functions deploy.
+### B5. Example seeds — **done**
 
-### B5. New accounts need better example seeds
+Seeds are date-aware now: `seedItems(today)` and `seedEventRanges(today)` build
+examples relative to the account's creation date, so they are live rather than
+stale. A new account gets one or two of each thing — a dated appointment, two
+Work items on different cadences, a timed home item, a **0-duration reminder**, a
+weekly errand, and an event a fortnight out with an item inside its range.
 
-**Verified:** `SEED_BUCKETS` is Work, Events, Home, Errands, plus
-`PERSONAL_BUCKET` added in `ensureTenant`. `SEED_ITEMS` is **2 items**
-(`Priority work`, `Tidy up`). **No appointments and no event are seeded at all**,
-so two of the four concepts are invisible to a new account.
-
-**Proposed:** one or two of each — a couple more list items across different
-buckets and cadences, one appointment, one short event with an item in it. Enough
-that a new account demonstrates every mechanic on day one. Keep them obviously
-generic so they read as examples.
-
-Seeds live in `src/domain/seed.ts` and are written by `ensureTenant`, so this is
-a functions deploy. Only affects accounts created after it ships.
+The previously seeded appointment had `dueAt: ''` and so could never pack; it was
+invisible outside Lists.
 
 ### B6. Respawn already resets the day — but not the log
 

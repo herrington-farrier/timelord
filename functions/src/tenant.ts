@@ -1,9 +1,9 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 
-import { bucketsToBackfill, PERSONAL_BUCKET, SEED_BUCKETS, SEED_ITEMS } from '../../src/domain/seed';
+import { bucketsToBackfill, PERSONAL_BUCKET, SEED_BUCKETS, seedEventRanges, seedItems } from '../../src/domain/seed';
 import type { Bucket } from '../../src/domain/types';
-import { APPOINTMENTS_ID, DEFAULT_SETTINGS } from '../../src/domain/types';
+import { APPOINTMENTS_ID, DEFAULT_SETTINGS, EVENTS_ID } from '../../src/domain/types';
 import { stampCreated } from './actorAudit';
 
 export function tenantRef(uid: string) {
@@ -31,10 +31,13 @@ export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
     const batch = getFirestore().batch();
     batch.set(ref, { ...stamp, schema: TENANT_SCHEMA });
     batch.set(ref.collection('settings').doc('current'), { ...DEFAULT_SETTINGS, ...stamp });
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
     for (const bucket of [PERSONAL_BUCKET, ...SEED_BUCKETS]) {
-      batch.set(ref.collection('buckets').doc(bucket.id), { ...bucket, ...stamp });
+      // the example event needs live dates, not dates fixed at build time
+      const seeded = bucket.id === EVENTS_ID ? { ...bucket, ranges: seedEventRanges(today) } : bucket;
+      batch.set(ref.collection('buckets').doc(bucket.id), { ...seeded, ...stamp });
     }
-    for (const item of SEED_ITEMS) {
+    for (const item of seedItems(today)) {
       batch.set(ref.collection('items').doc(item.id), { ...item, ...stamp });
     }
     await batch.commit();
@@ -81,15 +84,17 @@ export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
         ...stamp,
       });
       batch.delete(doc.ref);
-      });
+    });
   }
 
+  // A tenant that has lost every bucket gets the examples back.
   if (existing.filter((b) => !b.archived).length === 0) {
     const itemsSnap = await ref.collection('items').get();
     if (itemsSnap.empty) {
-      for (const item of SEED_ITEMS) {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
+      for (const item of seedItems(today)) {
         batch.set(ref.collection('items').doc(item.id), { ...item, ...stamp });
-          }
+      }
     }
   }
 

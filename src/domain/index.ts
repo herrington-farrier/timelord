@@ -8,7 +8,7 @@ export { packDay, collectEndDaySkipPushes, daySections, sectionMinutes } from '.
 export { PACK_RANGE_DAYS, packRange } from './packWeek';
 export { recomputeEtas } from './etas';
 export { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate, nextAssignedDate } from './skip';
-export { SEED_BUCKETS, SEED_ITEMS, PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET, APPOINTMENTS_BUCKET, isAppointmentBucket, defaultSettings, canDeleteBucket, canRenameBucket, splitEditBuckets, listableBuckets, listCadenceDays, bucketsToBackfill } from './seed';
+export { SEED_BUCKETS, seedItems, seedEventRanges, PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET, APPOINTMENTS_BUCKET, isAppointmentBucket, defaultSettings, canDeleteBucket, canRenameBucket, splitEditBuckets, listableBuckets, listCadenceDays, bucketsToBackfill } from './seed';
 export { applyBucketOrder, applyItemOrder, sortByWeight, nextItemWeight } from './order';
 export { appointmentLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity, usedFromEat, bucketSlots, parseBucketSlots, itemWorkSlot, workShowsItemSlot } from './sections';
 export { sectionRemainingNow, elapsedSince } from './timer';

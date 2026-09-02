@@ -128,6 +128,40 @@ describe('TodayPage', () => {
     expect(screen.queryByRole('button', { name: 'Start Quest' })).not.toBeInTheDocument();
   });
 
+  it('paints Break in the Personal colour', () => {
+    const startedAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    dayState.current = {
+      startedAt,
+      section: 'morning',
+      sectionStartedAt: startedAt,
+      sectionRemainingMinutes: 120,
+      packedAt: startedAt,
+      packedMinutes: 0,
+      blocks: [
+        {
+          id: 'break',
+          bucketId: 'personal',
+          kind: 'personal',
+          title: 'Break',
+          slot: 'morning',
+          status: 'pending',
+          date: '2026-08-30',
+          startMinutes: 0,
+          endMinutes: 0,
+          durationMinutes: 0,
+          color: '5b9bd5',
+          flexible: true,
+        },
+      ],
+      dropped: [],
+    };
+    const { container } = renderToday();
+    // Break is the only Personal block on Quest; without --bcolor it fell back
+    // to gold and the Personal colour appeared nowhere.
+    const card = container.querySelector('.item');
+    expect(card?.getAttribute('style')).toContain('#5b9bd5');
+  });
+
   it('hides Complete and Skip until the item is tapped open', async () => {
     const user = userEvent.setup();
     const startedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();

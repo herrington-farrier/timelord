@@ -134,6 +134,7 @@ export function TodayPage() {
               <BreakControl
                 key={b.id}
                 on={paused}
+                color={b.color}
                 index={i}
                 onStart={() => act('Resting.', () => api.startBreak({ date }))}
                 onEnd={() => act('Rest over.', () => api.endBreak({ date }))}
@@ -272,17 +273,21 @@ function SectionEndActs({
 
 function BreakControl({
   on,
+  color,
   index,
   onStart,
   onEnd,
 }: {
   on: boolean;
+  color?: string;
   index?: number;
   onStart: () => void;
   onEnd: () => void;
 }) {
   return (
-    <div className="item" style={stagger(index)}>
+    // Break is the only Personal block Quest shows, so without --bcolor the
+    // Personal colour never appeared anywhere on the page.
+    <div className="item" style={{ ['--bcolor' as string]: `#${color || '5b9bd5'}`, ...stagger(index) }}>
       <div className="item-top">
         <div className="item-title">Break</div>
       </div>

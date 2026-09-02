@@ -1,3 +1,4 @@
+import { addDaysKey } from '../shared/dates';
 import {
   APPOINTMENTS_ID,
   DEFAULT_SETTINGS,
@@ -7,6 +8,7 @@ import {
   WORK_ID,
   type Bucket,
   type DaySettings,
+  type EventRange,
   type ListItem,
   type Weekday,
 } from './types';
@@ -104,38 +106,91 @@ export const SEED_BUCKETS: Bucket[] = [
   },
 ];
 
-export const SEED_ITEMS: ListItem[] = [
-  {
-    id: 'example-appointment',
-    bucketId: APPOINTMENTS_ID,
-    title: 'Example appointment',
-    type: 'scheduled',
-    weight: 1,
-    durationMinutes: 60,
-    cadence: { kind: 'daily' },
-    dueAt: '',
-    slot: 'midday',
-    apptTime: '14:30',
-  },
-  {
-    id: 'priority-work',
-    bucketId: WORK_ID,
-    title: 'Priority work',
-    type: 'recurring',
-    weight: 1,
-    durationMinutes: 60,
-    cadence: { kind: 'weekdays' },
-  },
-  {
-    id: 'tidy',
-    bucketId: 'home',
-    title: 'Tidy up',
-    type: 'recurring',
-    weight: 1,
-    durationMinutes: 15,
-    cadence: { kind: 'daily' },
-  },
-];
+/**
+ * A new account should demonstrate every mechanic on day one: a timed item, a
+ * 0-duration reminder, a weekly cadence, a dated appointment and an event with
+ * something in it. Dates are relative to the day the account is created, so the
+ * examples are live rather than stale.
+ */
+export function seedItems(today: string): ListItem[] {
+  const eventStart = addDaysKey(today, 14);
+  return [
+    {
+      id: 'example-appointment',
+      bucketId: APPOINTMENTS_ID,
+      title: 'Example appointment',
+      type: 'scheduled',
+      weight: 1,
+      durationMinutes: 60,
+      cadence: { kind: 'daily' },
+      dueAt: today,
+      slot: 'midday',
+      apptTime: '14:30',
+    },
+    {
+      id: 'priority-work',
+      bucketId: WORK_ID,
+      title: 'Priority work',
+      type: 'recurring',
+      weight: 1,
+      durationMinutes: 60,
+      cadence: { kind: 'weekdays' },
+      slot: 'midday',
+    },
+    {
+      id: 'weekly-review',
+      bucketId: WORK_ID,
+      title: 'Weekly review',
+      type: 'recurring',
+      weight: 2,
+      durationMinutes: 30,
+      cadence: { kind: 'weekly', days: ['Fri'] },
+      slot: 'midday',
+    },
+    {
+      id: 'tidy',
+      bucketId: 'home',
+      title: 'Tidy up',
+      type: 'recurring',
+      weight: 1,
+      durationMinutes: 15,
+      cadence: { kind: 'daily' },
+    },
+    {
+      id: 'reminder-example',
+      bucketId: 'home',
+      title: 'Reminder with no duration',
+      type: 'recurring',
+      weight: 2,
+      durationMinutes: 0,
+      cadence: { kind: 'daily' },
+    },
+    {
+      id: 'groceries',
+      bucketId: 'errands',
+      title: 'Groceries',
+      type: 'recurring',
+      weight: 1,
+      durationMinutes: 45,
+      cadence: { kind: 'weekly', days: ['Sat'] },
+    },
+    {
+      id: 'example-event-item',
+      bucketId: EVENTS_ID,
+      title: 'Something during the event',
+      type: 'scheduled',
+      weight: 1,
+      durationMinutes: 90,
+      cadence: { kind: 'daily' },
+      dueAt: eventStart,
+    },
+  ];
+}
+
+/** A short event a fortnight out, so an event day is visible on the board. */
+export function seedEventRanges(today: string): EventRange[] {
+  return [{ id: 'example-event', startDate: addDaysKey(today, 14), endDate: addDaysKey(today, 15) }];
+}
 
 export function defaultSettings(): DaySettings {
   return { ...DEFAULT_SETTINGS };
