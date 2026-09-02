@@ -181,24 +181,23 @@ nothing a person did. `formatLogEvent` still renders existing rows.
 
 ## Features
 
-### F1. One Save for the whole Strategize page
+### F1. One Save for Strategize — **done**
 
-Carried over, and the request now extends past Lists to **every Strategize tab**.
+All three tabs now save as a page. `saveItems` takes every row, validates the
+lot, writes one batch and repacks once — deliberately not a loop over the old
+`upsertItem`, which ran a full repack per row.
 
-**Do not implement as a loop.** Every `upsertItem` runs a full repack, so saving
-N rows with N calls fires N repacks — the same duplicate-repack problem already
-removed from four callables.
+`buildItemPayload` holds the validation so the rules cannot drift between paths,
+and errors name the row (`Tidy up: pick at least one section.`) because "pick a
+section" is useless when a page Save covers twenty of them. Nothing is written
+until every row validates, so a bad row cannot leave the page half saved.
 
-Shape, mirroring `saveBuckets`: a `saveItems` callable taking `rows[]`,
-validating each the way `upsertItem` does (`itemFitsBucket`, and the Work section
-pick when `workShowsItemSlot`), reporting **which row** failed, then one batch and
-one repack. Same for appointments.
+The repack is scoped when every row is date-keyed; one cadence item in the batch
+puts it back to the full range, since a cadence can land anywhere.
 
-Not a blocker: collapsed groups are hidden with the `hidden` attribute but are
-still in the DOM and still readable — the Buckets page Save already does exactly
-this.
-
-Worth doing **after E3**, so page Save repacks a scoped range rather than 42 days.
+Row Save buttons are gone; Remove stays, being per-row and immediate.
+`upsertItem` was left with no caller and has been deleted, client binding and
+deployed function both.
 
 ### F2. Count Personal hours as day hours (toggle)
 

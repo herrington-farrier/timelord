@@ -502,28 +502,33 @@ function datesForItemEdit(
   return out.length ? [...new Set(out)] : [];
 }
 
-export const upsertItem = onCall(async (request) => {
-  const uid = requireUid(request);
-  await ensureTenant(uid, nowIso());
-  const data = request.data as Record<string, unknown>;
-  const id = typeof data.id === 'string' && data.id.trim() ? data.id.trim() : newId();
+/**
+ * Build one item's stored shape, validating it the same way whichever path
+ * arrived here. Both the single-row Save and the page Save call this, so the
+ * rules cannot drift between them.
+ *
+ * `label` names the row in any error, because "Pick an event" is unhelpful when
+ * a page Save covers twenty of them.
+ */
+function buildItemPayload(
+  data: Record<string, unknown>,
+  buckets: Bucket[],
+  items: ListItem[],
+  storedWeight: number,
+  isNew: boolean
+): Record<string, unknown> {
   const durationMinutes = asNumber(data.durationMinutes ?? 0, 'Duration');
-  if (durationMinutes < 0) {
-    throw new HttpsError('invalid-argument', 'Duration cannot be negative.');
-  }
-  const ref = tenantRef(uid).collection('items').doc(id);
-  const existing = await ref.get();
-  const storedWeight = existing.exists ? Number((existing.data() as { weight?: unknown }).weight) : NaN;
+  if (durationMinutes < 0) throw new HttpsError('invalid-argument', 'Duration cannot be negative.');
   const bucketId = asString(data.bucketId, 'Bucket');
   const eventItem = bucketId === EVENTS_ID;
   const apptItem = bucketId === APPOINTMENTS_ID;
-  const loaded = await loadTenant(uid);
-  const bucket = (loaded.buckets as Bucket[]).find((b) => b.id === bucketId);
+  const bucket = buckets.find((b) => b.id === bucketId);
+  const title = asString(data.title, 'Title');
+  const label = (msg: string) => new HttpsError('invalid-argument', `${title}: ${msg}`);
+
   if (!eventItem) {
-    if (!bucket) throw new HttpsError('not-found', 'That bucket was not found.');
-    if (!itemFitsBucket(durationMinutes, bucket)) {
-      throw new HttpsError('invalid-argument', itemExceedsBucketMessage(bucket));
-    }
+    if (!bucket) throw new HttpsError('not-found', `${title}: that bucket was not found.`);
+    if (!itemFitsBucket(durationMinutes, bucket)) throw label(itemExceedsBucketMessage(bucket));
   }
   // Events and appointments are both date-keyed: they pack on their due date
   // and never run on a cadence.
@@ -534,24 +539,16 @@ export const upsertItem = onCall(async (request) => {
     const ranges = eventRanges(bucket);
     eventId = typeof data.eventId === 'string' ? data.eventId.trim() : '';
     const range = ranges.find((r) => r.id === eventId);
-    if (!range) throw new HttpsError('invalid-argument', 'Pick an event for this item.');
+    if (!range) throw label('pick an event for this item.');
     if (dueAt < range.startDate || dueAt > range.endDate) {
-      throw new HttpsError(
-        'invalid-argument',
-        `${eventRangeName(range)} runs ${range.startDate} to ${range.endDate}.`
-      );
+      throw label(`${eventRangeName(range)} runs ${range.startDate} to ${range.endDate}.`);
     }
   }
-  const weight = existing.exists
-    ? Number.isFinite(storedWeight)
-      ? storedWeight
-      : 1
-    : nextItemWeight(loaded.items as ListItem[], bucketId);
   const payload: Record<string, unknown> = {
     bucketId,
-    title: asString(data.title, 'Title'),
+    title,
     type,
-    weight,
+    weight: isNew ? nextItemWeight(items, bucketId) : Number.isFinite(storedWeight) ? storedWeight : 1,
     durationMinutes,
     cadence: eventItem || apptItem ? { kind: 'daily' } : data.cadence || { kind: 'daily' },
     dueAt,
@@ -566,7 +563,7 @@ export const upsertItem = onCall(async (request) => {
     const allowed = bucketSlots(bucket);
     const raw = Array.isArray(data.slots) ? data.slots : [];
     const picked = allowed.filter((slot) => raw.includes(slot));
-    if (!picked.length) throw new HttpsError('invalid-argument', 'Pick at least one section.');
+    if (!picked.length) throw label('pick at least one section.');
     payload.slots = picked;
     payload.slot = picked[0];
   }
@@ -575,12 +572,8 @@ export const upsertItem = onCall(async (request) => {
     if (workShowsItemSlot(bucket)) {
       const allowed = bucketSlots(bucket);
       const slot = data.slot;
-      if (slot !== 'morning' && slot !== 'midday' && slot !== 'evening') {
-        throw new HttpsError('invalid-argument', 'Pick a Work section.');
-      }
-      if (!allowed.includes(slot)) {
-        throw new HttpsError('invalid-argument', 'Pick a Work section.');
-      }
+      if (slot !== 'morning' && slot !== 'midday' && slot !== 'evening') throw label('pick a Work section.');
+      if (!allowed.includes(slot)) throw label('pick a Work section.');
       payload.slot = slot;
     } else {
       payload.slot = itemWorkSlot({}, bucket);
@@ -588,13 +581,64 @@ export const upsertItem = onCall(async (request) => {
   } else if (!apptItem) {
     payload.slot = null;
   }
-  const stamp = existing.exists ? await stampLastUpdated(uid, nowIso()) : await stampCreated(uid, nowIso());
-  const previousDueAt = existing.exists ? (existing.data() as { dueAt?: string }).dueAt : undefined;
-  await ref.set({ ...payload, ...stamp }, { merge: true });
-  const scoped = datesForItemEdit(bucket, previousDueAt, dueAt || undefined);
-  if (scoped) await writePackedDates(uid, scoped);
-  else await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
-  return { ok: true, id };
+  return payload;
+}
+
+/**
+ * One Save for the whole Lists tab. Deliberately not a loop over upsertItem:
+ * that runs a full repack per row, so twenty rows would mean twenty rebuilds.
+ * Validate everything first, write once, repack once.
+ */
+export const saveItems = onCall(async (request) => {
+  const uid = requireUid(request);
+  await ensureTenant(uid, nowIso());
+  const rows = Array.isArray(request.data?.rows) ? (request.data.rows as Record<string, unknown>[]) : [];
+  if (!rows.length) return { ok: true, saved: 0 };
+  const loaded = await loadTenant(uid);
+  const buckets = loaded.buckets as Bucket[];
+  const items = loaded.items as ListItem[];
+
+  // Validate every row before writing any, so a bad row cannot leave the page
+  // half saved.
+  const prepared = rows.map((row) => {
+    const id = typeof row.id === 'string' && row.id.trim() ? row.id.trim() : newId();
+    const before = items.find((i) => i.id === id);
+    return {
+      id,
+      isNew: !before,
+      previousDueAt: before?.dueAt,
+      payload: buildItemPayload(row, buckets, items, Number(before?.weight), !before),
+    };
+  });
+
+  const now = nowIso();
+  const created = await stampCreated(uid, now);
+  const updated = await stampLastUpdated(uid, now);
+  const batch = getFirestore().batch();
+  for (const row of prepared) {
+    batch.set(
+      tenantRef(uid).collection('items').doc(row.id),
+      { ...row.payload, ...(row.isNew ? created : updated) },
+      { merge: true }
+    );
+  }
+  await batch.commit();
+
+  // Scope the repack when every row is date-keyed; otherwise a cadence item
+  // could land anywhere in the range.
+  const scopes = prepared.map((row) =>
+    datesForItemEdit(
+      buckets.find((b) => b.id === row.payload.bucketId),
+      row.previousDueAt,
+      (row.payload.dueAt as string) || undefined
+    )
+  );
+  if (scopes.every((s) => s !== null)) {
+    await writePackedDates(uid, [...new Set(scopes.flat() as string[])]);
+  } else {
+    await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
+  }
+  return { ok: true, saved: prepared.length };
 });
 
 export const reorderItems = onCall(async (request) => {

@@ -19,7 +19,7 @@ export const api = {
   saveBuckets: call<Record<string, unknown>, { ok: boolean }>('saveBuckets'),
   archiveBucket: call<{ id: string }, { ok: boolean }>('archiveBucket'),
   reorderBuckets: call<{ weightedOrderIds: string[] }, { ok: boolean }>('reorderBuckets'),
-  upsertItem: call<Record<string, unknown>, { ok: boolean; id: string }>('upsertItem'),
+  saveItems: call<{ rows: Record<string, unknown>[] }, { ok: boolean; saved: number }>('saveItems'),
   archiveItem: call<{ id: string }, { ok: boolean }>('archiveItem'),
   reorderItems: call<{ orderedIds: string[] }, { ok: boolean }>('reorderItems'),
   rebuildRange: call<{ start?: string; days?: number }, { ok: boolean }>('rebuildRange'),

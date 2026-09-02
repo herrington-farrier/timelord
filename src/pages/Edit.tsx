@@ -15,8 +15,6 @@ import {
   formatHoursField,
   hoursMinutesOf,
   hoursModeOf,
-  itemExceedsBucketMessage,
-  itemFitsBucket,
   personalWeekMinutes,
   weekBudgetSummary,
   type WeekBudgetSummary,
@@ -116,11 +114,7 @@ export function EditPage() {
         <ListsForm
           buckets={listableBuckets(buckets)}
           items={items}
-          onSave={(row) =>
-            act('Item saved.', async () => {
-              await api.upsertItem(row);
-            })
-          }
+          onSaveAll={(rows) => act('Page saved.', () => api.saveItems({ rows }), 'Save')}
           onReorder={(ids) =>
             act('Order saved.', async () => {
               await api.reorderItems({ orderedIds: ids });
@@ -761,13 +755,13 @@ function BucketFields({
 function ListsForm({
   buckets,
   items,
-  onSave,
+  onSaveAll,
   onReorder,
   onRemove,
 }: {
   buckets: Bucket[];
   items: ListItem[];
-  onSave: (row: Record<string, unknown>) => Promise<void>;
+  onSaveAll: (rows: Record<string, unknown>[]) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
 }) {
@@ -785,7 +779,7 @@ function ListsForm({
     <div className="edit-page">
       <div className="edit-card add-card">
         <h3 className="group-h">Add New</h3>
-        <ItemFields buckets={buckets} onSubmit={(payload) => onSave(payload)} />
+        <ItemFields buckets={buckets} />
       </div>
       {buckets.map((b) => {
         const rows = grouped[b.id] || [];
@@ -811,7 +805,7 @@ function ListsForm({
                 >
                   {eventRows.map((row) => (
                     <div key={row.id} className="edit-card" style={{ ['--bcolor' as string]: `#${b.color}` }}>
-                      <ItemFields buckets={buckets} item={row} onSubmit={(payload) => onSave({ id: row.id, ...payload })} />
+                      <ItemFields buckets={buckets} item={row} />
                       <div className="edit-acts">
                         <button type="button" className="btn--red" onClick={() => onRemove(row.id)}>
                           Remove
@@ -826,7 +820,7 @@ function ListsForm({
                 <CollapsibleBucket title="Unassigned" hours={String(orphans.length)} color={b.color}>
                   {orphans.map((row) => (
                     <div key={row.id} className="edit-card" style={{ ['--bcolor' as string]: `#${b.color}` }}>
-                      <ItemFields buckets={buckets} item={row} onSubmit={(payload) => onSave({ id: row.id, ...payload })} />
+                      <ItemFields buckets={buckets} item={row} />
                       <div className="edit-acts">
                         <button type="button" className="btn--red" onClick={() => onRemove(row.id)}>
                           Remove
@@ -847,11 +841,7 @@ function ListsForm({
                 if (!row) return null;
                 return (
                   <div className="edit-card" style={{ ['--bcolor' as string]: `#${b.color}` }}>
-                    <ItemFields
-                      buckets={buckets}
-                      item={row}
-                      onSubmit={(payload) => onSave({ id: row.id, ...payload })}
-                    />
+                    <ItemFields buckets={buckets} item={row} />
                     <div className="edit-acts">
                       <button type="button" className="btn--red" onClick={() => onRemove(row.id)}>
                         Remove
@@ -864,19 +854,88 @@ function ListsForm({
           </CollapsibleBucket>
         );
       })}
+      <div className="page-save">
+        <button
+          type="button"
+          className="btn--gold"
+          onClick={(e) => {
+            const root = e.currentTarget.closest('.edit-page');
+            if (!(root instanceof HTMLElement)) return;
+            // Collapsed groups are hidden, not removed, so their fields are
+            // still here to read.
+            const rows = [...root.querySelectorAll<HTMLFormElement>('form[data-kind="item"]')]
+              .map((form) => itemPayloadFromForm(form, buckets))
+              .filter((row): row is Record<string, unknown> => row !== null);
+            onSaveAll(rows);
+          }}
+        >
+          Save
+        </button>
+      </div>
     </div>
   );
 }
 
-function ItemFields({
-  buckets,
-  item,
-  onSubmit,
-}: {
-  buckets: Bucket[];
-  item?: ListItem;
-  onSubmit: (payload: Record<string, unknown>) => void;
-}) {
+/**
+ * Read one item row out of its form. Pure, so the page Save can build exactly
+ * the same payload the row Save built — no component state involved beyond
+ * what the form itself holds.
+ */
+function itemPayloadFromForm(form: HTMLFormElement, buckets: Bucket[]): Record<string, unknown> | null {
+  const fd = new FormData(form);
+  const title = String(fd.get('title') || '').trim();
+  const bucketId = String(fd.get('bucketId') || '');
+  // An untouched Add New row is not a row.
+  if (!title || !bucketId) return null;
+  const bucket = buckets.find((b) => b.id === bucketId);
+  const eventItem = Boolean(bucket && (bucket.kind === 'event' || bucket.id === EVENTS_ID));
+  const apptItem = isAppointmentBucket(bucket);
+  const datedItem = eventItem || apptItem;
+  const openDays = listCadenceDays(bucket);
+  const type = datedItem ? 'scheduled' : String(fd.get('type') || 'recurring');
+  const cadKind = String(fd.get('cadenceKind') || 'daily');
+
+  let cadence: Cadence = { kind: 'daily' };
+  if (!datedItem) {
+    if (cadKind === 'weekdays' || cadKind === 'weekends' || cadKind === 'daily') {
+      cadence = { kind: cadKind };
+    } else if (cadKind === 'weekly') {
+      cadence = { kind: 'weekly', days: (fd.getAll('weeklyDays') as Weekday[]).filter((d) => openDays.includes(d)) };
+    } else if (cadKind === 'everyNDays') {
+      const startDate = String(fd.get('startDate') || '').trim();
+      cadence = {
+        kind: 'everyNDays',
+        n: Number(fd.get('everyN')) || 2,
+        startWeekday: (openDays.includes(String(fd.get('startWeekday')) as Weekday)
+          ? String(fd.get('startWeekday'))
+          : openDays[0] || 'Mon') as Weekday,
+        ...(startDate ? { startDate } : {}),
+      };
+    } else if (cadKind === 'monthly') {
+      cadence = { kind: 'monthly', dayOfMonth: Number(fd.get('monthDay')) || 1 };
+    }
+  }
+
+  const id = form.dataset.id;
+  return {
+    ...(id ? { id } : {}),
+    bucketId,
+    title,
+    type,
+    durationMinutes: hoursToMinutes(fd.get('iH'), fd.get('iM')),
+    cadence,
+    dueAt: type === 'scheduled' ? fd.get('dueAt') : '',
+    ...(apptItem
+      ? { slots: fd.getAll('slots') }
+      : bucket && workShowsItemSlot(bucket)
+        ? { slot: fd.get('slot') }
+        : {}),
+    ...(apptItem ? { apptTime: fd.get('apptTime') } : {}),
+    ...(eventItem ? { eventId: fd.get('eventId') } : {}),
+  };
+}
+
+function ItemFields({ buckets, item }: { buckets: Bucket[]; item?: ListItem }) {
   const dur = durationInputs(item?.durationMinutes, { hours: 0, minutes: 30 });
   const [bucketId, setBucketId] = useState(item?.bucketId || buckets[0]?.id);
   const currentBucket = buckets.find((b) => b.id === bucketId);
@@ -894,55 +953,8 @@ function ItemFields({
   const openDays = listCadenceDays(currentBucket);
   const [kind, setKind] = useState(item?.type || 'recurring');
   const [cadenceKind, setCadenceKind] = useState(item?.cadence.kind || 'daily');
-  const { showToast } = useToast();
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        const fd = new FormData(e.currentTarget);
-        const type = datedItem ? 'scheduled' : String(fd.get('type'));
-        const cadKind = String(fd.get('cadenceKind') || 'daily');
-        const durationMinutes = hoursToMinutes(fd.get('iH'), fd.get('iM'));
-        if (!datedItem && currentBucket && !itemFitsBucket(durationMinutes, currentBucket)) {
-          showToast(itemExceedsBucketMessage(currentBucket), 'error');
-          return;
-        }
-        let cadence: Cadence = { kind: 'daily' };
-        if (!eventItem) {
-          if (cadKind === 'weekdays' || cadKind === 'weekends' || cadKind === 'daily') {
-            cadence = { kind: cadKind };
-          } else if (cadKind === 'weekly') {
-            cadence = {
-              kind: 'weekly',
-              days: (fd.getAll('weeklyDays') as Weekday[]).filter((d) => openDays.includes(d)),
-            };
-          } else if (cadKind === 'everyNDays') {
-            const startDate = String(fd.get('startDate') || '').trim();
-            cadence = {
-              kind: 'everyNDays',
-              n: Number(fd.get('everyN')) || 2,
-              startWeekday: (openDays.includes(String(fd.get('startWeekday')) as Weekday)
-              ? String(fd.get('startWeekday'))
-              : openDays[0] || 'Mon') as Weekday,
-              ...(startDate ? { startDate } : {}),
-            };
-          } else if (cadKind === 'monthly') {
-            cadence = { kind: 'monthly', dayOfMonth: Number(fd.get('monthDay')) || 1 };
-          }
-        }
-        onSubmit({
-          bucketId: fd.get('bucketId'),
-          title: fd.get('title'),
-          type,
-          durationMinutes,
-          cadence,
-          dueAt: type === 'scheduled' ? fd.get('dueAt') : '',
-          ...(apptItem ? { slots: fd.getAll('slots') } : slotPick ? { slot: fd.get('slot') } : {}),
-          ...(apptItem ? { apptTime: fd.get('apptTime') } : {}),
-          ...(eventItem ? { eventId: fd.get('eventId') } : {}),
-        });
-      }}
-    >
+    <form data-kind="item" data-id={item?.id} onSubmit={(e) => e.preventDefault()}>
       <div className="fields">
         <FormField label="Title" wide>
           <input name="title" defaultValue={item?.title || ''} required />
@@ -1096,11 +1108,6 @@ function ItemFields({
           </FormField>
         </div>
       ) : null}
-      <div className="edit-acts">
-        <button type="submit" className="btn--gold">
-          Save
-        </button>
-      </div>
     </form>
   );
 }
