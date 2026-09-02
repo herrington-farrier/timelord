@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { assignableWeekMinutes } from '../domain/budget';
+import { weekdayFromKey } from '../domain/cadence';
 import { collectEndDaySkipPushes, daySections, packDay, sectionMinutes } from '../domain/packDay';
 import { todaySectionItems } from '../domain/today';
 import { PACK_RANGE_DAYS, packRange } from '../domain/packWeek';
@@ -1153,5 +1154,40 @@ describe('transitions between buckets', () => {
     const trans = blocks.find((b: PackedBlock) => b.kind === 'transition');
     expect(trans?.itemId).toBeUndefined();
     expect(collectEndDaySkipPushes(monday, blocks, [], [], [workBucket(), house, errands])).toEqual([]);
+  });
+});
+
+describe('bucket days bound an item in the packer', () => {
+  const garden = bucket({
+    id: 'garden',
+    name: 'Garden',
+    weight: 4,
+    days: ['Sat', 'Sun'],
+    slots: ['morning'],
+  });
+  const mow = item({
+    id: 'mow',
+    bucketId: 'garden',
+    title: 'Mow',
+    durationMinutes: 60,
+    cadence: { kind: 'everyNDays', n: 60, startDate: '2026-09-05' },
+  });
+
+  function mowDates(start: string, days: number) {
+    return packRange(start, days, { settings: settings(), buckets: [workBucket(), garden], items: [mow] })
+      .filter((d) => d.result.blocks.some((b: PackedBlock) => b.title === 'Mow'))
+      .map((d) => d.date);
+  }
+
+  it('lands only on days the bucket runs', () => {
+    const hits = mowDates('2026-09-05', 130);
+    expect(hits.every((d) => ['Sat', 'Sun'].includes(weekdayFromKey(d)))).toBe(true);
+  });
+
+  it('moves the 60-day mark forward rather than skipping the cut', () => {
+    // Sep 5 + 60 is Wed Nov 4, which Garden is shut for. It mows the 7th.
+    // The third is Sep 5 + 120 = Sun Jan 3, counted from the anchor rather
+    // than from the pushed date, so the push does not drift the rhythm.
+    expect(mowDates('2026-09-05', 130)).toEqual(['2026-09-05', '2026-11-07', '2027-01-03']);
   });
 });

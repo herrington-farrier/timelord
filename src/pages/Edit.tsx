@@ -19,7 +19,8 @@ import {
   weekBudgetSummary,
   type WeekBudgetSummary,
 } from '../domain/budget';
-import { durationInputs, formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
+import { nextOpenDay } from '../domain/cadence';
+import { durationFromInputs, durationInputs, formatDuration, hoursToMinutes, splitMinutes } from '../domain/duration';
 import { eventRangeForItem, eventRangeName, eventRanges, newEventRangeId, parseEventRanges } from '../domain/events';
 import { PACK_RANGE_DAYS } from '../domain/packWeek';
 import { canDeleteBucket, canRenameBucket, listCadenceDays, listableBuckets, splitEditBuckets } from '../domain/seed';
@@ -893,6 +894,9 @@ function ListsForm({
  * the same payload the row Save built — no component state involved beyond
  * what the form itself holds.
  */
+/** What a new item is worth before anyone says otherwise. */
+const ITEM_DEFAULT_MINUTES = 30;
+
 function itemPayloadFromForm(form: HTMLFormElement, buckets: Bucket[]): Record<string, unknown> | null {
   const fd = new FormData(form);
   const title = String(fd.get('title') || '').trim();
@@ -915,8 +919,11 @@ function itemPayloadFromForm(form: HTMLFormElement, buckets: Bucket[]): Record<s
       cadence = { kind: 'weekly', days: (fd.getAll('weeklyDays') as Weekday[]).filter((d) => openDays.includes(d)) };
     } else if (cadKind === 'everyNDays') {
       // The start date is the whole definition of an every-N stream: it sets
-      // both the phase and the weekday. Blank means starting today.
-      const startDate = String(fd.get('startDate') || '').trim() || todayKey();
+      // both the phase and the weekday. Blank means starting today, and a day
+      // the bucket does not run moves to the next one that it does — the
+      // bucket's days bound the stream, not the other way round.
+      const picked = String(fd.get('startDate') || '').trim() || todayKey();
+      const startDate = openDays.length ? nextOpenDay(picked, openDays) : picked;
       cadence = { kind: 'everyNDays', n: Number(fd.get('everyN')) || 2, startDate };
     } else if (cadKind === 'monthly') {
       cadence = { kind: 'monthly', dayOfMonth: Number(fd.get('monthDay')) || 1 };
@@ -929,7 +936,7 @@ function itemPayloadFromForm(form: HTMLFormElement, buckets: Bucket[]): Record<s
     bucketId,
     title,
     type,
-    durationMinutes: hoursToMinutes(fd.get('iH'), fd.get('iM')),
+    durationMinutes: durationFromInputs(fd.get('iH'), fd.get('iM'), ITEM_DEFAULT_MINUTES),
     cadence,
     dueAt: type === 'scheduled' ? fd.get('dueAt') : '',
     ...(apptItem
@@ -955,7 +962,7 @@ function ItemFields({
   // the whole page.
   const failed = error && error.itemId && error.itemId === item?.id ? error : null;
   const invalid = (field: string) => (failed?.field === field ? ' is-invalid' : '');
-  const dur = durationInputs(item?.durationMinutes, { hours: 0, minutes: 30 });
+  const dur = durationInputs(item?.durationMinutes, splitMinutes(ITEM_DEFAULT_MINUTES));
   const [bucketId, setBucketId] = useState(item?.bucketId || buckets[0]?.id);
   const currentBucket = buckets.find((b) => b.id === bucketId);
   const eventItem = Boolean(currentBucket && (currentBucket.kind === 'event' || currentBucket.id === EVENTS_ID));
@@ -1120,7 +1127,13 @@ function ItemFields({
               name="startDate"
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              // Snap to a day the bucket runs as soon as it is picked, so the
+              // date shown is the date that will be used.
+              onChange={(e) =>
+                setStartDate(
+                  e.target.value && openDays.length ? nextOpenDay(e.target.value, openDays) : e.target.value
+                )
+              }
             />
           </FormField>
         </div>

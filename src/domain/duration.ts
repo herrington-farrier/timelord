@@ -1,3 +1,17 @@
+/**
+ * Duration off a pair of form inputs, where blank and 0 mean different things.
+ *
+ * A 0-duration item is a reminder that costs no time, so 0 has to stay
+ * expressible. But an empty field is not a 0 — it is a field someone cleared
+ * and did not refill, which on a phone is one thumb-slip. Reading it as 0 turns
+ * a 30m appointment into a reminder without saying anything.
+ */
+export function durationFromInputs(hours: unknown, minutes: unknown, whenBlank: number): number {
+  const blank = (v: unknown) => v == null || String(v).trim() === '';
+  if (blank(hours) && blank(minutes)) return Math.max(0, Math.round(whenBlank));
+  return hoursToMinutes(hours, minutes);
+}
+
 export function hoursToMinutes(hours: unknown, minutes: unknown): number {
   const h = Number(hours) || 0;
   const m = Number(minutes) || 0;

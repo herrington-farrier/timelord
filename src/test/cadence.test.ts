@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { cadenceHitsDate, weekdayFromKey } from '../domain/cadence';
+import type { Weekday } from '../domain/types';
 
 describe('cadenceHitsDate', () => {
   it('treats 2026-08-31 as a Monday', () => {
@@ -88,5 +89,64 @@ describe('cadenceHitsDate', () => {
 
   it('hits the first of the month for monthly cadence', () => {
     expect(cadenceHitsDate({ kind: 'monthly', dayOfMonth: 1 }, '2026-09-01')).toBe(true);
+  });
+});
+
+describe('bucket days bound the cadence', () => {
+  // Garden runs weekends only; mow every 60 days. 60 walks through the week,
+  // so most occurrences land on a day the bucket is shut.
+  const garden: Weekday[] = ['Sat', 'Sun'];
+  const mow = { kind: 'everyNDays' as const, n: 60, startDate: '2026-09-05' }; // a Saturday
+
+  it('never runs on a day the bucket is closed', () => {
+    for (const d of ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11']) {
+      expect(cadenceHitsDate(mow, d, garden)).toBe(false);
+    }
+  });
+
+  it('moves an occurrence forward to the next open day instead of losing it', () => {
+    // 60 days from Sat Sep 5 is Wed Nov 4 — closed. It should land Sat Nov 7.
+    expect(cadenceHitsDate(mow, '2026-11-04', garden)).toBe(false);
+    expect(cadenceHitsDate(mow, '2026-11-07', garden)).toBe(true);
+  });
+
+  it('keeps the rhythm rather than drifting from the push', () => {
+    // The third occurrence still counts from the anchor, not from the pushed
+    // date: Sep 5 + 120 = Sun Jan 3, which is open and lands as-is.
+    expect(cadenceHitsDate(mow, '2027-01-03', garden)).toBe(true);
+  });
+
+  it('lands on the start date itself when that day is open', () => {
+    expect(cadenceHitsDate(mow, '2026-09-05', garden)).toBe(true);
+  });
+
+  it('leaves an unrestricted bucket exactly as it was', () => {
+    expect(cadenceHitsDate(mow, '2026-11-04', [])).toBe(true);
+    expect(cadenceHitsDate(mow, '2026-11-04')).toBe(true);
+  });
+
+  it('does not stack a daily item onto one open day', () => {
+    // Dense cadences are filtered, not pushed — there is another one tomorrow.
+    const weekdaysOnly: Weekday[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    expect(cadenceHitsDate({ kind: 'daily' }, '2026-09-05', weekdaysOnly)).toBe(false);
+    expect(cadenceHitsDate({ kind: 'daily' }, '2026-09-07', weekdaysOnly)).toBe(true);
+  });
+
+  it('moves a monthly item off a closed day too', () => {
+    // The 1st of Nov 2026 is a Sunday; a weekday bucket takes it on Monday.
+    const weekdaysOnly: Weekday[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    const monthly = { kind: 'monthly' as const, dayOfMonth: 1 };
+    expect(cadenceHitsDate(monthly, '2026-11-01', weekdaysOnly)).toBe(false);
+    expect(cadenceHitsDate(monthly, '2026-11-02', weekdaysOnly)).toBe(true);
+  });
+
+  it('fires once when several occurrences crowd the same open day', () => {
+    // Every 2 days into a Monday-only bucket: Mondays, and only Mondays.
+    const monday: Weekday[] = ['Mon'];
+    const often = { kind: 'everyNDays' as const, n: 2, startDate: '2026-09-07' };
+    const hits = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-14'].filter((d) =>
+      cadenceHitsDate(often, d, monday)
+    );
+    expect(hits).toEqual(['2026-09-07', '2026-09-14']);
   });
 });

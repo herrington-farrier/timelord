@@ -58,7 +58,12 @@ function prevStatus(previous: PreviousBlock[] | undefined, itemId?: string, appo
   });
 }
 
-function itemHitsDate(item: ListItem, dateKey: string, skipPushes: SkipPush[]): boolean {
+function itemHitsDate(
+  item: ListItem,
+  dateKey: string,
+  skipPushes: SkipPush[],
+  bucket?: Bucket
+): boolean {
   if (item.archived) return false;
   if (skipPushes.some((p) => p.itemId === item.id && p.toDate === dateKey)) return true;
   // Events always sit on one date inside their range.
@@ -66,7 +71,9 @@ function itemHitsDate(item: ListItem, dateKey: string, skipPushes: SkipPush[]): 
   // An appointment is a one-off by default, but a standing one — therapy every
   // Tuesday — runs on a cadence like any other recurring item.
   if (item.bucketId === APPOINTMENTS_ID && item.type === 'scheduled') return item.dueAt === dateKey;
-  return cadenceHitsDate(item.cadence, dateKey);
+  // The bucket's days bound its items. Passing them here is what makes a
+  // 60-day chore land on a day the bucket actually runs.
+  return cadenceHitsDate(item.cadence, dateKey, bucket?.days);
 }
 
 function sortItems(items: ListItem[]): ListItem[] {
@@ -192,7 +199,7 @@ export function packDay(input: PackDayInput): PackDayResult {
   });
 
   function hittingFor(bucket: Bucket): ListItem[] {
-    return sortItems(items.filter((it) => it.bucketId === bucket.id && itemHitsDate(it, date, skipPushes)));
+    return sortItems(items.filter((it) => it.bucketId === bucket.id && itemHitsDate(it, date, skipPushes, bucket)));
   }
 
   function placeItem(item: ListItem, bucket: Bucket, slot?: Slot, spans?: Slot[]): void {
@@ -254,7 +261,7 @@ export function packDay(input: PackDayInput): PackDayResult {
   const apptLoad: Record<Slot, number> = { morning: 0, midday: 0, evening: 0 };
   if (apptBucket) {
     for (const appt of items.filter(
-      (it) => it.bucketId === apptBucket.id && itemHitsDate(it, date, skipPushes)
+      (it) => it.bucketId === apptBucket.id && itemHitsDate(it, date, skipPushes, apptBucket)
     )) {
       // Skipped means cancelled: the day gets those hours back.
       if (prevStatus(previous, appt.id)?.status === 'skipped') continue;

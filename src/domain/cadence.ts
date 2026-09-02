@@ -36,7 +36,8 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((db - da) / 86400000);
 }
 
-export function cadenceHitsDate(cadence: Cadence, dateKey: string): boolean {
+/** Where the cadence lands before the bucket has any say. */
+function naturalHit(cadence: Cadence, dateKey: string): boolean {
   const wd = weekdayFromKey(dateKey);
   if (cadence.kind === 'daily') return true;
   if (cadence.kind === 'weekdays') return wd !== 'Sat' && wd !== 'Sun';
@@ -54,4 +55,47 @@ export function cadenceHitsDate(cadence: Cadence, dateKey: string): boolean {
   const origin = cadence.startDate || phaseOrigin(cadence.startWeekday || 'Mon');
   const diff = daysBetween(origin, dateKey);
   return ((diff % cadence.n) + cadence.n) % cadence.n === 0;
+}
+
+/**
+ * A cadence counted in days lands wherever the arithmetic puts it, which is
+ * often a day its bucket does not run — every 60 days walks through the week.
+ * Those occurrences move forward to the bucket's next open day rather than
+ * being lost, so "every 60 days" keeps its rhythm without ever asking for a day
+ * the bucket is closed.
+ *
+ * Cadences that already name their days do not move. Another daily or weekly
+ * occurrence is never more than a few days off, so pushing one would only stack
+ * duplicates onto the same open day.
+ */
+function movesToOpenDay(cadence: Cadence): boolean {
+  return cadence.kind === 'everyNDays' || cadence.kind === 'monthly';
+}
+
+export function nextOpenDay(dateKey: string, openDays: Weekday[]): string {
+  let key = dateKey;
+  for (let i = 0; i < 7; i += 1) {
+    if (openDays.includes(weekdayFromKey(key))) return key;
+    key = addDaysKey(key, 1);
+  }
+  return dateKey;
+}
+
+/**
+ * Bucket rules are king: nothing runs on a day its bucket is closed. `openDays`
+ * empty or absent means unrestricted, which is what every caller without a
+ * bucket to hand passes.
+ */
+export function cadenceHitsDate(cadence: Cadence, dateKey: string, openDays?: Weekday[]): boolean {
+  const open = openDays && openDays.length ? openDays : null;
+  if (!open) return naturalHit(cadence, dateKey);
+  if (!open.includes(weekdayFromKey(dateKey))) return false;
+  if (!movesToOpenDay(cadence)) return naturalHit(cadence, dateKey);
+  // Today is a hit if any occurrence in the past week moves onto it. A week is
+  // the whole search: a closed day is never more than six days from an open one.
+  for (let back = 0; back < 7; back += 1) {
+    const landed = addDaysKey(dateKey, -back);
+    if (naturalHit(cadence, landed) && nextOpenDay(landed, open) === dateKey) return true;
+  }
+  return false;
 }
