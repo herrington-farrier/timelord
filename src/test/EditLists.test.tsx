@@ -13,13 +13,18 @@ vi.mock('../shared/auth', () => ({
 
 vi.mock('../services/live', () => ({
   useSettings: () => DEFAULT_SETTINGS,
-  useBuckets: () => [workBucket({ slot: 'morning', slots: ['morning', 'midday'] }), bucket({ id: 'house', name: 'House', weight: 4 })],
+  useBuckets: () => [
+    workBucket({ slot: 'morning', slots: ['morning', 'midday'] }),
+    // House stays single-section: its items should get no picker.
+    bucket({ id: 'house', name: 'House', weight: 4 }),
+    bucket({ id: 'errands', name: 'Errands', weight: 5, slots: ['morning', 'evening'] }),
+  ],
   useItems: () => [
     item({ id: 'standup', bucketId: 'work', title: 'Standup', weight: 1, slot: 'midday' }),
     item({ id: 'review', bucketId: 'work', title: 'Review', weight: 2 }),
     item({ id: 'dishes', bucketId: 'house', title: 'Dishes', weight: 1 }),
+    item({ id: 'post', bucketId: 'errands', title: 'Post office', weight: 1 }),
   ],
-  useAppointments: () => [],
 }));
 
 vi.mock('../services/api', () => ({
@@ -61,5 +66,23 @@ describe('Edit Lists collapse', () => {
     await user.click(screen.getByRole('button', { name: 'House, 1' }));
     const houseCard = screen.getByDisplayValue('Dishes').closest('form');
     expect(houseCard?.querySelector('select[name="slot"]')).toBeNull();
+  });
+});
+
+describe('a weighted bucket spanning sections', () => {
+  it('makes its items pick a section, the same as Work', async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <MemoryRouter>
+        <EditPage />
+      </MemoryRouter>
+    );
+    await user.click(screen.getByRole('button', { name: 'Lists' }));
+    await user.click(screen.getByRole('button', { name: /Errands/ }));
+    const row = container.querySelector('form[data-kind="item"][data-id="post"]');
+    const picker = row?.querySelector<HTMLSelectElement>('select[name="slot"]');
+    expect(picker).toBeTruthy();
+    // only the sections the bucket actually runs in
+    expect([...(picker?.options || [])].map((o) => o.value)).toEqual(['morning', 'evening']);
   });
 });

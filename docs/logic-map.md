@@ -41,7 +41,7 @@ Edit → Day shows the live morning / midday / evening section lengths, plus tim
 
 Each Strategize tab has one **Save** (Lists keeps per-row Remove). Lists saves through `saveItems`: every row validated first, then one batch and one repack. After a successful write, this week’s Sunday + 6 weeks (42 days) rebuild. Buckets Save is `saveBuckets`: Personal settings + Work + Events + weighted buckets (Add New if named), cap check, then pack. Item Save keeps the stored list weight. Pack always uses fresh section thirds and clears leftover eat. Started or ended days keep Complete / Skip.
 
-Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show `slot · 8h/wk` (Work can show `morning+midday · 8h/wk`; Personal: hours only). Packer daily budget: week-mode `floor(weeklyMinutes / days.length)` on a checked day; day-mode `hoursMinutes` on a checked day.
+**Every** bucket picks one or more sections with toggles, and an item chooses among them whenever its bucket spans more than one. Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show `slot · 8h/wk` (Work can show `morning+midday · 8h/wk`; Personal: hours only). Packer daily budget: week-mode `floor(weeklyMinutes / days.length)` on a checked day; day-mode `hoursMinutes` on a checked day.
 
 ## Locked vs customizable
 
@@ -49,7 +49,7 @@ Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show 
 - **Work** always exists, weight 1, first in each **selected** section (one or more; toggles on Edit). Cannot be deleted or drag-reordered. Break is always midday. If Work is in midday, Break sits in that Work block (2-hour split). Morning/evening Work is not split. If Work is not in midday, Break still lands once there. Each Work list item packs in one selected section.
 - **Appointments** always exists. A container, not a scheduled bucket: no hours, no days, no sections of its own, and it cannot be renamed or deleted. Only its colour is editable, on Strategize → Buckets where it sits first. Its items are added under Lists.
 - **Events** always exists. One or more **named** date ranges on the bucket (1-day ranges allowed). Add / remove / name them in Strategize → Buckets; page Save writes them. An event whose last day has passed deletes itself, and its items with it. Collapsed row summarises them (`2 ranges · 6d`) or `off` — the dates themselves live in the form. No slot, no week hours, no day sections. Cannot be deleted.
-- **Weighted buckets** can be added, removed, renamed, recolored, reweighted, and given days / slot / Week or Day hours.
+- **Weighted buckets** can be added, removed, renamed, recolored, reweighted, and given days / one or more sections / Week or Day hours.
 
 ## Today (normal day)
 

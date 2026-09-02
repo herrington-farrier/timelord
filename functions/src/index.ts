@@ -81,7 +81,7 @@ function bucketFields(data: Record<string, unknown>, resolvedKind: string, resol
   const hoursMode = hoursModeOf(data.hoursMode);
   const hoursMinutes = asNumber(data.hoursMinutes ?? data.weeklyMinutes, 'Hours');
   const days = Array.isArray(data.days) ? data.days.filter((d): d is string => typeof d === 'string') : [];
-  const slots = domainCall(() => parseBucketSlots(data, resolvedKind));
+  const slots = domainCall(() => parseBucketSlots(data, resolvedName));
   return {
     kind: resolvedKind,
     name: resolvedName,
@@ -581,13 +581,15 @@ function buildItemPayload(
     payload.slots = picked;
     payload.slot = picked[0];
   }
-  const isWork = Boolean(bucket && (bucket.kind === 'work' || bucket.id === WORK_ID));
-  if (isWork && bucket) {
+  if (bucket && !apptItem) {
+    // Any bucket spanning more than one section makes its items choose. Only
+    // appointments span several at once; everything else lands in exactly one.
     if (workShowsItemSlot(bucket)) {
       const allowed = bucketSlots(bucket);
       const slot = data.slot;
-      if (slot !== 'morning' && slot !== 'midday' && slot !== 'evening') throw label('pick a Work section.', 'slot');
-      if (!allowed.includes(slot)) throw label('pick a Work section.', 'slot');
+      const bad = `pick a section for ${bucket.name}.`;
+      if (slot !== 'morning' && slot !== 'midday' && slot !== 'evening') throw label(bad, 'slot');
+      if (!allowed.includes(slot)) throw label(bad, 'slot');
       payload.slot = slot;
     } else {
       payload.slot = itemWorkSlot({}, bucket);

@@ -712,34 +712,22 @@ function BucketFields({
             </div>
           </div>
         </div>
-        {kind === 'work' ? (
-          <div className="field">
-            <span>Time of day</span>
-            <div className="pills" role="group" aria-label="Time of day">
-              {SLOTS.map((s) => (
-                <label key={s}>
-                  <input
-                    name="slots"
-                    type="checkbox"
-                    value={s}
-                    defaultChecked={(bucket ? bucketSlots(bucket) : ['midday']).includes(s)}
-                  />
-                  {s}
-                </label>
-              ))}
-            </div>
+        <div className="field">
+          <span>Time of day</span>
+          <div className="pills" role="group" aria-label="Time of day">
+            {SLOTS.map((s) => (
+              <label key={s}>
+                <input
+                  name="slots"
+                  type="checkbox"
+                  value={s}
+                  defaultChecked={(bucket ? bucketSlots(bucket) : kind === 'work' ? ['midday'] : ['morning']).includes(s)}
+                />
+                {s}
+              </label>
+            ))}
           </div>
-        ) : (
-          <FormField label="Time of day">
-            <select name="slot" defaultValue={bucket?.slot || 'morning'}>
-              {SLOTS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </FormField>
-        )}
+        </div>
         <div className="field">
           <span>Days</span>
           <DayChips name="days" isOn={(d) => (bucket ? bucket.days.includes(d) : true)} />

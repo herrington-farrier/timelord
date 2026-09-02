@@ -16,7 +16,6 @@ vi.mock('../services/live', () => ({
   useSettings: () => DEFAULT_SETTINGS,
   useBuckets: () => [PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET, bucket({ id: 'home', name: 'Home', weight: 2 })],
   useItems: () => [],
-  useAppointments: () => [],
 }));
 
 vi.mock('../services/api', () => ({
@@ -27,23 +26,41 @@ vi.mock('../services/api', () => ({
   },
 }));
 
-describe('Edit Work sections', () => {
-  it('lets Work pick multiple sections with toggles, not a dropdown', async () => {
+function sectionsOf(form: Element | null) {
+  return [...(form?.querySelectorAll<HTMLInputElement>('input[name="slots"]') || [])].map((el) => ({
+    value: el.value,
+    checked: el.checked,
+  }));
+}
+
+describe('Edit bucket sections', () => {
+  it('gives every bucket the section toggles, not a dropdown', async () => {
     const user = userEvent.setup();
-    render(
-        <MemoryRouter>
-          <EditPage />
-        </MemoryRouter>
+    const { container } = render(
+      <MemoryRouter>
+        <EditPage />
+      </MemoryRouter>
     );
     await user.click(screen.getByRole('button', { name: 'Buckets' }));
     await user.click(screen.getByRole('button', { name: /Work,/ }));
-    expect(screen.getByRole('checkbox', { name: 'morning' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'midday' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'evening' })).toBeInTheDocument();
-    const workForm = screen.getByRole('checkbox', { name: 'midday' }).closest('form');
-    expect(workForm?.querySelector('select[name="slot"]')).toBeNull();
-
     await user.click(screen.getByRole('button', { name: /Home,/ }));
-    expect(document.querySelector('form[data-kind="weighted"] select[name="slot"]')).toBeTruthy();
+
+    const work = container.querySelector('form[data-kind="work"]');
+    expect(sectionsOf(work)).toEqual([
+      { value: 'morning', checked: false },
+      { value: 'midday', checked: true },
+      { value: 'evening', checked: false },
+    ]);
+
+    // a weighted bucket gets the same control it used to be denied
+    const home = container.querySelector('form[data-kind="weighted"]');
+    expect(sectionsOf(home)).toEqual([
+      { value: 'morning', checked: true },
+      { value: 'midday', checked: false },
+      { value: 'evening', checked: false },
+    ]);
+
+    // and the single-section dropdown is gone everywhere
+    expect(container.querySelector('select[name="slot"]')).toBeNull();
   });
 });

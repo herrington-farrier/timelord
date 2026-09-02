@@ -77,6 +77,9 @@ Tick as you go. Anything that fails, tell me the item number.
 31. **Reroll is blocked mid-day** — start the day, then try Reroll Stats: it
     should refuse with "Finish the day before rerolling Stats."
 32. **Forms read left-aligned** — fields in even columns, Title on its own row.
+32b. **Every bucket picks sections** — Buckets shows section toggles on every
+    bucket, not a dropdown. Give a weighted bucket two sections; its items in
+    Lists then get a section picker offering just those two.
 
 ## Quest Log
 

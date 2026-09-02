@@ -222,19 +222,21 @@ reasonable, a 0-duration repeating checklist entry probably is too. Once they
 carry a cadence they stop being purely date-keyed, which affects `itemHitsDate`
 and the Quest Log chips.
 
-### F4. Multi-section toggle for every bucket
+### F4. Multi-section for every bucket — **done**
 
-Work already has it — `slots[]`, `bucketSlots()`, `parseBucketSlots()`,
-`workShowsItemSlot()`, `itemWorkSlot()`. Generalising is mostly removing the
-"work only" guards:
+Every bucket picks its sections with the same toggles Work had; the
+single-section dropdown is gone. Mostly a matter of deleting "work only" guards,
+since the packer already iterated `bucketSlots(b)` for every bucket and
+`slotForItem` already deferred to the item when a bucket spanned more than one.
 
-- `BucketFields` renders the checkbox group only when `kind === 'work'`.
-- `upsertItem` validates a per-item slot only for the Work bucket.
-- `packDay` calls `itemWorkSlot` only for the work bucket.
+- `BucketFields` renders the toggles for every kind.
+- `parseBucketSlots` requires at least one section from any bucket, not just
+  Work, and names the bucket in the error.
+- `buildItemPayload` makes an item choose whenever **its** bucket spans more than
+  one — the rule is about the bucket now, not about being Work.
 
-The packer already iterates `bucketSlots(b)` for every bucket, so the hard part
-is largely done. Decide whether every multi-section bucket's *items* pick a
-section, or only Work's.
+Single-section buckets still give their items no picker, which is the behaviour
+worth keeping and is covered by a test.
 
 ### F5. Day-end summary after Hearth
 

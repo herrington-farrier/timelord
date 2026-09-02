@@ -38,15 +38,15 @@ export function bucketSlots(bucket: { kind?: string; id?: string; slot?: Slot; s
   return bucket.kind === 'work' || bucket.id === WORK_ID ? ['midday'] : ['morning'];
 }
 
-export function parseBucketSlots(data: { slot?: unknown; slots?: unknown }, kind: string): Slot[] {
+export function parseBucketSlots(data: { slot?: unknown; slots?: unknown }, name: string): Slot[] {
   const fromList = Array.isArray(data.slots)
     ? data.slots.filter((s): s is Slot => s === 'morning' || s === 'midday' || s === 'evening')
     : [];
   const ordered = SLOTS.filter((s) => fromList.includes(s));
   if (ordered.length) return ordered;
+  // A single stored `slot` is the pre-multi-section shape; still honoured.
   if (data.slot === 'morning' || data.slot === 'midday' || data.slot === 'evening') return [data.slot];
-  if (kind === 'work') throw new Error('Work needs a time of day.');
-  return ['morning'];
+  throw new Error(`${name} needs at least one time of day.`);
 }
 
 export function workShowsItemSlot(work: { slot?: Slot; slots?: Slot[] }): boolean {
