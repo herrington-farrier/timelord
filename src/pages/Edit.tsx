@@ -25,12 +25,12 @@ import { eventRanges, newEventRangeId, parseEventRanges } from '../domain/events
 import { PACK_RANGE_DAYS } from '../domain/packWeek';
 import { canDeleteBucket, canRenameBucket, listCadenceDays, listableBuckets, splitEditBuckets } from '../domain/seed';
 import { bucketSlots, itemWorkSlot, workShowsItemSlot } from '../domain/sections';
+import { isAppointmentBucket } from '../domain/seed';
 import {
+  APPOINTMENTS_ID,
   EVENTS_ID,
   SLOTS,
   WEEKDAYS,
-  WORK_ID,
-  type Appointment,
   type Bucket,
   type EventRange,
   type Cadence,
@@ -41,20 +41,19 @@ import {
   type Weekday,
 } from '../domain/types';
 import { api } from '../services/api';
-import { useAppointments, useBuckets, useItems, useSettings } from '../services/live';
+import { useBuckets, useItems, useSettings } from '../services/live';
 import { useAuth } from '../shared/auth';
 import { formatActionError } from '../shared/formatActionError';
 import { useToast } from '../shared/toast';
 import { Chrome } from '../components/Chrome';
 
-const TABS = ['day', 'buckets', 'lists', 'appointments'] as const;
+const TABS = ['day', 'buckets', 'lists'] as const;
 
 export function EditPage() {
   const { user } = useAuth();
   const settings = useSettings(user?.uid);
   const buckets = useBuckets(user?.uid);
   const items = useItems(user?.uid);
-  const appointments = useAppointments(user?.uid);
   const [tab, setTab] = useState<(typeof TABS)[number]>('day');
   const { showToast } = useToast();
 
@@ -129,23 +128,6 @@ export function EditPage() {
           onRemove={(id) =>
             act('Item removed.', async () => {
               await api.archiveItem({ id });
-            })
-          }
-        />
-      ) : null}
-      {tab === 'appointments' ? (
-        <ApptForm
-          appointments={appointments}
-          onSave={(row) =>
-            act('Appointment saved.', async () => {
-              await api.upsertAppointment(row);
-              await rebuild();
-            })
-          }
-          onRemove={(id) =>
-            act('Appointment removed.', async () => {
-              await api.archiveAppointment({ id });
-              await rebuild();
             })
           }
         />
@@ -344,7 +326,7 @@ function BucketsForm({
   onRemove: (id: string) => Promise<void>;
 }) {
   const { showToast } = useToast();
-  const { personal, work, events, weighted } = splitEditBuckets(buckets);
+  const { personal, appointments, work, events, weighted } = splitEditBuckets(buckets);
   const ids = weighted.map((b) => b.id);
   const saved = useMemo(
     () => weekBudgetSummary(settings, assignedWeekMinutes(buckets)),
@@ -365,6 +347,7 @@ function BucketsForm({
       onChange={(e) => refreshLive(e.currentTarget)}
     >
       <WeekBudgetBar summary={live ?? saved} />
+      <AppointmentsCard bucket={appointments} />
       <PersonalCard settings={settings} bucket={personal} />
       <BucketCard bucket={work} />
       <EventsCard bucket={events} />
@@ -394,6 +377,21 @@ function BucketsForm({
               const weight = Number(form.dataset.weight || 0);
               rows.push(bucketPayloadFromForm(form, { id, kind, weight }));
             });
+            const apptForm = root.querySelector<HTMLFormElement>('form[data-kind="appointment"]');
+            if (apptForm) {
+              rows.push({
+                id: APPOINTMENTS_ID,
+                kind: 'appointment',
+                name: 'Appointments',
+                weight: 0,
+                hoursMode: 'week',
+                hoursMinutes: 0,
+                days: WEEKDAYS,
+                slot: 'morning',
+                slots: SLOTS,
+                color: String(new FormData(apptForm).get('color') || '').replace('#', ''),
+              });
+            }
             const eventsForm = root.querySelector<HTMLFormElement>('form[data-kind="event"]');
             if (eventsForm) {
               const fd = new FormData(eventsForm);
@@ -491,6 +489,34 @@ function CompactHours({
         <input name={`${name}M`} type="number" min={0} max={59} defaultValue={m} />
       </FormField>
     </div>
+  );
+}
+
+/**
+ * Appointments is a container, not a scheduled bucket: no hours, no days, no
+ * sections. The only thing to set is the colour every appointment wears.
+ */
+function AppointmentsCard({ bucket }: { bucket: Bucket }) {
+  return (
+    <CollapsibleBucket title="Appointments" hours="always first" color={bucket.color}>
+      <form
+        key={bucket.color}
+        data-kind="appointment"
+        data-id={APPOINTMENTS_ID}
+        onSubmit={(e) => {
+          e.preventDefault();
+        }}
+      >
+        <div className="fields">
+          <FormField label="Color">
+            <input name="color" type="color" defaultValue={`#${bucket.color || 'e85d4c'}`} />
+          </FormField>
+        </div>
+        <p className="hint">
+          Appointments are packed before every other bucket in their section. Add them under Lists.
+        </p>
+      </form>
+    </CollapsibleBucket>
   );
 }
 
@@ -797,13 +823,15 @@ function ItemFields({
   item?: ListItem;
   onSubmit: (payload: Record<string, unknown>) => void;
 }) {
-  const dur = splitMinutes(item?.durationMinutes || 30);
+  const dur = durationInputs(item?.durationMinutes, { hours: 0, minutes: 30 });
   const [bucketId, setBucketId] = useState(item?.bucketId || buckets[0]?.id);
   const currentBucket = buckets.find((b) => b.id === bucketId);
   const eventItem = Boolean(currentBucket && (currentBucket.kind === 'event' || currentBucket.id === EVENTS_ID));
-  const workItem = Boolean(currentBucket && (currentBucket.kind === 'work' || currentBucket.id === WORK_ID));
-  const workSlotPick = workItem && currentBucket ? workShowsItemSlot(currentBucket) : false;
-  const workSlotOptions = currentBucket && workItem ? bucketSlots(currentBucket) : [];
+  const apptItem = isAppointmentBucket(currentBucket);
+  /** Events and appointments both pack on a date rather than a cadence. */
+  const datedItem = eventItem || apptItem;
+  const slotPick = currentBucket ? workShowsItemSlot(currentBucket) : false;
+  const slotOptions = currentBucket ? bucketSlots(currentBucket) : [];
   const openDays = listCadenceDays(currentBucket);
   const [kind, setKind] = useState(item?.type || 'recurring');
   const [cadenceKind, setCadenceKind] = useState(item?.cadence.kind || 'daily');
@@ -813,10 +841,10 @@ function ItemFields({
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
-        const type = eventItem ? 'scheduled' : String(fd.get('type'));
+        const type = datedItem ? 'scheduled' : String(fd.get('type'));
         const cadKind = String(fd.get('cadenceKind') || 'daily');
         const durationMinutes = hoursToMinutes(fd.get('iH'), fd.get('iM'));
-        if (!eventItem && currentBucket && !itemFitsBucket(durationMinutes, currentBucket)) {
+        if (!datedItem && currentBucket && !itemFitsBucket(durationMinutes, currentBucket)) {
           showToast(itemExceedsBucketMessage(currentBucket), 'error');
           return;
         }
@@ -850,7 +878,8 @@ function ItemFields({
           durationMinutes,
           cadence,
           dueAt: type === 'scheduled' ? fd.get('dueAt') : '',
-          ...(workSlotPick ? { slot: fd.get('slot') } : {}),
+          ...(slotPick ? { slot: fd.get('slot') } : {}),
+          ...(apptItem ? { apptTime: fd.get('apptTime') } : {}),
         });
       }}
     >
@@ -872,10 +901,10 @@ function ItemFields({
           </select>
         </FormField>
         <DurationFields name="i" label="Duration" h={dur.hours} m={dur.minutes} />
-        {workSlotPick && currentBucket ? (
+        {slotPick && currentBucket ? (
           <FormField label="Time of day">
             <select key={bucketId} name="slot" defaultValue={itemWorkSlot(item || {}, currentBucket)}>
-              {workSlotOptions.map((s) => (
+              {slotOptions.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -883,10 +912,17 @@ function ItemFields({
             </select>
           </FormField>
         ) : null}
-        {eventItem ? (
-          <FormField label="Date">
-            <input name="dueAt" type="date" defaultValue={item?.dueAt || ''} required />
-          </FormField>
+        {datedItem ? (
+          <>
+            <FormField label="Date">
+              <input name="dueAt" type="date" defaultValue={item?.dueAt || ''} required />
+            </FormField>
+            {apptItem ? (
+              <FormField label="Time (label only)">
+                <input name="apptTime" type="time" defaultValue={item?.apptTime || ''} />
+              </FormField>
+            ) : null}
+          </>
         ) : (
           <>
             <FormField label="Type">
@@ -969,75 +1005,3 @@ function ItemFields({
   );
 }
 
-function ApptForm({
-  appointments,
-  onSave,
-  onRemove,
-}: {
-  appointments: Appointment[];
-  onSave: (row: Record<string, unknown>) => Promise<void>;
-  onRemove: (id: string) => Promise<void>;
-}) {
-  return (
-    <div className="edit-page">
-      <div className="edit-card add-card">
-        <ApptFields onSubmit={(payload) => onSave(payload)} />
-      </div>
-      {appointments.map((a) => (
-        <div key={a.id} className="edit-card" style={{ ['--bcolor' as string]: `#${a.color || 'f87171'}` }}>
-          <ApptFields
-            appointment={a}
-            onSubmit={(payload) => onSave({ id: a.id, ...payload })}
-          />
-          <div className="edit-acts">
-            <button type="button" className="btn--red" onClick={() => onRemove(a.id)}>
-              Remove
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ApptFields({
-  appointment,
-  onSubmit,
-}: {
-  appointment?: { title: string; date: string; color?: string; durationMinutes?: number };
-  onSubmit: (payload: Record<string, unknown>) => void;
-}) {
-  const dur = durationInputs(appointment?.durationMinutes);
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        const fd = new FormData(e.currentTarget);
-        onSubmit({
-          title: fd.get('title'),
-          date: fd.get('date'),
-          durationMinutes: hoursToMinutes(fd.get('dH'), fd.get('dM')),
-          color: String(fd.get('color') || '').replace('#', ''),
-        });
-      }}
-    >
-      <div className="fields">
-        <FormField label="Title" wide>
-          <input name="title" defaultValue={appointment?.title || ''} required />
-        </FormField>
-        <FormField label="Date">
-          <input name="date" type="date" defaultValue={appointment?.date || ''} required />
-        </FormField>
-        <DurationFields name="d" label="Duration" h={dur.hours} m={dur.minutes} />
-        <FormField label="Color">
-          <input name="color" type="color" defaultValue={`#${appointment?.color || 'f87171'}`} />
-        </FormField>
-      </div>
-      <div className="edit-acts">
-        <button type="submit" className="btn--gold">
-          Save
-        </button>
-      </div>
-    </form>
-  );
-}

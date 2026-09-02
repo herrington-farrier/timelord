@@ -18,8 +18,8 @@ export function nextSectionAction(section: Slot): { label: string; kind: 'next' 
 }
 
 /**
- * Total packed bucket work waiting in the next stretch. Appointments carry no
- * slot (they show in every section) and Break is personal, so neither counts.
+ * Total packed work waiting in the next stretch. Appointments now carry a slot
+ * and count toward it; Break is personal, so it does not.
  */
 export function nextSectionMinutes(blocks: PackedBlock[], section: Slot): number {
   const next = nextSlot(section);
@@ -29,19 +29,11 @@ export function nextSectionMinutes(blocks: PackedBlock[], section: Slot): number
     .reduce((sum, b) => sum + (Number(b.durationMinutes) || 0), 0);
 }
 
-export function appointmentElapsed(
-  run: { startedAt?: string; elapsedMinutes?: number } | undefined,
-  nowMs: number
-): number {
-  const stored = run?.elapsedMinutes || 0;
-  if (!run?.startedAt) return stored;
-  return stored + Math.max(0, (nowMs - Date.parse(run.startedAt)) / 60000);
-}
-
 export function todaySectionItems(blocks: PackedBlock[], section: Slot): PackedBlock[] {
   return blocks.filter((b) => {
     if (b.kind === 'transition') return false;
-    if (b.kind === 'appointment') return true;
+    // Appointments used to be slot-less and shown in every section. They are
+    // bucket items now, so they belong to exactly one, like anything else.
     if (b.title === 'Break' && b.slot === section) return true;
     return b.kind !== 'personal' && b.slot === section;
   });

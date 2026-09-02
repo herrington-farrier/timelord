@@ -1,7 +1,7 @@
 import { collection, doc, onSnapshot, query, where, type DocumentData } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
-import type { Appointment, Bucket, DaySettings, ListItem, Slot } from '../domain/types';
+import type { Bucket, DaySettings, ListItem, Slot } from '../domain/types';
 import type { DroppedBucket } from '../domain/packDay';
 import type { PackedBlock } from '../domain/types';
 import { db } from './firebase';
@@ -23,7 +23,6 @@ export type DayDoc = {
   sectionExtra?: Partial<Record<Slot, number>>;
   sectionUsed?: Partial<Record<Slot, number>>;
   eventStartedAt?: string | null;
-  appointmentRuns?: Record<string, { startedAt?: string; elapsedMinutes?: number }>;
 };
 
 function tenantCol(uid: string, name: string) {
@@ -69,17 +68,6 @@ export function useItems(uid: string | undefined): ListItem[] {
           .filter((i) => !i.archived)
           .sort((a, b) => a.weight - b.weight)
       );
-    });
-  }, [uid]);
-  return value;
-}
-
-export function useAppointments(uid: string | undefined): Appointment[] {
-  const [value, setValue] = useState<Appointment[]>([]);
-  useEffect(() => {
-    if (!uid || !db) return;
-    return onSnapshot(tenantCol(uid, 'appointments'), (snap) => {
-      setValue(snap.docs.map((d) => ({ id: d.id, ...(d.data() as DocumentData) }) as Appointment));
     });
   }, [uid]);
   return value;

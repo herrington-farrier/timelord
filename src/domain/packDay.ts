@@ -1,13 +1,14 @@
 import { assignWeeklyBudgets, dailyBudgetFor } from './budget';
 import { cadenceHitsDate } from './cadence';
-import { bucketSlots, isEventDay, sectionCapacity, slotIndex, itemWorkSlot } from './sections';
+import { isAppointmentBucket } from './seed';
+import { bucketSlots, capsAfterLoad, isEventDay, sectionCapacity, slotIndex, itemWorkSlot } from './sections';
 import { skipPushDate } from './skip';
 import {
+  APPOINTMENTS_ID,
   EVENTS_ID,
   PERSONAL_ID,
   SLOTS,
   WORK_ID,
-  type Appointment,
   type Bucket,
   type DaySettings,
   type ListItem,
@@ -22,7 +23,6 @@ export type PackDayInput = {
   settings: DaySettings;
   buckets: Bucket[];
   items: ListItem[];
-  appointments: Appointment[];
   previous?: PreviousBlock[];
   skipPushes?: SkipPush[];
   sectionExtra?: Partial<Record<Slot, number>>;
@@ -62,6 +62,7 @@ function itemHitsDate(item: ListItem, dateKey: string, skipPushes: SkipPush[]): 
   if (item.archived) return false;
   if (skipPushes.some((p) => p.itemId === item.id && p.toDate === dateKey)) return true;
   if (item.bucketId === EVENTS_ID) return item.dueAt === dateKey;
+  if (item.bucketId === APPOINTMENTS_ID) return item.dueAt === dateKey;
   return cadenceHitsDate(item.cadence, dateKey);
 }
 
@@ -73,8 +74,22 @@ function blockId(date: string, suffix: string): string {
   return `${date}:${suffix}`;
 }
 
+/** Appointment blocks keep kind 'appointment' so the Quest and Quest Log
+ *  treatments (isAccentChip, .cal-chip--appt) keep working unchanged. */
+function blockKind(bucket: Bucket): PackedBlock['kind'] {
+  if (isAppointmentBucket(bucket)) return 'appointment';
+  if (bucket.kind === 'work') return 'work';
+  if (bucket.kind === 'event') return 'event';
+  return 'weighted';
+}
+
+/** The section an item lands in. Multi-slot buckets let each item pick. */
+function slotForItem(item: ListItem, bucket: Bucket): Slot {
+  return bucketSlots(bucket).length > 1 ? itemWorkSlot(item, bucket) : bucket.slot;
+}
+
 export function packDay(input: PackDayInput): PackDayResult {
-  const { date, settings, items, appointments } = input;
+  const { date, settings, items } = input;
   const skipPushes = input.skipPushes || [];
   const previous = input.previous || [];
   const buckets = assignWeeklyBudgets(settings, input.buckets);
@@ -117,14 +132,14 @@ export function packDay(input: PackDayInput): PackDayResult {
       bucketId: bucket.id,
       itemId: item.id,
       title: item.title,
-      kind: bucket.kind === 'work' ? 'work' : bucket.kind === 'event' ? 'event' : 'weighted',
+      kind: blockKind(bucket),
       startMinutes: 0,
       endMinutes: item.durationMinutes,
       durationMinutes: item.durationMinutes,
       status: 'dropped',
       color: bucket.color,
       flexible: true,
-      ...(bucket.kind === 'event' ? {} : { slot: bucket.kind === 'work' ? itemWorkSlot(item, bucket) : bucket.slot }),
+      ...(bucket.kind === 'event' ? {} : { slot: slotForItem(item, bucket) }),
     });
   }
 
@@ -154,22 +169,6 @@ export function packDay(input: PackDayInput): PackDayResult {
     slot: 'evening',
   });
 
-  const dayAppts = appointments.filter((a) => a.date === date);
-  for (const appt of dayAppts) {
-    pushBlock({
-      id: blockId(date, `appt-${appt.id}`),
-      bucketId: 'appointment',
-      appointmentId: appt.id,
-      title: appt.title,
-      kind: 'appointment',
-      startMinutes: order++,
-      durationMinutes: appt.durationMinutes,
-      status: 'pending',
-      color: appt.color || 'f87171',
-      flexible: false,
-    });
-  }
-
   function hittingFor(bucket: Bucket): ListItem[] {
     return sortItems(items.filter((it) => it.bucketId === bucket.id && itemHitsDate(it, date, skipPushes)));
   }
@@ -180,13 +179,14 @@ export function packDay(input: PackDayInput): PackDayResult {
       bucketId: bucket.id,
       itemId: item.id,
       title: item.title,
-      kind: bucket.kind === 'work' ? 'work' : bucket.kind === 'event' ? 'event' : 'weighted',
+      kind: blockKind(bucket),
       startMinutes: order++,
       durationMinutes: item.durationMinutes,
       status: 'pending',
       color: bucket.color,
       flexible: true,
       slot,
+      ...(item.apptTime ? { apptTime: item.apptTime } : {}),
     });
   }
 
@@ -217,6 +217,28 @@ export function packDay(input: PackDayInput): PackDayResult {
   for (const b of buckets) remainingBudget[b.id] = dailyBudgetFor(b, date);
 
   const caps = sectionCapacity(settings, input.sectionExtra, input.sectionUsed);
+
+  /**
+   * An appointment costs the day its whole duration, not just whatever its own
+   * section had left. A 2h appointment in a section with 10m free takes those
+   * 10m and 1h50m out of the sections that follow — so the work it displaces
+   * falls off, wherever in the day that work sits.
+   *
+   * Worked out up front so `caps` already reflects it and the bucket loop can
+   * treat what remains as the time genuinely available.
+   */
+  const apptBucket = buckets.find((b) => !b.archived && isAppointmentBucket(b));
+  const apptLoad: Record<Slot, number> = { morning: 0, midday: 0, evening: 0 };
+  if (apptBucket) {
+    for (const appt of items.filter(
+      (it) => it.bucketId === apptBucket.id && itemHitsDate(it, date, skipPushes)
+    )) {
+      // Skipped means cancelled: the day gets those hours back.
+      if (prevStatus(previous, appt.id)?.status === 'skipped') continue;
+      apptLoad[slotForItem(appt, apptBucket)] += Math.max(0, appt.durationMinutes);
+    }
+  }
+  const bucketCaps = capsAfterLoad(caps, apptLoad);
 
   function placeBreak(slot: Slot): void {
     pushBlock({
@@ -326,11 +348,22 @@ export function packDay(input: PackDayInput): PackDayResult {
   }
 
   const live = buckets
-    .filter((b) => !b.archived && (b.kind === 'weighted' || b.kind === 'work') && b.id !== EVENTS_ID)
-    .sort((a, b) => a.weight - b.weight);
+    .filter(
+      (b) =>
+        !b.archived &&
+        (b.kind === 'weighted' || b.kind === 'work' || isAppointmentBucket(b)) &&
+        b.id !== EVENTS_ID
+    )
+    // Appointments come first in every section, ahead of Work. Ordered by kind
+    // rather than weight: Personal and Events are both weight 0 already, so a
+    // tie would resolve arbitrarily.
+    .sort((a, b) => {
+      const rank = (x: Bucket) => (isAppointmentBucket(x) ? -1 : 0);
+      return rank(a) - rank(b) || a.weight - b.weight;
+    });
 
   for (const slot of SLOTS) {
-    let left = caps[slot];
+    let left = bucketCaps[slot];
     const inSlot = live.filter((b) => bucketSlots(b).includes(slot));
     if (slot === 'midday' && !inSlot.some((b) => b.kind === 'work' || b.id === WORK_ID)) {
       placeBreak('midday');
@@ -340,7 +373,17 @@ export function packDay(input: PackDayInput): PackDayResult {
         left = placeWorkInSlot(slot, left, slot === 'midday');
         continue;
       }
-      const hitting = hittingFor(bucket);
+      if (isAppointmentBucket(bucket)) {
+        // Fixed commitments. The bucket has no hours, so there is no budget to
+        // check against — an appointment is always placed, and takes its time
+        // off the section before anything else competes for what is left.
+        // 0-duration entries are checklist items and cost nothing.
+        for (const appt of hittingFor(bucket).filter((it) => slotForItem(it, bucket) === slot)) {
+          placeItem(appt, bucket, slot);
+        }
+        continue;
+      }
+      const hitting = hittingFor(bucket).filter((it) => slotForItem(it, bucket) === slot);
       let placedCount = 0;
       for (const item of hitting) {
         const need = item.durationMinutes;

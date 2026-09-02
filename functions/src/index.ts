@@ -10,12 +10,12 @@ import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
 import { PACK_RANGE_DAYS, packRange } from '../../src/domain/packWeek';
-import { bucketSlots, eatFromSections, isEventDay, itemWorkSlot, liveSectionState, nextSlot, parseBucketSlots, sectionCapacity, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
+import { appointmentLoad, bucketSlots, capsAfterLoad, eatFromSections, isEventDay, itemWorkSlot, liveSectionState, nextSlot, parseBucketSlots, sectionCapacity, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
 import { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate } from '../../src/domain/skip';
 import { elapsedSince, sectionRemainingNow } from '../../src/domain/timer';
 import { nextItemWeight } from '../../src/domain/order';
-import type { Appointment, Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Slot, Weekday } from '../../src/domain/types';
-import { EVENTS_ID, WORK_ID } from '../../src/domain/types';
+import type { Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Slot, Weekday } from '../../src/domain/types';
+import { APPOINTMENTS_ID, EVENTS_ID, WORK_ID } from '../../src/domain/types';
 import { weekStart } from '../../src/shared/dates';
 import { stampCreated, stampLastUpdated } from './actorAudit';
 import { asNumber, asString, authEmail, newId, requireSignedIn, requireUid } from './http';
@@ -121,7 +121,6 @@ type DayState = {
   sectionExtra?: Partial<Record<Slot, number>>;
   sectionUsed?: Partial<Record<Slot, number>>;
   eventStartedAt?: string | null;
-  appointmentRuns?: Record<string, { startedAt?: string; elapsedMinutes?: number }>;
 };
 
 /**
@@ -167,7 +166,6 @@ async function writePackedRange(uid: string, start: string, days: number): Promi
         sectionExtra: {},
         sectionUsed: {},
         eventStartedAt: prev?.eventStartedAt ?? null,
-        appointmentRuns: prev?.appointmentRuns || {},
       })
     );
   }
@@ -408,6 +406,7 @@ export const upsertItem = onCall(async (request) => {
   const storedWeight = existing.exists ? Number((existing.data() as { weight?: unknown }).weight) : NaN;
   const bucketId = asString(data.bucketId, 'Bucket');
   const eventItem = bucketId === EVENTS_ID;
+  const apptItem = bucketId === APPOINTMENTS_ID;
   const loaded = await loadTenant(uid);
   const bucket = (loaded.buckets as Bucket[]).find((b) => b.id === bucketId);
   if (!eventItem) {
@@ -416,7 +415,9 @@ export const upsertItem = onCall(async (request) => {
       throw new HttpsError('invalid-argument', itemExceedsBucketMessage(bucket));
     }
   }
-  const type = eventItem ? 'scheduled' : asString(data.type, 'Type');
+  // Events and appointments are both date-keyed: they pack on their due date
+  // and never run on a cadence.
+  const type = eventItem || apptItem ? 'scheduled' : asString(data.type, 'Type');
   const dueAt = type === 'scheduled' ? asString(data.dueAt, 'Date') : '';
   const weight = existing.exists
     ? Number.isFinite(storedWeight)
@@ -429,9 +430,11 @@ export const upsertItem = onCall(async (request) => {
     type,
     weight,
     durationMinutes,
-    cadence: eventItem ? { kind: 'daily' } : data.cadence || { kind: 'daily' },
+    cadence: eventItem || apptItem ? { kind: 'daily' } : data.cadence || { kind: 'daily' },
     dueAt,
     archived: false,
+    // Display only. Never read by the packer.
+    apptTime: apptItem && typeof data.apptTime === 'string' ? data.apptTime.trim().slice(0, 40) : '',
   };
   const isWork = Boolean(bucket && (bucket.kind === 'work' || bucket.id === WORK_ID));
   if (isWork && bucket) {
@@ -508,34 +511,6 @@ export const resetBucket = onCall(async (request) => {
   return { ok: true };
 });
 
-export const upsertAppointment = onCall(async (request) => {
-  const uid = requireUid(request);
-  await ensureTenant(uid, nowIso());
-  const data = request.data as Record<string, unknown>;
-  const id = typeof data.id === 'string' && data.id.trim() ? data.id.trim() : newId();
-  const payload = {
-    title: asString(data.title, 'Title'),
-    date: asString(data.date, 'Date'),
-    durationMinutes: asNumber(data.durationMinutes, 'Duration'),
-    color: asString(data.color || 'f87171', 'Color').replace(/^#/, ''),
-  };
-  if (payload.durationMinutes <= 0) {
-    throw new HttpsError('invalid-argument', 'Duration must be greater than 0.');
-  }
-  const ref = tenantRef(uid).collection('appointments').doc(id);
-  const existing = await ref.get();
-  const stamp = existing.exists ? await stampLastUpdated(uid, nowIso()) : await stampCreated(uid, nowIso());
-  await ref.set({ ...payload, ...stamp }, { merge: true });
-  return { ok: true, id };
-});
-
-export const archiveAppointment = onCall(async (request) => {
-  const uid = requireUid(request);
-  const id = asString(request.data?.id, 'Appointment');
-  await tenantRef(uid).collection('appointments').doc(id).delete();
-  return { ok: true };
-});
-
 function asPackInput(
   loaded: Awaited<ReturnType<typeof loadTenant>>,
   date: string,
@@ -548,7 +523,6 @@ function asPackInput(
     settings: loaded.settings as DaySettings,
     buckets: loaded.buckets as Bucket[],
     items: loaded.items as ListItem[],
-    appointments: loaded.appointments as Appointment[],
     skipPushes: loaded.skipPushes as SkipPush[],
     sectionExtra: extra,
     sectionUsed: used,
@@ -594,7 +568,6 @@ export const resetToday = onCall(async (request) => {
         sectionExtra: {},
         sectionUsed: {},
         eventStartedAt: null,
-        appointmentRuns: {},
         ...stamp,
       })
     );
@@ -629,6 +602,40 @@ async function patchBlock(
   return { item, block: found };
 }
 
+/**
+ * A cancelled appointment hands its hours back. Repack the day so other work
+ * can claim the freed time, and credit the running section timer with whatever
+ * that section got back — the countdown has to agree with the new capacity.
+ */
+async function refundSkippedAppointment(uid: string, date: string): Promise<void> {
+  const dayRef = tenantRef(uid).collection('days').doc(date);
+  const snap = await dayRef.get();
+  if (!snap.exists) return;
+  const data = snap.data() as DayState & { blocks: PackedBlock[]; dropped: PackedBlock[] };
+  const loaded = await loadTenant(uid);
+  const settings = loaded.settings as DaySettings;
+  const base = sectionCapacity(settings, data.sectionExtra || {}, data.sectionUsed);
+  const before = capsAfterLoad(base, appointmentLoad((data.blocks || []).map((b) => ({ ...b, status: 'pending' }))));
+  const after = capsAfterLoad(base, appointmentLoad(data.blocks || []));
+  const result = domainCall(() =>
+    packDay(asPackInput(loaded, date, [...(data.blocks || []), ...(data.dropped || [])], data.sectionExtra, data.sectionUsed))
+  );
+  const section = data.section && data.section !== 'event' ? data.section : null;
+  const freed = section ? Math.max(0, after[section] - before[section]) : 0;
+  const stamp = await stampLastUpdated(uid, nowIso());
+  await dayRef.set(
+    firestoreDoc({
+      ...result,
+      ...(freed > 0
+        ? { sectionRemainingMinutes: (data.sectionRemainingMinutes || 0) + freed }
+        : {}),
+      packedAt: nowIso(),
+      ...stamp,
+    }),
+    { merge: true }
+  );
+}
+
 export const completeBlock = onCall(async (request) => {
   const uid = requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
@@ -657,6 +664,7 @@ export const skipBlock = onCall(async (request) => {
   const date = asString(request.data?.date || todayKey(), 'Date');
   const id = asString(request.data?.id, 'Block');
   const { item, block } = await patchBlock(uid, date, id, 'skipped');
+  if (block?.kind === 'appointment') await refundSkippedAppointment(uid, date);
   if (item?.type === 'scheduled') {
     const loaded = await loadTenant(uid);
     const bucket = (loaded.buckets as Bucket[]).find((b) => b.id === item.bucketId);
@@ -711,10 +719,12 @@ async function beginSection(uid: string, date: string, section: Slot | 'event'):
   const fresh = !prev.startedAt;
   const extra = fresh ? {} : prev.sectionExtra || {};
   const used = fresh ? {} : prev.sectionUsed || {};
-  const caps = sectionCapacity(settings, extra, used);
   const blocks = (prev.blocks || []).map((b) =>
     b.title === 'Morning Routine' || String(b.id || '').endsWith(':morning') ? { ...b, status: 'complete' as const } : b
   );
+  // The timer counts down the time actually available, so it has to subtract
+  // appointments the same way the packer does — including what spills forward.
+  const caps = capsAfterLoad(sectionCapacity(settings, extra, used), appointmentLoad(blocks));
   await dayRef.set(
     {
       startedAt: prev.startedAt || nowIso(),
@@ -766,7 +776,10 @@ export const startNext = onCall(async (request) => {
   );
   const extra = { ...(data.sectionExtra || {}) };
   const used = data.sectionUsed || {};
-  const caps = sectionCapacity(loaded.settings as DaySettings, extra, used);
+  const caps = capsAfterLoad(
+    sectionCapacity(loaded.settings as DaySettings, extra, used),
+    appointmentLoad(blocks)
+  );
   async function writeAutoSkips(): Promise<void> {
     for (const b of skipLogBlocks(leftovers)) {
       await writeLog(uid, {
@@ -837,61 +850,6 @@ export const endBreak = onCall(async (request) => {
   const stamp = await stampLastUpdated(uid, nowIso());
   await tenantRef(uid).collection('days').doc(date).set({ pausedAt: null, sectionStartedAt: nowIso(), ...stamp }, { merge: true });
   await writeLog(uid, { type: 'end_break', date });
-  return { ok: true };
-});
-
-export const startAppointment = onCall(async (request) => {
-  const uid = requireUid(request);
-  const date = asString(request.data?.date || todayKey(), 'Date');
-  const id = asString(request.data?.id, 'Appointment');
-  const dayRef = tenantRef(uid).collection('days').doc(date);
-  const snap = await dayRef.get();
-  const data = (snap.exists ? snap.data() : {}) as DayState;
-  const runs = { ...(data.appointmentRuns || {}) };
-  runs[id] = { ...runs[id], startedAt: nowIso() };
-  const stamp = await stampLastUpdated(uid, nowIso());
-  await dayRef.set({ appointmentRuns: runs, ...stamp }, { merge: true });
-  return { ok: true };
-});
-
-export const stopAppointment = onCall(async (request) => {
-  const uid = requireUid(request);
-  const date = asString(request.data?.date || todayKey(), 'Date');
-  const id = asString(request.data?.id, 'Appointment');
-  const dayRef = tenantRef(uid).collection('days').doc(date);
-  const snap = await dayRef.get();
-  if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
-  const data = snap.data() as DayState & { blocks: PackedBlock[] };
-  const run = data.appointmentRuns?.[id];
-  if (!run?.startedAt) throw new HttpsError('failed-precondition', 'That appointment is not running.');
-  const elapsed = Math.round((run.elapsedMinutes || 0) + elapsedSince(run.startedAt, Date.now()));
-  const section = data.section && data.section !== 'event' ? data.section : 'morning';
-  const loaded = await loadTenant(uid);
-  const settings = loaded.settings as DaySettings;
-  const extra = data.sectionExtra || {};
-  const remainingCaps = sectionCapacity(settings, extra, data.sectionUsed);
-  const after = eatFromSections(remainingCaps, section, elapsed);
-  const used = usedFromEat(sectionCapacity(settings, extra, {}), after);
-  const eatenHere = remainingCaps[section] - after[section];
-  const nowRemain = sectionRemainingNow(data.sectionRemainingMinutes || 0, data.sectionStartedAt, data.pausedAt, Date.now());
-  const result = domainCall(() => packDay(asPackInput(loaded, date, data.blocks, extra, used)));
-  const stamp = await stampLastUpdated(uid, nowIso());
-  const runs = { ...(data.appointmentRuns || {}) };
-  runs[id] = { elapsedMinutes: elapsed };
-  await dayRef.set(
-    firestoreDoc({
-      ...result,
-      sectionUsed: used,
-      sectionRemainingMinutes: Math.max(0, nowRemain - eatenHere),
-      sectionStartedAt: data.pausedAt ? data.sectionStartedAt : nowIso(),
-      appointmentRuns: runs,
-      packedAt: nowIso(),
-      ...stamp,
-    }),
-    { merge: true }
-  );
-  const appt = (data.blocks || []).find((b) => b.appointmentId === id);
-  await writeLog(uid, { type: 'appointment_stop', date, minutes: elapsed, title: appt?.title });
   return { ok: true };
 });
 

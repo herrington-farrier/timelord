@@ -4,7 +4,7 @@ export type HoursMode = 'week' | 'day';
 
 export type Slot = 'morning' | 'midday' | 'evening';
 
-export type BucketKind = 'personal' | 'work' | 'weighted' | 'event';
+export type BucketKind = 'personal' | 'work' | 'weighted' | 'event' | 'appointment';
 
 export type ItemType = 'recurring' | 'scheduled';
 
@@ -63,15 +63,12 @@ export type ListItem = {
   dueAt?: string;
   archived?: boolean;
   slot?: Slot;
-};
-
-export type Appointment = {
-  id: string;
-  title: string;
-  date: string;
-  durationMinutes: number;
-  color?: string;
-  startMinutes?: number;
+  /**
+   * Appointments only. A label such as "2:30pm", shown on the card and the
+   * Quest Log chip. DISPLAY ONLY — the packer never reads it. The section an
+   * appointment lands in is its `slot`, picked by hand like any other item.
+   */
+  apptTime?: string;
 };
 
 export type BlockKind = 'personal' | 'work' | 'weighted' | 'appointment' | 'event' | 'transition';
@@ -93,6 +90,8 @@ export type PackedBlock = {
   color: string;
   flexible: boolean;
   slot?: Slot;
+  /** Appointments only, display only — see ListItem.apptTime. */
+  apptTime?: string;
 };
 
 export type SkipPush = {
@@ -113,6 +112,7 @@ export const WEEKDAYS: Weekday[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'S
 export const PERSONAL_ID = 'personal';
 export const WORK_ID = 'work';
 export const EVENTS_ID = 'events';
+export const APPOINTMENTS_ID = 'appointments';
 export const SLOTS: Slot[] = ['morning', 'midday', 'evening'];
 
 export const DEFAULT_SETTINGS: DaySettings = {

@@ -2,10 +2,9 @@ import { useEffect, useId, useRef, useState } from 'react';
 
 import { Chrome } from '../components/Chrome';
 import { loadTone } from '../domain/budget';
-import { formatDuration } from '../domain/duration';
+import { formatApptTime, formatDuration } from '../domain/duration';
 import { isEventDay } from '../domain/sections';
 import {
-  appointmentElapsed,
   formatCountdown,
   nextSectionAction,
   nextSectionMinutes,
@@ -87,8 +86,6 @@ export function TodayPage() {
   const sectionItems = started && section ? todaySectionItems(placed, section) : [];
   const sectionDropped = started && section ? todaySectionDropped(dropped, section) : [];
   const eventItems = eventDay ? todayEventItems(placed) : [];
-  const appointments = sectionItems.filter((b) => b.kind === 'appointment');
-  const tasks = sectionItems.filter((b) => b.kind !== 'appointment');
 
   return (
     <Chrome
@@ -132,28 +129,17 @@ export function TodayPage() {
 
       {!eventDay && started && section ? (
         <div className="day">
-          {appointments.map((b, i) => (
-            <AppointmentCard
-              key={b.id}
-              block={b}
-              date={date}
-              nowMs={nowMs}
-              run={day?.appointmentRuns?.[b.appointmentId || '']}
-              act={act}
-              index={i}
-            />
-          ))}
-          {tasks.map((b, i) =>
+          {sectionItems.map((b, i) =>
             b.title === 'Break' ? (
               <BreakControl
                 key={b.id}
                 on={paused}
-                index={appointments.length + i}
+                index={i}
                 onStart={() => act('Resting.', () => api.startBreak({ date }))}
                 onEnd={() => act('Rest over.', () => api.endBreak({ date }))}
               />
             ) : (
-              <ItemCard key={b.id} block={b} date={date} act={act} index={appointments.length + i} />
+              <ItemCard key={b.id} block={b} date={date} act={act} index={i} />
             )
           )}
         </div>
@@ -315,49 +301,6 @@ function BreakControl({
   );
 }
 
-function AppointmentCard({
-  block,
-  date,
-  nowMs,
-  run,
-  act,
-  index,
-}: {
-  block: PackedBlock;
-  date: string;
-  nowMs: number;
-  run?: { startedAt?: string; elapsedMinutes?: number };
-  act: (label: string, fn: () => Promise<unknown>) => Promise<void>;
-  index?: number;
-}) {
-  const running = Boolean(run?.startedAt);
-  const elapsed = appointmentElapsed(run, nowMs);
-  const id = block.appointmentId || '';
-  return (
-    <div className="item item--appt" style={{ ['--bcolor' as string]: `#${block.color}`, ...stagger(index) }}>
-      <div className="item-top">
-        <div className="item-title">
-          <span className="item-tag">Appt</span>
-          {block.title}
-        </div>
-        <div className="item-hours">{formatCountdown(elapsed)}</div>
-      </div>
-      <div className="item-meta">{block.durationMinutes ? formatDuration(block.durationMinutes) : ''}</div>
-      <div className="item-acts">
-        {running ? (
-          <button type="button" className="btn--red" onClick={() => act('Appointment stopped.', () => api.stopAppointment({ date, id }))}>
-            Stop
-          </button>
-        ) : (
-          <button type="button" className="btn--gold" onClick={() => act('Appointment started.', () => api.startAppointment({ date, id }))}>
-            Start
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function FallRow({
   block,
   date,
@@ -421,7 +364,9 @@ function ItemCard({
   const title = (
     <>
       {block.kind === 'event' ? <span className="item-tag">Event</span> : null}
+      {block.kind === 'appointment' ? <span className="item-tag">Appt</span> : null}
       {block.title}
+      {block.apptTime ? <span className="item-when">{formatApptTime(block.apptTime)}</span> : null}
     </>
   );
   const hours = block.durationMinutes ? formatDuration(block.durationMinutes) : null;

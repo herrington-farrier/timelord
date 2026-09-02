@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { durationInputs, formatDuration, formatTimeInput, hoursToMinutes, parseTimeInput } from '../domain/duration';
+import { durationInputs, formatApptTime, formatDuration, formatTimeInput, hoursToMinutes, parseTimeInput } from '../domain/duration';
 
 describe('formatDuration', () => {
   it('formats 20 minutes as 20m', () => {
@@ -31,5 +31,21 @@ describe('formatDuration', () => {
   it('round-trips a clock time', () => {
     expect(formatTimeInput(10 * 60 + 30)).toBe('10:30');
     expect(parseTimeInput('10:30')).toBe(10 * 60 + 30);
+  });
+});
+
+describe('formatApptTime', () => {
+  it('reads a stored 24h value as a clock label', () => {
+    expect(formatApptTime('14:30')).toBe('2:30 PM');
+    expect(formatApptTime('09:05')).toBe('9:05 AM');
+    expect(formatApptTime('00:00')).toBe('12:00 AM');
+    expect(formatApptTime('12:00')).toBe('12:00 PM');
+  });
+
+  it('passes through anything that is not HH:MM, so older free text still shows', () => {
+    expect(formatApptTime('2:30pm')).toBe('2:30pm');
+    expect(formatApptTime('after lunch')).toBe('after lunch');
+    expect(formatApptTime('')).toBe('');
+    expect(formatApptTime(undefined)).toBe('');
   });
 });

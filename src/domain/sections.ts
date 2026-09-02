@@ -100,6 +100,47 @@ export function eatFromSections(
   return out;
 }
 
+/**
+ * Appointment minutes owed by each section, taken from a packed day.
+ */
+export function appointmentLoad(
+  blocks: { kind?: string; slot?: Slot; durationMinutes?: number; status?: string }[]
+): Record<Slot, number> {
+  const load: Record<Slot, number> = { morning: 0, midday: 0, evening: 0 };
+  for (const b of blocks) {
+    if (b.kind !== 'appointment') continue;
+    // A cancelled appointment hands its hours back to the day.
+    if (b.status === 'skipped') continue;
+    const slot = b.slot && SLOTS.includes(b.slot) ? b.slot : 'morning';
+    load[slot] += Math.max(0, Number(b.durationMinutes) || 0);
+  }
+  return load;
+}
+
+/**
+ * Spend `load` out of `caps`, spilling whatever a section cannot cover into the
+ * sections after it. An appointment costs the day its whole duration, not just
+ * what its own section had spare — so a 2h appointment in a section with 10m
+ * left takes those 10m and 1h50m from what follows.
+ *
+ * Shared by the packer (which decides what falls off) and by the section timers
+ * (which must count down from the same number).
+ */
+export function capsAfterLoad(
+  caps: Record<Slot, number>,
+  load: Record<Slot, number>
+): Record<Slot, number> {
+  const out = { ...caps };
+  let carry = 0;
+  for (const slot of SLOTS) {
+    const need = (load[slot] || 0) + carry;
+    const take = Math.min(out[slot], need);
+    out[slot] -= take;
+    carry = need - take;
+  }
+  return out;
+}
+
 export function liveSectionState(prev?: {
   startedAt?: string | null;
   endedAt?: string | null;

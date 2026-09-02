@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { freeTone, loadTone } from '../domain/budget';
-import { formatDuration } from '../domain/duration';
+import { formatApptTime, formatDuration } from '../domain/duration';
 import { bucketSlots, isEventDay, sectionCapacity, slotIndex } from '../domain/sections';
 import { isBreakBlock, isEventPacked } from '../domain/today';
 import { addDaysKey, formatDayLabel, todayKey, weekStart } from '../shared/dates';
@@ -171,6 +171,7 @@ function Chip({ block, overflow }: { block: PackedBlock; overflow?: boolean }) {
       className={`cal-chip${overflow ? ' overflow' : ''}${isAccentChip(block) ? ' cal-chip--appt' : ''}${brk ? ' cal-chip--break' : ''}`}
       style={{ ['--bcolor' as string]: `#${block.color}` }}
     >
+      {block.apptTime ? <b className="cal-chip__when">{formatApptTime(block.apptTime)}</b> : null}
       {block.title}
       {block.durationMinutes ? ` · ${formatDuration(block.durationMinutes)}` : ''}
     </div>

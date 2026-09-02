@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { daySections, packDay, sectionMinutes } from '../domain/packDay';
 import { PACK_RANGE_DAYS, packRange } from '../domain/packWeek';
-import { eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity } from '../domain/sections';
+import { appointmentLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity } from '../domain/sections';
 import { nextAssignedDate, skipPushDate } from '../domain/skip';
-import { EVENTS_ID } from '../domain/types';
+import { APPOINTMENTS_BUCKET } from '../domain/seed';
+import { APPOINTMENTS_ID, EVENTS_ID } from '../domain/types';
 import { weekStart } from '../shared/dates';
 import { bucket, item, settings, workBucket } from './fixtures';
 
@@ -16,7 +17,6 @@ function base() {
     settings: settings(),
     buckets: [workBucket()],
     items: [] as ReturnType<typeof item>[],
-    appointments: [],
   };
 }
 
@@ -317,14 +317,132 @@ describe('packDay', () => {
     expect(result.blocks.some((b) => b.itemId === 'b')).toBe(false);
   });
 
-  it('keeps appointments as duration-only blocks', () => {
+  it('packs an appointment as a dated item, first in its section', () => {
+    const house = bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 600, days: ['Mon'] });
     const result = packDay({
       ...base(),
-      appointments: [{ id: 'dentist', title: 'Dentist', date: monday, durationMinutes: 60 }],
+      buckets: [APPOINTMENTS_BUCKET, workBucket({ weeklyMinutes: 0, days: ['Tue'] }), house],
+      items: [
+        item({ id: 'dishes', bucketId: 'house', title: 'Dishes', weight: 1, durationMinutes: 20, slot: 'morning' }),
+        item({
+          id: 'dentist',
+          bucketId: APPOINTMENTS_ID,
+          title: 'Dentist',
+          type: 'scheduled',
+          dueAt: monday,
+          durationMinutes: 60,
+          slot: 'morning',
+        }),
+      ],
     });
-    const appt = result.blocks.find((b) => b.appointmentId === 'dentist');
+    const appt = result.blocks.find((b) => b.itemId === 'dentist');
     expect(appt?.durationMinutes).toBe(60);
+    // the block kind is what drives the Quest and Quest Log appointment styling
     expect(appt?.kind).toBe('appointment');
+    expect(appt?.slot).toBe('morning');
+    const dishes = result.blocks.find((b) => b.itemId === 'dishes');
+    expect((appt?.startMinutes ?? 0) < (dishes?.startMinutes ?? 0)).toBe(true);
+  });
+
+  it('gives an appointment section capacity, so what it displaces falls off', () => {
+    // morning third of a 3h day is 60m; the appointment takes all of it
+    const house = bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 600, days: ['Mon'] });
+    const result = packDay({
+      ...base(),
+      settings: settings({ dayMinutes: 180 }),
+      buckets: [APPOINTMENTS_BUCKET, workBucket({ weeklyMinutes: 0, days: ['Tue'] }), house],
+      items: [
+        item({ id: 'dishes', bucketId: 'house', title: 'Dishes', weight: 1, durationMinutes: 45, slot: 'morning' }),
+        item({
+          id: 'dentist',
+          bucketId: APPOINTMENTS_ID,
+          title: 'Dentist',
+          type: 'scheduled',
+          dueAt: monday,
+          durationMinutes: 60,
+          slot: 'morning',
+        }),
+      ],
+    });
+    expect(result.blocks.some((b) => b.itemId === 'dentist')).toBe(true);
+    expect(result.dropped.some((d) => d.itemId === 'dishes')).toBe(true);
+  });
+
+  it('spills an appointment past its own section into the ones after it', () => {
+    // 3h day = 60m a section. A 2h morning appointment eats all of morning and
+    // 60m of midday, so the midday task has nothing left and falls off.
+    const house = bucket({
+      id: 'house',
+      name: 'House',
+      weight: 4,
+      weeklyMinutes: 600,
+      days: ['Mon'],
+      slots: ['morning', 'midday', 'evening'],
+    });
+    const result = packDay({
+      ...base(),
+      settings: settings({ dayMinutes: 180 }),
+      buckets: [APPOINTMENTS_BUCKET, workBucket({ weeklyMinutes: 0, days: ['Tue'] }), house],
+      items: [
+        item({ id: 'am', bucketId: 'house', title: 'Morning task', weight: 1, durationMinutes: 30, slot: 'morning' }),
+        item({ id: 'noon', bucketId: 'house', title: 'Midday task', weight: 2, durationMinutes: 30, slot: 'midday' }),
+        item({ id: 'pm', bucketId: 'house', title: 'Evening task', weight: 3, durationMinutes: 30, slot: 'evening' }),
+        item({
+          id: 'dentist',
+          bucketId: APPOINTMENTS_ID,
+          title: 'Dentist',
+          type: 'scheduled',
+          dueAt: monday,
+          durationMinutes: 120,
+          slot: 'morning',
+        }),
+      ],
+    });
+    expect(result.blocks.some((b) => b.itemId === 'dentist')).toBe(true);
+    expect(result.dropped.some((d) => d.itemId === 'am')).toBe(true);
+    expect(result.dropped.some((d) => d.itemId === 'noon')).toBe(true);
+    // evening is untouched: the 2h ran out before it
+    expect(result.blocks.some((b) => b.itemId === 'pm')).toBe(true);
+  });
+
+  it('treats a 0-duration appointment as a checklist entry that never drops', () => {
+    const result = packDay({
+      ...base(),
+      settings: settings({ dayMinutes: 0 }),
+      buckets: [APPOINTMENTS_BUCKET, workBucket({ weeklyMinutes: 0, days: ['Tue'] })],
+      items: [
+        item({
+          id: 'call',
+          bucketId: APPOINTMENTS_ID,
+          title: 'Call back',
+          type: 'scheduled',
+          dueAt: monday,
+          durationMinutes: 0,
+          slot: 'morning',
+        }),
+      ],
+    });
+    expect(result.blocks.some((b) => b.itemId === 'call')).toBe(true);
+    expect(result.dropped.some((d) => d.itemId === 'call')).toBe(false);
+  });
+
+  it('only packs an appointment on its own date', () => {
+    const result = packDay({
+      ...base(),
+      buckets: [APPOINTMENTS_BUCKET, workBucket({ weeklyMinutes: 0, days: ['Tue'] })],
+      items: [
+        item({
+          id: 'dentist',
+          bucketId: APPOINTMENTS_ID,
+          title: 'Dentist',
+          type: 'scheduled',
+          dueAt: '2026-09-04',
+          durationMinutes: 60,
+          slot: 'morning',
+        }),
+      ],
+    });
+    expect(result.blocks.some((b) => b.itemId === 'dentist')).toBe(false);
   });
 
   it('reorders pending items by weight only', () => {
@@ -461,11 +579,6 @@ describe('packDay', () => {
     expect(trip?.kind).toBe('event');
     expect(result.blocks.some((b) => b.itemId === 'dishes')).toBe(true);
     expect(trip && 'slot' in trip).toBe(false);
-    const appt = packDay({
-      ...base(),
-      appointments: [{ id: 'dentist', title: 'Dentist', date: monday, durationMinutes: 60 }],
-    }).blocks.find((b) => b.appointmentId === 'dentist');
-    expect(appt && 'slot' in appt).toBe(false);
   });
 
   it('places more in the next section only when leftover extra is passed in', () => {
@@ -557,5 +670,92 @@ describe('skip push', () => {
   it('finds the next assigned date after Tuesday for a Mon/Wed/Fri bucket', () => {
     const house = bucket({ id: 'house', name: 'House', weight: 4, days: ['Mon', 'Wed', 'Fri'] });
     expect(nextAssignedDate(house, '2026-09-01')).toBe('2026-09-02');
+  });
+});
+
+describe('a cancelled appointment', () => {
+  it('hands its hours back to the day', () => {
+    const house = bucket({
+      id: 'house',
+      name: 'House',
+      weight: 4,
+      weeklyMinutes: 600,
+      days: ['Mon'],
+      slots: ['morning', 'midday', 'evening'],
+    });
+    const appt = item({
+      id: 'dentist',
+      bucketId: APPOINTMENTS_ID,
+      title: 'Dentist',
+      type: 'scheduled',
+      dueAt: monday,
+      durationMinutes: 120,
+      slot: 'morning',
+    });
+    const input = {
+      ...base(),
+      settings: settings({ dayMinutes: 180 }),
+      buckets: [APPOINTMENTS_BUCKET, workBucket({ weeklyMinutes: 0, days: ['Tue'] }), house],
+      items: [
+        item({ id: 'am', bucketId: 'house', title: 'Morning task', weight: 1, durationMinutes: 30, slot: 'morning' }),
+        appt,
+      ],
+    };
+    // while the appointment stands, it takes the morning and the task falls off
+    expect(packDay(input).dropped.some((d) => d.itemId === 'am')).toBe(true);
+
+    // cancelled, the morning is free again
+    const afterSkip = packDay({
+      ...input,
+      previous: [{ id: 'x', itemId: 'dentist', status: 'skipped' }],
+    });
+    expect(afterSkip.blocks.some((b) => b.itemId === 'am')).toBe(true);
+    expect(afterSkip.dropped.some((d) => d.itemId === 'am')).toBe(false);
+  });
+});
+
+describe('capsAfterLoad', () => {
+  const caps = { morning: 300, midday: 300, evening: 300 };
+
+  it('spills what a section cannot cover into the ones after it', () => {
+    // an 8h appointment in the morning of a 15h day: 5h from morning, 3h from midday
+    const after = capsAfterLoad(caps, { morning: 480, midday: 0, evening: 0 });
+    expect(after).toEqual({ morning: 0, midday: 120, evening: 300 });
+  });
+
+  it('never returns a negative section, and stops when the day runs out', () => {
+    const after = capsAfterLoad(caps, { morning: 6000, midday: 0, evening: 0 });
+    expect(after).toEqual({ morning: 0, midday: 0, evening: 0 });
+  });
+
+  it('leaves the day alone when there are no appointments', () => {
+    expect(capsAfterLoad(caps, { morning: 0, midday: 0, evening: 0 })).toEqual(caps);
+  });
+});
+
+describe('appointmentLoad', () => {
+  it('totals appointment minutes per section and ignores everything else', () => {
+    const load = appointmentLoad([
+      { kind: 'appointment', slot: 'morning', durationMinutes: 60 },
+      { kind: 'appointment', slot: 'morning', durationMinutes: 30 },
+      { kind: 'appointment', slot: 'evening', durationMinutes: 45 },
+      { kind: 'weighted', slot: 'morning', durationMinutes: 90 },
+      { kind: 'personal', slot: 'midday', durationMinutes: 0 },
+    ]);
+    expect(load).toEqual({ morning: 90, midday: 0, evening: 45 });
+  });
+});
+
+describe('skipPushDate', () => {
+  it('does not defer a cancelled appointment or event to another day', () => {
+    const appt = item({
+      id: 'dentist',
+      bucketId: APPOINTMENTS_ID,
+      title: 'Dentist',
+      type: 'scheduled',
+      dueAt: monday,
+      durationMinutes: 60,
+    });
+    expect(skipPushDate(appt, APPOINTMENTS_BUCKET, monday)).toBeNull();
   });
 });

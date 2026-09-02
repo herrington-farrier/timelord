@@ -1,6 +1,6 @@
 import { daysBetween, weekdayFromKey } from './cadence';
 import { formatDuration } from './duration';
-import { EVENTS_ID, PERSONAL_ID, WORK_ID, type Bucket, type DaySettings, type HoursMode, type Slot, type Weekday } from './types';
+import { APPOINTMENTS_ID, EVENTS_ID, PERSONAL_ID, WORK_ID, type Bucket, type DaySettings, type HoursMode, type Slot, type Weekday } from './types';
 
 export type DailyBudgetMap = Record<string, number>;
 
@@ -112,6 +112,9 @@ export function dailyBudgetFor(bucket: Bucket, dateKey: string): number {
 export function itemFitsBucket(durationMinutes: number, bucket: Bucket | undefined): boolean {
   if (durationMinutes === 0) return true;
   if (!bucket || bucket.kind === 'event' || bucket.id === EVENTS_ID) return true;
+  // Appointments are fixed commitments in a bucket with no hours, so there is
+  // no daily budget to measure them against.
+  if (bucket.kind === 'appointment' || bucket.id === APPOINTMENTS_ID) return true;
   return durationMinutes <= assignedDayBudget(bucket);
 }
 

@@ -22,8 +22,6 @@ export const api = {
   upsertItem: call<Record<string, unknown>, { ok: boolean; id: string }>('upsertItem'),
   archiveItem: call<{ id: string }, { ok: boolean }>('archiveItem'),
   reorderItems: call<{ orderedIds: string[] }, { ok: boolean }>('reorderItems'),
-  upsertAppointment: call<Record<string, unknown>, { ok: boolean; id: string }>('upsertAppointment'),
-  archiveAppointment: call<{ id: string }, { ok: boolean }>('archiveAppointment'),
   rebuildRange: call<{ start?: string; days?: number }, { ok: boolean }>('rebuildRange'),
   resetToday: call<Record<string, never>, { ok: boolean }>('resetToday'),
   clearLogs: call<Record<string, never>, { ok: boolean; removed: number }>('clearLogs'),
@@ -33,8 +31,6 @@ export const api = {
   startNext: call<{ date: string }, { ok: boolean }>('startNext'),
   startBreak: call<{ date: string }, { ok: boolean }>('startBreak'),
   endBreak: call<{ date: string }, { ok: boolean }>('endBreak'),
-  startAppointment: call<{ date: string; id: string }, { ok: boolean }>('startAppointment'),
-  stopAppointment: call<{ date: string; id: string }, { ok: boolean }>('stopAppointment'),
   endDay: call<{ date: string }, { ok: boolean }>('endDay'),
   wipeAccount: call<Record<string, never>, { ok: boolean }>('wipeAccount'),
 };

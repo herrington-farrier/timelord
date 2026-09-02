@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { appointmentElapsed, formatCountdown, isEventPacked, nextSectionAction, nextSectionMinutes, slotLabel, todayEventItems, todaySectionDropped, todaySectionItems } from '../domain/today';
+import { formatCountdown, isEventPacked, nextSectionAction, nextSectionMinutes, slotLabel, todayEventItems, todaySectionDropped, todaySectionItems } from '../domain/today';
 import type { PackedBlock } from '../domain/types';
 
 function block(partial: Partial<PackedBlock> & Pick<PackedBlock, 'id' | 'kind'>): PackedBlock {
@@ -19,10 +19,11 @@ function block(partial: Partial<PackedBlock> & Pick<PackedBlock, 'id' | 'kind'>)
 }
 
 describe('today section list', () => {
-  it('keeps appointments and this section’s items, including Break', () => {
+  it('keeps this section’s items, including Break and its appointments', () => {
     const shown = todaySectionItems(
       [
-        block({ id: 'appt', kind: 'appointment', title: 'Dentist' }),
+        block({ id: 'appt', kind: 'appointment', title: 'Dentist', slot: 'morning' }),
+        block({ id: 'later', kind: 'appointment', title: 'Optician', slot: 'evening' }),
         block({ id: 'house', kind: 'weighted', title: 'Floors', slot: 'morning' }),
         block({ id: 'work', kind: 'work', title: 'Standup', slot: 'midday' }),
         block({ id: 'break', kind: 'personal', title: 'Break', slot: 'morning' }),
@@ -30,6 +31,7 @@ describe('today section list', () => {
       ],
       'morning'
     );
+    // An appointment sits in one section now, not all of them.
     expect(shown.map((b) => b.id)).toEqual(['appt', 'house', 'break']);
     expect(shown.find((b) => b.title === 'Break')?.slot).toBe('morning');
   });
@@ -76,14 +78,6 @@ describe('formatCountdown', () => {
   });
 });
 
-describe('appointmentElapsed', () => {
-  it('adds live time to stored minutes', () => {
-    const started = '2026-08-29T12:00:00.000Z';
-    expect(appointmentElapsed({ startedAt: started, elapsedMinutes: 5 }, Date.parse(started) + 2 * 60000)).toBe(7);
-    expect(appointmentElapsed({ elapsedMinutes: 5 }, Date.parse(started))).toBe(5);
-  });
-});
-
 describe('nextSectionMinutes', () => {
   it('adds up the buckets waiting in the next stretch', () => {
     const blocks = [
@@ -100,12 +94,13 @@ describe('nextSectionMinutes', () => {
     expect(nextSectionMinutes([block({ id: 'e', kind: 'weighted', slot: 'evening' })], 'evening')).toBe(0);
   });
 
-  it('ignores Break and unslotted appointments', () => {
+  it('counts the next section’s appointments but never Break', () => {
     const blocks = [
       block({ id: 'work', kind: 'work', slot: 'midday', durationMinutes: 60 }),
       block({ id: 'break', kind: 'personal', title: 'Break', slot: 'midday', durationMinutes: 0 }),
-      block({ id: 'appt', kind: 'appointment', title: 'Dentist', durationMinutes: 45 }),
+      block({ id: 'appt', kind: 'appointment', title: 'Dentist', slot: 'midday', durationMinutes: 45 }),
+      block({ id: 'other', kind: 'appointment', title: 'Optician', slot: 'evening', durationMinutes: 30 }),
     ];
-    expect(nextSectionMinutes(blocks, 'morning')).toBe(60);
+    expect(nextSectionMinutes(blocks, 'morning')).toBe(105);
   });
 });

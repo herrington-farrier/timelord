@@ -29,17 +29,23 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 - Work items may have `slot` when the Work bucket has more than one section. Each item packs in that one section.
 - Events items are always `scheduled`. `dueAt` is the date they pack; cadence is unused.
 
-## appointments/{id}
+## Appointments
 
-- `title`, `date`, `durationMinutes`, `color`
-- No start time. Today counts elapsed time up; stop subtracts from section capacity.
+Not a collection. Appointments are items in the locked `appointments` bucket:
+`type` is always `scheduled`, `dueAt` is the date they pack, `slot` is the
+section, and `apptTime` is a display-only label (`14:30`, shown as `2:30 PM`).
+They have no per-appointment colour — the bucket's colour applies.
+
+An appointment costs the day its whole duration: its own section first, then
+spilling into the sections after it. Skipping one cancels it and hands those
+hours back. 0-duration appointments are checklist entries and cost nothing.
 
 ## days/{yyyy-mm-dd}
 
 - `blocks[]` (each block may have `slot`), `dropped[]`, `droppedBuckets[]`, `startedAt`, `endedAt`, `packedAt`
 - `section` (`morning` | `midday` | `evening` | `event`), `sectionStartedAt`, `sectionRemainingMinutes`, `pausedAt`
 - `sectionExtra`, `sectionUsed` (appointment eat). Pack rebuilds 6 weeks from this week’s Sunday and clears both. Start Next Chapter does not write leftover extra.
-- `eventStartedAt` (unused on event days; no stopwatch), `appointmentRuns` (`{ startedAt?, elapsedMinutes? }` keyed by appointment id)
+- `eventStartedAt` (unused on event days; no stopwatch)
 - Pack restamps `color` from current buckets and appointments. Started or ended days keep Complete / Skip.
 
 ## logs/{id}

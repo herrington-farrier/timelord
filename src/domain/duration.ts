@@ -53,3 +53,19 @@ export function parseTimeInput(value: unknown): number {
 function clockMinutes(dayMinutesFromMidnight: number): number {
   return ((Math.round(dayMinutesFromMidnight) % (24 * 60)) + 24 * 60) % (24 * 60);
 }
+
+/**
+ * An appointment's time label: "14:30" -> "2:30 PM". Stored as the 24h value a
+ * <input type="time"> produces. Anything that is not HH:MM is passed through
+ * unchanged, so labels typed before the field became a time picker still show.
+ */
+export function formatApptTime(value: string | undefined): string {
+  if (!value) return '';
+  const [rawH, rawM] = value.split(':');
+  const h = Number(rawH);
+  const m = Number(rawM);
+  if (!value.includes(':') || !Number.isInteger(h) || !Number.isInteger(m)) return value;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return value;
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}

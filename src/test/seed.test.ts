@@ -4,7 +4,6 @@ import {
   EVENTS_BUCKET,
   PERSONAL_BUCKET,
   SEED_BUCKETS,
-  SEED_ITEMS,
   bucketsToBackfill,
   canDeleteBucket,
   canRenameBucket,
@@ -13,7 +12,7 @@ import {
   splitEditBuckets,
 } from '../domain/seed';
 import { bucketSlots, itemWorkSlot, workShowsItemSlot } from '../domain/sections';
-import { PERSONAL_ID, WORK_ID } from '../domain/types';
+import { APPOINTMENTS_ID, PERSONAL_ID, WORK_ID } from '../domain/types';
 import { bucket, workBucket } from './fixtures';
 
 describe('locked buckets on Edit', () => {
@@ -56,16 +55,15 @@ describe('listable buckets', () => {
 });
 
 describe('tenant backfill', () => {
-  it('restores Personal and Work when a tenant has other buckets but not the locked ones', () => {
+  it('restores every locked bucket when a tenant has only its own', () => {
     const missing = bucketsToBackfill([bucket({ id: 'house', name: 'House', weight: 4 })]);
-    expect(missing.map((b) => b.id).sort()).toEqual(['events', PERSONAL_ID, WORK_ID]);
+    expect(missing.map((b) => b.id).sort()).toEqual([APPOINTMENTS_ID, 'events', PERSONAL_ID, WORK_ID]);
   });
 });
 
 describe('new-account seed', () => {
-  it('seeds Work, Events, and two generic buckets', () => {
-    expect(SEED_BUCKETS.map((b) => b.id)).toEqual(['work', 'events', 'home', 'errands']);
-    expect(SEED_ITEMS.map((i) => i.bucketId).sort()).toEqual(['home', 'work']);
+  it('seeds Appointments, Work, Events, and two generic buckets', () => {
+    expect(SEED_BUCKETS.map((b) => b.id)).toEqual([APPOINTMENTS_ID, 'work', 'events', 'home', 'errands']);
   });
 });
 

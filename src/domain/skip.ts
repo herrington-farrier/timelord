@@ -1,6 +1,6 @@
 import { addDaysKey, weekdayFromKey } from './cadence';
 import { todaySectionDropped, todaySectionItems } from './today';
-import type { Bucket, ListItem, PackedBlock, Slot } from './types';
+import { APPOINTMENTS_ID, EVENTS_ID, type Bucket, type ListItem, type PackedBlock, type Slot } from './types';
 
 function isLeftover(block: PackedBlock): boolean {
   return (
@@ -47,5 +47,9 @@ export function nextAssignedDate(bucket: Bucket, afterDate: string): string {
 export function skipPushDate(item: ListItem, bucket: Bucket | undefined, fromDate: string): string | null {
   if (item.type !== 'scheduled') return null;
   if (!bucket) return null;
+  // Events and appointments are pinned to a date. Skipping one cancels it; it
+  // does not reappear on the next day the bucket runs.
+  if (bucket.kind === 'event' || bucket.id === EVENTS_ID) return null;
+  if (bucket.kind === 'appointment' || bucket.id === APPOINTMENTS_ID) return null;
   return nextAssignedDate(bucket, fromDate);
 }

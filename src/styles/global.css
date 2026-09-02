@@ -379,6 +379,14 @@ button:disabled {
   text-transform: uppercase;
 }
 .item-hours { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* An appointment's own time label. Display only — it schedules nothing. */
+.item-when {
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
 .item-meta { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
 .item-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 /* --- Tap targets -------------------------------------------------- *
@@ -591,6 +599,12 @@ button:disabled {
   text-overflow: ellipsis;
 }
 .cal-chip.overflow { opacity: 0.45; }
+.cal-chip__when {
+  color: var(--gold);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.4em;
+}
 .cal-chip--appt {
   font-weight: 750;
   border-left-width: 5px;

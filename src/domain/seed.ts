@@ -1,4 +1,5 @@
 import {
+  APPOINTMENTS_ID,
   DEFAULT_SETTINGS,
   EVENTS_ID,
   PERSONAL_ID,
@@ -53,7 +54,28 @@ export const EVENTS_BUCKET: Bucket = {
   ranges: [],
 };
 
+/**
+ * A container, not a scheduled bucket: no hours, no days, no slot settings of
+ * its own. Its items are scheduled to a date and packed ahead of every other
+ * bucket in their section.
+ */
+export const APPOINTMENTS_BUCKET: Bucket = {
+  id: APPOINTMENTS_ID,
+  kind: 'appointment',
+  name: 'Appointments',
+  weight: 0,
+  weeklyMinutes: 0,
+  hoursMode: 'week',
+  hoursMinutes: 0,
+  days: [...WEEKDAYS],
+  slot: 'morning',
+  // spans every section; each appointment picks one via its own `slot`
+  slots: ['morning', 'midday', 'evening'],
+  color: 'e85d4c',
+};
+
 export const SEED_BUCKETS: Bucket[] = [
+  APPOINTMENTS_BUCKET,
   WORK_BUCKET,
   EVENTS_BUCKET,
   {
@@ -84,6 +106,18 @@ export const SEED_BUCKETS: Bucket[] = [
 
 export const SEED_ITEMS: ListItem[] = [
   {
+    id: 'example-appointment',
+    bucketId: APPOINTMENTS_ID,
+    title: 'Example appointment',
+    type: 'scheduled',
+    weight: 1,
+    durationMinutes: 60,
+    cadence: { kind: 'daily' },
+    dueAt: '',
+    slot: 'midday',
+    apptTime: '14:30',
+  },
+  {
     id: 'priority-work',
     bucketId: WORK_ID,
     title: 'Priority work',
@@ -107,16 +141,27 @@ export function defaultSettings(): DaySettings {
   return { ...DEFAULT_SETTINGS };
 }
 
+export function isAppointmentBucket(bucket: { kind?: string; id?: string } | undefined): boolean {
+  return Boolean(bucket && (bucket.kind === 'appointment' || bucket.id === APPOINTMENTS_ID));
+}
+
 export function canDeleteBucket(bucket: Bucket): boolean {
-  return bucket.kind === 'weighted' && bucket.id !== WORK_ID && bucket.id !== PERSONAL_ID && bucket.id !== EVENTS_ID;
+  return (
+    bucket.kind === 'weighted' &&
+    bucket.id !== WORK_ID &&
+    bucket.id !== PERSONAL_ID &&
+    bucket.id !== EVENTS_ID &&
+    bucket.id !== APPOINTMENTS_ID
+  );
 }
 
 export function canRenameBucket(bucket: Bucket): boolean {
-  return bucket.kind !== 'personal';
+  return bucket.kind !== 'personal' && !isAppointmentBucket(bucket);
 }
 
 export function splitEditBuckets(buckets: Bucket[]): {
   personal: Bucket;
+  appointments: Bucket;
   work: Bucket;
   events: Bucket;
   weighted: Bucket[];
@@ -125,10 +170,18 @@ export function splitEditBuckets(buckets: Bucket[]): {
   const personal = live.find((b) => b.kind === 'personal' || b.id === PERSONAL_ID) ?? PERSONAL_BUCKET;
   const work = live.find((b) => b.kind === 'work' || b.id === WORK_ID) ?? WORK_BUCKET;
   const events = live.find((b) => b.kind === 'event' || b.id === EVENTS_ID) ?? EVENTS_BUCKET;
+  const appointments = live.find((b) => isAppointmentBucket(b)) ?? APPOINTMENTS_BUCKET;
   const weighted = live
-    .filter((b) => b.kind === 'weighted' && b.id !== WORK_ID && b.id !== PERSONAL_ID && b.id !== EVENTS_ID)
+    .filter(
+      (b) =>
+        b.kind === 'weighted' &&
+        b.id !== WORK_ID &&
+        b.id !== PERSONAL_ID &&
+        b.id !== EVENTS_ID &&
+        b.id !== APPOINTMENTS_ID
+    )
     .sort((a, b) => a.weight - b.weight);
-  return { personal, work, events, weighted };
+  return { personal, appointments, work, events, weighted };
 }
 
 export function listableBuckets(buckets: Bucket[]): Bucket[] {
@@ -146,5 +199,5 @@ export function bucketsToBackfill(existing: Bucket[]): Bucket[] {
   if (active.length === 0) {
     return [PERSONAL_BUCKET, ...SEED_BUCKETS];
   }
-  return [PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET].filter((b) => !have.has(b.id));
+  return [PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET, APPOINTMENTS_BUCKET].filter((b) => !have.has(b.id));
 }
