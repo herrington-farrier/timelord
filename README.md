@@ -18,7 +18,7 @@ Every screen hides its nav behind the page title — tap the title to open the m
 
 Work stays first in each section you pick and cannot be deleted. Events is locked and uses one or more date ranges. Other buckets can be added, removed, renamed, or recolored.
 
-Design and packing rules live in [docs/logic-map.md](docs/logic-map.md), the Firestore shape in [docs/data-model.md](docs/data-model.md), deferred work in [docs/todo.md](docs/todo.md), and the manual check list in [docs/verify.md](docs/verify.md).
+Design and packing rules live in [docs/logic-map.md](docs/logic-map.md), the Firestore shape in [docs/data-model.md](docs/data-model.md), deferred work in [docs/todo.md](docs/todo.md), the manual check list in [docs/verify.md](docs/verify.md), and — if you ever fork this or fold it into something larger — [docs/porting.md](docs/porting.md).
 
 ## Run locally
 

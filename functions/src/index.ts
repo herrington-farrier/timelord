@@ -701,30 +701,6 @@ export const archiveItem = onCall(async (request) => {
   return { ok: true };
 });
 
-export const resetBucket = onCall(async (request) => {
-  const uid = requireUid(request);
-  const id = asString(request.data?.id, 'Bucket');
-  const snap = await tenantRef(uid).collection('buckets').doc(id).get();
-  if (!snap.exists) throw new HttpsError('not-found', 'Bucket not found.');
-  const loaded = await loadTenant(uid);
-  const items = (loaded.items as ListItem[]).filter((i) => i.bucketId === id && !i.archived);
-  const stamp = await stampLastUpdated(uid, nowIso());
-  const batch = getFirestore().batch();
-  for (const item of items) {
-    batch.set(tenantRef(uid).collection('items').doc(item.id), { archived: true, ...stamp }, { merge: true });
-  }
-  batch.set(tenantRef(uid).collection('buckets').doc(id), {
-    hoursMode: 'week',
-    hoursMinutes: 0,
-    weeklyMinutes: 0,
-    ...stamp,
-  }, { merge: true });
-  await batch.commit();
-  await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
-  await writeLog(uid, { type: 'reset_bucket', date: todayKey(), bucketId: id });
-  return { ok: true };
-});
-
 function asPackInput(
   loaded: Awaited<ReturnType<typeof loadTenant>>,
   date: string,
