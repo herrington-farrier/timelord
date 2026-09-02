@@ -41,7 +41,8 @@ export function bookedMinutes(blocks: PackedBlock[]): number {
 
 export function todaySectionItems(blocks: PackedBlock[], section: Slot): PackedBlock[] {
   return blocks.filter((b) => {
-    if (b.kind === 'transition') return false;
+    // A switch marker belongs to the section it separates, and to nothing else.
+    if (b.kind === 'transition') return b.slot === section;
     // Appointments used to be slot-less and shown in every section. They are
     // bucket items now, so they belong to exactly one, like anything else.
     if (b.title === 'Break' && b.slot === section) return true;

@@ -139,7 +139,9 @@ export function TodayPage() {
       {!eventDay && started && section ? (
         <div className="day">
           {sectionItems.map((b, i) =>
-            b.title === 'Break' ? (
+            b.kind === 'transition' ? (
+              <TransitionRow key={b.id} minutes={b.durationMinutes} index={i} />
+            ) : b.title === 'Break' ? (
               <BreakControl
                 key={b.id}
                 on={paused}
@@ -371,6 +373,21 @@ function FallRow({
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The gap between two buckets. A marker, not an item: nothing to open, nothing
+ * to complete, no colour of its own. The minutes are already gone from the
+ * section — this is only where they went.
+ */
+function TransitionRow({ minutes, index }: { minutes: number; index?: number }) {
+  return (
+    <div className="switch-row" style={stagger(index)} aria-hidden="true">
+      <span className="switch-line" />
+      <span className="switch-mins">{formatDuration(minutes)}</span>
+      <span className="switch-line" />
     </div>
   );
 }

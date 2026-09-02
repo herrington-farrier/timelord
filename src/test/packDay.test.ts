@@ -1084,3 +1084,74 @@ describe('every-N-days items in the packer', () => {
     expect(hit).toEqual(['2026-08-31', '2026-09-28', '2026-10-26']);
   });
 });
+
+describe('transitions between buckets', () => {
+  const house = bucket({ id: 'house', name: 'House', weight: 4, slots: ['morning'] });
+  const errands = bucket({ id: 'errands', name: 'Errands', weight: 5, slots: ['morning'] });
+
+  function packWith(over = {}) {
+    return packDay({
+      date: monday,
+      settings: settings({ transitionMinutes: 10, ...over }),
+      buckets: [workBucket(), house, errands],
+      items: [
+        item({ id: 'dishes', bucketId: 'house', title: 'Dishes', durationMinutes: 30 }),
+        item({ id: 'post', bucketId: 'errands', title: 'Post office', durationMinutes: 30 }),
+      ],
+    });
+  }
+
+  it('marks the switch between two buckets in the same section', () => {
+    const trans = packWith().blocks.filter((b: PackedBlock) => b.kind === 'transition');
+    expect(trans).toHaveLength(1);
+    expect(trans[0].title).toBe('10m');
+    expect(trans[0].durationMinutes).toBe(10);
+    expect(trans[0].slot).toBe('morning');
+  });
+
+  it('sits between the two buckets it separates', () => {
+    const morning = packWith()
+      .blocks.filter((b: PackedBlock) => b.slot === 'morning' && b.kind !== 'personal')
+      .map((b: PackedBlock) => b.bucketId);
+    expect(morning).toEqual(['house', 'transition', 'errands']);
+  });
+
+  it('charges the time to the section, so it is gone from what work can use', () => {
+    const withTrans = packWith().blocks;
+    const without = packWith({ transitionMinutes: 0 }).blocks;
+    expect(reservedLoad(withTrans).morning - reservedLoad(without).morning).toBe(10);
+  });
+
+  it('the timers lose exactly what the packer charged', () => {
+    // reservedLoad is what the section countdown reads, so a charged switch has
+    // to show up there or the clock hands back time the day does not have.
+    const blocks = packWith().blocks;
+    const trans = blocks.filter((b: PackedBlock) => b.kind === 'transition');
+    const charged = trans.reduce((s: number, b: PackedBlock) => s + b.durationMinutes, 0);
+    expect(reservedLoad(blocks).morning).toBeGreaterThanOrEqual(charged);
+  });
+
+  it('one bucket in a section pays nothing', () => {
+    const only = packDay({
+      date: monday,
+      settings: settings({ transitionMinutes: 10 }),
+      buckets: [workBucket(), house],
+      items: [item({ id: 'dishes', bucketId: 'house', title: 'Dishes', durationMinutes: 30 })],
+    });
+    const morning = only.blocks.filter((b: PackedBlock) => b.slot === 'morning');
+    expect(morning.some((b: PackedBlock) => b.kind === 'transition')).toBe(false);
+  });
+
+  it('zero transition minutes emits nothing at all', () => {
+    expect(packWith({ transitionMinutes: 0 }).blocks.some((b: PackedBlock) => b.kind === 'transition')).toBe(
+      false
+    );
+  });
+
+  it('never scores and never renews', () => {
+    const blocks = packWith().blocks;
+    const trans = blocks.find((b: PackedBlock) => b.kind === 'transition');
+    expect(trans?.itemId).toBeUndefined();
+    expect(collectEndDaySkipPushes(monday, blocks, [], [], [workBucket(), house, errands])).toEqual([]);
+  });
+});

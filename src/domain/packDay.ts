@@ -1,7 +1,7 @@
 import { assignWeeklyBudgets, dailyBudgetFor, personalCountsAsDay } from './budget';
 import { cadenceHitsDate } from './cadence';
 import { isAppointmentBucket } from './seed';
-import { bucketSlots, capsAfterLoad, isEventDay, itemSlots, sectionCapacity, slotIndex, itemWorkSlot } from './sections';
+import { bucketSlots, capsAfterLoad, isEventDay, itemSlots, sectionCapacity, slotIndex, itemWorkSlot, transitionLoad } from './sections';
 import { skipPushDate } from './skip';
 import {
   APPOINTMENTS_ID,
@@ -90,6 +90,14 @@ function blockKind(bucket: Bucket): PackedBlock['kind'] {
 function slotForItem(item: ListItem, bucket: Bucket): Slot {
   if (bucketSlots(bucket).length <= 1) return bucket.slot;
   return itemSlots(item, bucket)[0];
+}
+
+/** A switch marker is not a bucket; it owns this id so nothing can target it. */
+const TRANSITION_ID = 'transition';
+const TRANSITION_COLOR = '64748b';
+
+function formatTransition(minutes: number): string {
+  return `${minutes}m`;
 }
 
 export function packDay(input: PackDayInput): PackDayResult {
@@ -253,10 +261,33 @@ export function packDay(input: PackDayInput): PackDayResult {
       apptLoad[itemSlots(appt, apptBucket)[0]] += Math.max(0, appt.durationMinutes);
     }
   }
+  /**
+   * Switching buckets costs time too, and it has to be bought before the
+   * buckets compete for what is left — otherwise the day packs work into
+   * minutes that will be spent changing tack.
+   */
+  const switching = transitionLoad(
+    SLOTS.reduce<Record<Slot, number>>(
+      (acc, slot) => {
+        acc[slot] = buckets.filter(
+          (b) =>
+            !b.archived &&
+            b.kind !== 'personal' &&
+            b.kind !== 'event' &&
+            bucketSlots(b).includes(slot) &&
+            hittingFor(b).some((it) => slotForItem(it, b) === slot)
+        ).length;
+        return acc;
+      },
+      { morning: 0, midday: 0, evening: 0 }
+    ),
+    settings.transitionMinutes
+  );
+
   const bucketCaps = capsAfterLoad(caps, {
-    morning: apptLoad.morning + personalMins.morning,
-    midday: apptLoad.midday + personalMins.midday,
-    evening: apptLoad.evening + personalMins.evening,
+    morning: apptLoad.morning + personalMins.morning + switching.morning,
+    midday: apptLoad.midday + personalMins.midday + switching.midday,
+    evening: apptLoad.evening + personalMins.evening + switching.evening,
   });
 
   function placeBreak(slot: Slot): void {
@@ -456,6 +487,43 @@ export function packDay(input: PackDayInput): PackDayResult {
     if (sa !== sb) return sa - sb;
     return a.startMinutes - b.startMinutes;
   });
+
+  /**
+   * Mark the switches, once the running order is settled — the boundaries only
+   * exist after the sort, since appointments are hoisted to the front of their
+   * section. Break is a pause inside Work rather than a change of tack, so it
+   * does not read as a switch.
+   */
+  const withSwitches: PackedBlock[] = [];
+  const perSwitch = Math.max(0, Math.floor(Number(settings.transitionMinutes) || 0));
+  let lastBucket: string | null = null;
+  let lastSlot: Slot | undefined;
+  for (const block of blocks) {
+    const marks = block.kind !== 'personal' && block.status !== 'dropped';
+    if (perSwitch > 0 && marks && block.slot === lastSlot && lastBucket && lastBucket !== block.bucketId) {
+      withSwitches.push({
+        id: blockId(date, `trans-${withSwitches.length}`),
+        date,
+        bucketId: TRANSITION_ID,
+        title: formatTransition(perSwitch),
+        kind: 'transition',
+        startMinutes: block.startMinutes,
+        endMinutes: block.startMinutes,
+        durationMinutes: perSwitch,
+        status: 'pending',
+        color: TRANSITION_COLOR,
+        flexible: true,
+        ...(block.slot ? { slot: block.slot } : {}),
+      });
+    }
+    if (marks) {
+      lastBucket = block.bucketId;
+      lastSlot = block.slot;
+    }
+    withSwitches.push(block);
+  }
+  blocks.length = 0;
+  blocks.push(...withSwitches);
 
   return {
     blocks,

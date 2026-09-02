@@ -1353,9 +1353,34 @@ button:disabled {
   from { opacity: 0; transform: translateY(14px) scale(0.985); }
   to { opacity: 1; transform: none; }
 }
-.day .item {
+.day .item,
+.day .switch-row {
   animation: item-in 0.42s cubic-bezier(0.22, 0.68, 0.28, 1) both;
   animation-delay: calc(var(--i, 0) * 65ms);
+}
+
+/* The gap between two buckets. Quiet by design: it is a note about where the
+   minutes went, not something to act on, so it stays lighter than any item. */
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 10px;
+  padding: 0 12px;
+}
+.switch-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.switch-mins {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
 }
 
 /* --- Compact chrome: Today gets the screen ------------------------- */

@@ -150,3 +150,26 @@ describe('Personal counting as day time', () => {
     expect(routine(30).map((b) => b.id)).toEqual(['morning']);
   });
 });
+
+describe('transitions on the Quest list', () => {
+  const morning = block({ id: 'a', kind: 'weighted', slot: 'morning' });
+  const gap = block({ id: 'g', kind: 'transition', slot: 'morning', durationMinutes: 10, title: '10m' });
+  const midday = block({ id: 'b', kind: 'weighted', slot: 'midday' });
+
+  it('shows a switch in the section it separates', () => {
+    expect(todaySectionItems([morning, gap, midday], 'morning').map((b) => b.id)).toEqual(['a', 'g']);
+  });
+
+  it('keeps it out of every other section', () => {
+    expect(todaySectionItems([morning, gap, midday], 'midday').map((b) => b.id)).toEqual(['b']);
+  });
+
+  it('survives openBlocks, since there is nothing to complete', () => {
+    expect(openBlocks([gap]).map((b) => b.id)).toEqual(['g']);
+  });
+
+  it('is not counted as work waiting in the next stretch', () => {
+    const nextGap = block({ id: 'g2', kind: 'transition', slot: 'midday', durationMinutes: 10 });
+    expect(nextSectionMinutes([midday, nextGap], 'morning')).toBe(30);
+  });
+});

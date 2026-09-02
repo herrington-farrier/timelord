@@ -114,20 +114,43 @@ export function eatFromSections(
 
 /**
  * Minutes each section owes before any bucket competes for it: appointments,
- * plus Personal when it counts as day time. Personal blocks carry 0 minutes
- * otherwise, so this needs no branch on the setting.
+ * switching time between buckets, plus Personal when it counts as day time.
+ * Personal blocks carry 0 minutes otherwise, so this needs no branch on the
+ * setting.
+ *
+ * The section timers read this off the packed blocks, so a transition the
+ * packer charged for is one the countdown also loses — the two cannot drift.
  */
 export function reservedLoad(
   blocks: { kind?: string; slot?: Slot; durationMinutes?: number; status?: string }[]
 ): Record<Slot, number> {
   const load: Record<Slot, number> = { morning: 0, midday: 0, evening: 0 };
   for (const b of blocks) {
-    if (b.kind !== 'appointment' && b.kind !== 'personal') continue;
+    if (b.kind !== 'appointment' && b.kind !== 'personal' && b.kind !== 'transition') continue;
     // A cancelled appointment — or a skipped routine — hands its hours back.
     if (b.status === 'skipped') continue;
     const slot = b.slot && SLOTS.includes(b.slot) ? b.slot : 'morning';
     load[slot] += Math.max(0, Number(b.durationMinutes) || 0);
   }
+  return load;
+}
+
+/**
+ * Switching buckets costs real time, so the day has to buy it before anything
+ * competes for what is left. A section running three buckets pays for two
+ * switches; one bucket pays nothing.
+ *
+ * Counted from the buckets that have work to do in a section, which is known
+ * before packing. A bucket squeezed out entirely leaves its switch bought and
+ * unused, so the day errs toward warning you rather than overbooking you.
+ */
+export function transitionLoad(
+  bucketsPerSlot: Partial<Record<Slot, number>>,
+  transitionMinutes: number
+): Record<Slot, number> {
+  const per = Math.max(0, Math.floor(Number(transitionMinutes) || 0));
+  const load: Record<Slot, number> = { morning: 0, midday: 0, evening: 0 };
+  for (const slot of SLOTS) load[slot] = Math.max(0, (bucketsPerSlot[slot] || 0) - 1) * per;
   return load;
 }
 
