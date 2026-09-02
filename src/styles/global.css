@@ -447,17 +447,47 @@ button:disabled {
   cursor: not-allowed;
 }
 .fall-wrap h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 8px 0 8px;
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-indent: 0.16em;
   text-transform: uppercase;
-  color: var(--head);
+  color: var(--danger);
 }
+.fall-wrap h2::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--danger) 45%, transparent), transparent);
+}
+/* Falling off is not a card you act on so much as one sliding out of the day:
+   faded, dashed, and set back from the items that are still in. */
 .fall-row {
   display: flex; flex-direction: column; gap: 8px;
-  padding: 6px 20px 8px 10px; margin-bottom: 6px;
+  padding: 6px 20px 8px 10px;
+  margin-bottom: 6px;
+  margin-left: 14px;
+  background: none;
+  border: 1px dashed color-mix(in srgb, var(--bcolor, var(--danger)) 45%, transparent);
+  border-top: 2px dashed var(--bcolor, var(--danger));
+  box-shadow: none;
+  opacity: 0.62;
 }
+.fall-row:hover,
+.fall-row.is-open { opacity: 1; }
 .fall-row .item-top { display: flex; justify-content: space-between; gap: 8px; }
+.fall-wrap {
+  margin-top: 10px;
+  padding-top: 2px;
+}
+.fall-note {
+  margin: -4px 0 8px;
+  font-size: 0.8rem;
+}
 .cal-layout {
   display: grid;
   grid-template-columns: minmax(240px, 320px) 1fr;

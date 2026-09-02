@@ -39,6 +39,17 @@ export function todaySectionItems(blocks: PackedBlock[], section: Slot): PackedB
   });
 }
 
+/**
+ * What Quest still shows. Once an item is completed or skipped it is done with,
+ * and leaving it on the list is just clutter — Stats is where it is recorded.
+ * Break is a control rather than an item and always stays.
+ */
+export function openBlocks(blocks: PackedBlock[]): PackedBlock[] {
+  return blocks.filter(
+    (b) => b.title === 'Break' || (b.status !== 'complete' && b.status !== 'skipped')
+  );
+}
+
 export function todaySectionDropped(dropped: PackedBlock[], section: Slot): PackedBlock[] {
   return dropped.filter((b) => !b.slot || b.slot === section);
 }

@@ -12,6 +12,6 @@ export { SEED_BUCKETS, seedItems, seedEventRanges, PERSONAL_BUCKET, WORK_BUCKET,
 export { applyBucketOrder, applyItemOrder, sortByWeight, nextItemWeight } from './order';
 export { appointmentLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity, usedFromEat, bucketSlots, parseBucketSlots, itemWorkSlot, workShowsItemSlot } from './sections';
 export { sectionRemainingNow, elapsedSince } from './timer';
-export { formatCountdown, nextSectionAction, nextSectionMinutes, slotLabel, todaySectionItems, todayEventItems, isEventPacked, isBreakBlock } from './today';
+export { formatCountdown, nextSectionAction, nextSectionMinutes, openBlocks, slotLabel, todaySectionItems, todayEventItems, isEventPacked, isBreakBlock } from './today';
 export { formatLogEvent, logEventTone } from './log';
 export { ALLOWED_EMAILS, canAdmitAccount, isAllowedEmail } from './allowlist';

@@ -8,6 +8,7 @@ import {
   formatCountdown,
   nextSectionAction,
   nextSectionMinutes,
+  openBlocks,
   signalSectionEnd,
   slotLabel,
   todayEventItems,
@@ -83,9 +84,9 @@ export function TodayPage() {
 
   const placed = day?.blocks || [];
   const dropped = day?.dropped || [];
-  const sectionItems = started && section ? todaySectionItems(placed, section) : [];
-  const sectionDropped = started && section ? todaySectionDropped(dropped, section) : [];
-  const eventItems = eventDay ? todayEventItems(placed) : [];
+  const sectionItems = started && section ? openBlocks(todaySectionItems(placed, section)) : [];
+  const sectionDropped = started && section ? openBlocks(todaySectionDropped(dropped, section)) : [];
+  const eventItems = eventDay ? openBlocks(todayEventItems(placed)) : [];
 
   return (
     <Chrome
@@ -149,6 +150,7 @@ export function TodayPage() {
       {!eventDay && started && sectionDropped.length ? (
         <section className="fall-wrap">
           <h2>Falling off</h2>
+          <p className="hint fall-note">No room left in this stretch. Complete or skip to clear them.</p>
           {sectionDropped.map((b) => (
             <FallRow key={b.id} block={b} date={date} act={act} />
           ))}

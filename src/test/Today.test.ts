@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatCountdown, isEventPacked, nextSectionAction, nextSectionMinutes, slotLabel, todayEventItems, todaySectionDropped, todaySectionItems } from '../domain/today';
+import { formatCountdown, isEventPacked, nextSectionAction, nextSectionMinutes, openBlocks, slotLabel, todayEventItems, todaySectionDropped, todaySectionItems } from '../domain/today';
 import type { PackedBlock } from '../domain/types';
 
 function block(partial: Partial<PackedBlock> & Pick<PackedBlock, 'id' | 'kind'>): PackedBlock {
@@ -102,5 +102,23 @@ describe('nextSectionMinutes', () => {
       block({ id: 'other', kind: 'appointment', title: 'Optician', slot: 'evening', durationMinutes: 30 }),
     ];
     expect(nextSectionMinutes(blocks, 'morning')).toBe(105);
+  });
+});
+
+describe('openBlocks', () => {
+  it('drops finished items so the list stays what is left to do', () => {
+    const shown = openBlocks([
+      block({ id: 'a', kind: 'weighted', title: 'Floors', slot: 'morning' }),
+      block({ id: 'b', kind: 'weighted', title: 'Dishes', slot: 'morning', status: 'complete' }),
+      block({ id: 'c', kind: 'weighted', title: 'Bins', slot: 'morning', status: 'skipped' }),
+    ]);
+    expect(shown.map((b) => b.id)).toEqual(['a']);
+  });
+
+  it('keeps Break, which is a control rather than an item', () => {
+    const shown = openBlocks([
+      block({ id: 'break', kind: 'personal', title: 'Break', slot: 'morning', status: 'complete' }),
+    ]);
+    expect(shown.map((b) => b.id)).toEqual(['break']);
   });
 });
