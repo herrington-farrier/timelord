@@ -115,14 +115,15 @@ only — so the section is picked by hand, like any other item.
   dead once the stopwatch is gone — check first: `Reset Today` and the Quest Log
   leftover row also read them.
 
-#### Two decisions
+#### Decided
 
-- **Per-appointment colour?** Each appointment has its own `color` today; a bucket
-  gives them all one. Either keep a per-item colour override, or accept a single
-  appointment colour. See D7.
-- **Where do they live in Organize?** Keep the dedicated Appointments tab, or drop
-  it and let them appear under Lists as another bucket group? A hybrid bucket
-  argues for Lists, and it removes a tab. See D8.
+- **One bucket colour.** Drop the per-appointment `color` field entirely; the
+  bucket colour applies, like every other bucket. Existing per-appointment colours
+  are discarded in the migration.
+- **No Appointments tab.** Delete it. The bucket appears in Organize → Buckets,
+  pinned first, to show its always-#1 status; its items are managed under Lists
+  with every other bucket's items. That removes a tab and a whole editing surface.
+- **No history for appointments.** Nothing to retain on delete.
 
 ### B2. Events are unusable across multiple ranges
 
@@ -141,23 +142,38 @@ setting `dueAt` on each item — which is the reported mess.
   (the date picker clamps to it), so you never retype a range.
 - Organize → Lists groups event items under their event name rather than under
   one flat Events bucket.
-- **Auto-drop when the whole event has passed:** archive the event and its items
-  once `endDate < today`. Needs a decision — see D3.
+- **Auto-drop when the whole event has passed:** **decided — delete outright**
+  once `endDate < today`. No history is kept for events, so archiving would only
+  accumulate dead rows.
 
 **This is the largest item here.** It touches the data model, the packer's
 `itemHitsDate`, the Lists UI, and the Quest Log outline logic. Worth its own
 session, and worth writing the migration down before starting.
 
-### B3. Menu selection still solid — probably already fixed, verify first
+### B3. "Menu still solid yellow" — not reproducible in the deployed CSS
 
-The gold wash was removed from `.chrome-btn.is-on` / `.tab.is-on` / pills / day
-chips and deployed after this was reported; selection is now a gold edge, gold
-letters and a one-shot pulse. **Check against a hard refresh before touching
-anything.**
+Reported again after the deploy, so it was checked properly rather than assumed.
+Every rule in the live stylesheet that touches a selected control was dumped:
 
-If something still reads as solid, the only remaining `--gold-bg` fill is
-`.cal-cell.is-today` on the Quest Log board — that one is marking a calendar
-cell, not text, so it is probably wanted.
+```
+@3565  .chrome-btn.is-on,.tab.is-on,.pills label:has(input:checked),.day-chips label:has(input:checked)
+       { background:transparent; border-color:var(--accent); color:var(--gold); animation:pick-on .5s }
+@3761  .chrome-btn.is-on:hover,.tab.is-on:hover { background:transparent; ... }
+@25124 .title-toggle[aria-expanded=true] { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), ... }
+```
+
+No solid fill, and no later rule re-adds one. Searching the whole file for a gold
+background returns only the title rule and pip, `.cal-day.is-today`,
+`.cal-cell.is-today`, and the card gradient — none of which is a menu control.
+
+**Most likely a cached shell.** `index.html` is `no-cache` now, but a home-screen
+PWA can still be holding an `index.html` fetched while it was `max-age=3600`,
+which pins it to the old hashed CSS.
+
+**Diagnostic before any code:** open the site in a private Safari tab, *not* the
+home-screen app. If selection is an outline there, it is the PWA cache — remove
+and re-add the home-screen app. If it is still solid in a private tab, get a
+screenshot and the element, because the stylesheet does not explain it.
 
 ### B4. The Personal colour picker does nothing
 
@@ -188,6 +204,26 @@ generic so they read as examples.
 
 Seeds live in `src/domain/seed.ts` and are written by `ensureTenant`, so this is
 a functions deploy. Only affects accounts created after it ships.
+
+### B6. Respawn already resets the day — but not the log
+
+**Verified.** `resetToday` already sets `startedAt`, `endedAt`, `section`,
+`sectionStartedAt`, `sectionRemainingMinutes`, `pausedAt`, `eventStartedAt` and
+`appointmentRuns` to null, clears `sectionExtra` / `sectionUsed`, and repacks
+with `packDay(asPackInput(loaded, date))` — no `previous` blocks, so every
+complete / skip status is dropped too. Timestamps and progress are both already
+wiped. Nothing to add there.
+
+**The real gap:** it does not touch `logs/`. Today's `complete` and `skip` rows
+survive a Respawn. So anything counting progress from the log would still show
+the pre-Respawn result, while the day itself reads as untouched.
+
+**Decided:** the day summary (F5) counts from the day's `blocks`, not the log.
+That keeps Respawn correct for free, and survives Reroll Stats erasing the log.
+
+**Still to decide:** whether Respawn should also delete today's `complete` /
+`skip` log rows so the Stats history agrees with the day. Deleting is the simple,
+consistent answer for an app that wants no long-term history. See D4.
 
 ---
 
@@ -360,17 +396,23 @@ end of `global.css`.
 Every row repeats its date. Grouping under `Sat Aug 29` headers, like the Quest
 Log list day blocks, would make 14 days much faster to scan.
 
-### D3. What "auto drop" means for a passed event
+### D3. Reroll Stats during an active day — **decided: block it**
 
-Archive the event and its items, or delete them? Archiving keeps Stats history
-intact and is reversible; deleting is truly tidy but loses the record. Also decide
-*when* it runs — on read, on the next pack, or on a schedule.
+Rerolling mid-day would erase the day's own completes and skips while the day is
+still running, leaving the progress bar and the day disagreeing. Refuse it
+server-side when today has `startedAt` and no `endedAt`, and disable the button
+in Organize with a reason. Server-side matters: the client check alone is a
+suggestion.
 
-### D4. Does Reroll Stats erase history that F6 needs?
+### D4. Should Respawn also delete today's log rows?
 
-See F6. If Stats grows a long-term progress view, erasing the log erases the
-progress. Either that is intended ("reroll" = start over), or day aggregates need
-to live outside `logs/`.
+`resetToday` wipes the day but not `logs/` (B6). The day summary counts from
+blocks, so the on-screen bar is already correct — but the Stats history would
+still hold the pre-Respawn completes and skips.
+
+Deleting today's `complete` / `skip` rows on Respawn makes the two agree and
+suits an app that keeps no long-term history. Against: it makes an "append-only"
+collection lose rows in a second place. Cheap either way; decide when F6 is built.
 
 ### D5. An affordance on tap-to-expand items?
 
@@ -383,15 +425,10 @@ The Guide covers every bucket plus Quest, Quest Log and the Lists tab. Stats and
 Organize itself are missing, though the docs describe the Guide as a tour of what
 each bucket and page is for.
 
-### D7. One appointment colour, or per-appointment?
+### Settled
 
-B1 turns appointments into items in a bucket, and buckets carry one colour.
-Appointments each have their own today. Keeping a per-item override is a small
-addition to the item shape; dropping it is simpler but loses the visual
-distinction between, say, a dentist visit and a school run.
-
-### D8. Do appointments keep their own Organize tab?
-
-A hybrid bucket argues for showing them under Lists with the other bucket groups,
-which also removes a tab. Against: appointments are date-first and may deserve
-their own view.
+- **D7 — one appointment colour.** Per-appointment colour is dropped; the bucket
+  colour applies. Recorded in B1.
+- **D8 — no Appointments tab.** The bucket lives in Organize → Buckets, pinned
+  first; its items sit under Lists. Recorded in B1.
+- **Events auto-drop** deletes outright; no history is kept. Recorded in B2.
