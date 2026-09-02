@@ -1,9 +1,10 @@
 import { formatDuration } from '../domain/duration';
 import { formatLogEvent, logEventTone } from '../domain/log';
 import { addDaysKey, formatClock, formatDayLabel, todayKey } from '../shared/dates';
-import { useItems, useLogs } from '../services/live';
+import { useItems, useLogs, useScore } from '../services/live';
 import { useAuth } from '../shared/auth';
 import { Chrome } from '../components/Chrome';
+import { ScoreBar } from '../components/ScoreBar';
 
 const LOG_DAYS = 14;
 
@@ -13,8 +14,10 @@ export function LogPage() {
   const start = addDaysKey(today, -(LOG_DAYS - 1));
   const logs = useLogs(user?.uid, start, today);
   const items = useItems(user?.uid);
+  const score = useScore(user?.uid);
   return (
     <Chrome title="Stats" stamp={`${LOG_DAYS} days`}>
+      <ScoreBar total={score} />
       {logs
         .slice()
         .sort((a, b) => String(b.at).localeCompare(String(a.at)))

@@ -30,6 +30,7 @@ vi.mock('../services/live', () => ({
   useSettings: () => DEFAULT_SETTINGS,
   useBuckets: () => [],
   useDay: () => dayState.current,
+  useScore: () => 0,
 }));
 
 vi.mock('../services/api', () => ({ api }));
@@ -108,6 +109,22 @@ describe('TodayPage', () => {
     await user.click(screen.getByRole('button', { name: 'Timelord' }));
     expect(screen.getByRole('button', { name: 'Sign Out' })).toBeVisible();
     expect(screen.queryByRole('button', { name: /Pack/ })).not.toBeInTheDocument();
+  });
+
+  it('shows the score bar under the greyed seal, with what the day added', () => {
+    dayState.current = {
+      blocks: [],
+      dropped: [],
+      packedMinutes: 0,
+      packedAt: '2026-08-30T12:00:00.000Z',
+      startedAt: '2026-08-30T13:00:00.000Z',
+      endedAt: '2026-08-30T21:00:00.000Z',
+      scoreDelta: 4,
+    };
+    const { container } = renderToday();
+    expect(container.querySelector('.score')).toBeTruthy();
+    expect(screen.getByText('+4')).toBeInTheDocument();
+    expect(container.querySelector('.day-seal.is-done')).toBeTruthy();
   });
 
   it('greys the seal instead of saying the day ended', () => {

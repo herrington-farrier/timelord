@@ -110,6 +110,19 @@ Tick as you go. Anything that fails, tell me the item number.
     row every time.
 40. **Readable dates** — `Sat Aug 29 · 7:00 AM · 20m`, not raw ISO strings.
 
+## Score
+
+45. **After Hearth** — the bar appears under the greyed seal, animates, and
+    shows the day's delta (`+4`) beside the running total.
+46. **Counting** — finish two items and skip one: `+1`. Complete something in
+    Falling off: that one is worth `+2`.
+47. **Forgiven days** — on a day with an appointment, items left in Falling off
+    do not subtract. A skip you chose still does.
+48. **A day never started** scores nothing at all.
+49. **Respawn** takes back exactly what today added, and today's rows leave Stats.
+50. **Reroll Stats** sets the total to 0 along with the history.
+51. **Stats** — the same bar sits at the top of the page.
+
 ## Speed and cost
 
 41. **Quest feels quicker** — Complete, Skip and Start Next Chapter should

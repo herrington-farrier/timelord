@@ -9,6 +9,7 @@ import { eventRangeName, eventRanges, expiredEventRanges, parseEventRanges } fro
 import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
+import { applyDelta, dayHasAppointments, scoreDay } from '../../src/domain/score';
 import { PACK_RANGE_DAYS } from '../../src/domain/packWeek';
 import { reservedLoad, bucketSlots, capsAfterLoad, eatFromSections, isEventDay, itemWorkSlot, liveSectionState, nextSlot, parseBucketSlots, sectionCapacity, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
 import { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate } from '../../src/domain/skip';
@@ -121,6 +122,7 @@ type DayState = {
   sectionExtra?: Partial<Record<Slot, number>>;
   sectionUsed?: Partial<Record<Slot, number>>;
   eventStartedAt?: string | null;
+  scoreDelta?: number;
 };
 
 /**
@@ -326,6 +328,8 @@ export const clearLogs = onCall(async (request) => {
     throw new HttpsError('failed-precondition', 'Finish the day before rerolling Stats.');
   }
   const removed = await deleteAllDocs(tenantRef(uid).collection('logs'));
+  // Rerolling starts the score over too — it is the same history.
+  await tenantRef(uid).collection('score').doc('current').set({ total: 0, updatedAt: nowIso() }, { merge: true });
   return { ok: true, removed };
 });
 
@@ -760,14 +764,35 @@ export const resetToday = onCall(async (request) => {
   await ensureTenant(uid, nowIso());
   const date = asString(request.data?.date || todayKey(), 'Date');
   const loaded = await loadTenant(uid);
+  const dayRef = tenantRef(uid).collection('days').doc(date);
+  // Respawn starts the day over, so whatever it scored is taken back. The day
+  // stored its own delta precisely so this does not have to be recomputed from
+  // evidence we are about to erase.
+  const prevSnap = await dayRef.get();
+  const prevDelta = prevSnap.exists ? Number((prevSnap.data() as DayState).scoreDelta) || 0 : 0;
+  if (prevDelta) {
+    const scoreRef = tenantRef(uid).collection('score').doc('current');
+    await getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(scoreRef);
+      const total = snap.exists ? Number((snap.data() as { total?: unknown }).total) : 0;
+      tx.set(scoreRef, { total: applyDelta(total, -prevDelta), updatedAt: nowIso() }, { merge: true });
+    });
+  }
+  // Today's own complete / skip rows go with it, so Stats agrees with the day.
+  const todayLogs = await tenantRef(uid).collection('logs').where('date', '==', date).get();
+  const logBatch = getFirestore().batch();
+  todayLogs.docs.forEach((doc) => {
+    const type = (doc.data() as { type?: string }).type;
+    if (type === 'complete' || type === 'skip') logBatch.delete(doc.ref);
+  });
+  if (!todayLogs.empty) await logBatch.commit();
   const result = domainCall(() => packDay(asPackInput(loaded, date)));
   const stamp = await stampLastUpdated(uid, nowIso());
-  await tenantRef(uid)
-    .collection('days')
-    .doc(date)
+  await dayRef
     .set(
       firestoreDoc({
         ...result,
+        scoreDelta: 0,
         startedAt: null,
         endedAt: null,
         packedAt: nowIso(),
@@ -1073,6 +1098,36 @@ async function writeSkipPushes(uid: string, date: string, pushes: SkipPush[]): P
   await batch.commit();
 }
 
+/**
+ * Score a finished day and fold it into the running total.
+ *
+ * The day's own delta is stored on the day, so Respawn can take back exactly
+ * what that day contributed rather than trying to recompute it after the
+ * evidence has been cleared.
+ */
+async function scoreFinishedDay(
+  uid: string,
+  date: string,
+  blocks: PackedBlock[],
+  dropped: PackedBlock[],
+  started: boolean,
+  events: Bucket | undefined
+): Promise<number> {
+  const score = scoreDay(blocks, dropped, {
+    started,
+    isEventDay: isEventDay(events, date),
+    hasAppointments: dayHasAppointments(blocks),
+  });
+  if (!score.delta) return 0;
+  const scoreRef = tenantRef(uid).collection('score').doc('current');
+  await getFirestore().runTransaction(async (tx) => {
+    const snap = await tx.get(scoreRef);
+    const total = snap.exists ? Number((snap.data() as { total?: unknown }).total) : 0;
+    tx.set(scoreRef, { total: applyDelta(total, score.delta), updatedAt: nowIso() }, { merge: true });
+  });
+  return score.delta;
+}
+
 export const endDay = onCall(async (request) => {
   const uid = requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
@@ -1116,8 +1171,13 @@ export const endDay = onCall(async (request) => {
     { merge: true }
   );
   await writeSkipPushes(uid, date, pushes);
+  const scoredBlocks = mark(evening);
+  const scoredDropped = mark(data.dropped || []);
+  const events = (loaded.buckets as Bucket[]).find((b) => b.id === EVENTS_ID || b.kind === 'event');
+  const delta = await scoreFinishedDay(uid, date, scoredBlocks, scoredDropped, Boolean(data.startedAt), events);
+  await dayRef.set({ scoreDelta: delta }, { merge: true });
   if (eventMinutes) await writeLog(uid, { type: 'event_hours', date, minutes: eventMinutes });
   await writeLog(uid, { type: 'end_day', date });
-  return { ok: true };
+  return { ok: true, delta };
 });
 

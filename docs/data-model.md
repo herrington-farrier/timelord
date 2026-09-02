@@ -49,6 +49,18 @@ hours back. 0-duration appointments are checklist entries and cost nothing.
 - `eventStartedAt` (unused on event days; no stopwatch)
 - Pack restamps `color` from current buckets and appointments. Started or ended days keep Complete / Skip.
 
+## score/current
+
+- `total` — the running score, never below zero. `+1` per completed item, `-1`
+  per skipped, `+2` for completing one that had fallen off. Days never started
+  score nothing; event days and days with appointments forgive what fell off.
+- Written only when a day ends, unwound by Respawn, zeroed by Reroll Stats.
+
+## days/{yyyy-mm-dd} — `scoreDelta`
+
+What that day added to the total. Stored so Respawn can take back exactly its
+contribution rather than recompute it after clearing the day.
+
 ## logs/{id}
 
 Append-only: `type`, `at`, `date`, `itemId`, `bucketId`, `minutes`, optional `title` and `section`. Never overwritten — but **Reroll Stats** (`clearLogs`) erases the whole collection, and that is irreversible. `rebuild` displays as Quest Log Packed (gold). Complete is green (`Quest Completed: …`); skip is red (`Quest Failed: …`). Every Stats row's text takes its row colour. Start Next Chapter writes one `skip` row per leftover item, then `start_next`.

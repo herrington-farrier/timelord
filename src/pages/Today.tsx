@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { Chrome } from '../components/Chrome';
+import { ScoreBar } from '../components/ScoreBar';
 import { loadTone } from '../domain/budget';
 import { formatApptTime, formatDuration } from '../domain/duration';
 import { isEventDay } from '../domain/sections';
@@ -19,7 +20,7 @@ import {
 import { sectionRemainingNow } from '../domain/timer';
 import { EVENTS_ID, type PackedBlock, type Slot } from '../domain/types';
 import { api } from '../services/api';
-import { useBuckets, useDay, useSettings } from '../services/live';
+import { useBuckets, useDay, useScore, useSettings } from '../services/live';
 import { useAuth } from '../shared/auth';
 import { todayKey } from '../shared/dates';
 import { formatActionError } from '../shared/formatActionError';
@@ -35,6 +36,7 @@ export function TodayPage() {
   const settings = useSettings(user?.uid);
   const buckets = useBuckets(user?.uid);
   const day = useDay(user?.uid, date);
+  const score = useScore(user?.uid);
   const [error, setError] = useState<string | null>(null);
   const events = buckets.find((b) => b.id === EVENTS_ID || b.kind === 'event');
   const eventDay = isEventDay(events, date);
@@ -115,6 +117,8 @@ export function TodayPage() {
         <NormalDayControls
           started={started}
           ended={ended}
+          score={score}
+          scoreDelta={day?.scoreDelta || 0}
           ready={Boolean(day)}
           onStartDay={() => act('Quest started.', () => api.startDay({ date }))}
         />
@@ -230,11 +234,15 @@ function DayHead({
 function NormalDayControls({
   started,
   ended,
+  score,
+  scoreDelta,
   ready,
   onStartDay,
 }: {
   started: boolean;
   ended: boolean;
+  score: number;
+  scoreDelta: number;
   ready: boolean;
   onStartDay: () => void;
 }) {
@@ -242,6 +250,7 @@ function NormalDayControls({
     return (
       <div className="seal-wrap">
         <img className="day-seal is-done" src="/icon-192.png" alt="Day ended" width={192} height={192} />
+        <ScoreBar total={score} delta={scoreDelta} />
       </div>
     );
   }

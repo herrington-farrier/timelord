@@ -1556,3 +1556,65 @@ button:disabled {
 .duration-fields.is-invalid input {
   border-color: var(--danger);
 }
+
+/* --- Score ---------------------------------------------------------- *
+ * The XP bar: fills every hundred and starts again. The level is
+ * arbitrary; the total is the number that means something.               */
+.score {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 22rem;
+  margin: 0 auto;
+}
+.score__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.score__level {
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-indent: 0.16em;
+  text-transform: uppercase;
+  color: var(--head);
+}
+.score__total {
+  margin-left: auto;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+.score__delta {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ok);
+  animation: score-pop 0.5s ease-out both;
+}
+.score__delta.is-down { color: var(--danger); }
+@keyframes score-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+.score__track {
+  height: 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--control);
+  overflow: hidden;
+}
+.score__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #a97a24 0%, var(--gold) 55%, #fbeccb 100%);
+  box-shadow: 0 0 12px -2px rgba(230, 185, 104, 0.9);
+  /* slow enough to read as filling, not as a jump */
+  transition: width 0.9s cubic-bezier(0.22, 0.68, 0.28, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .score__fill { transition: none; }
+  .score__delta { animation: none; }
+}

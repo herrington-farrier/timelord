@@ -251,26 +251,30 @@ since the packer already iterated `bucketSlots(b)` for every bucket and
 Single-section buckets still give their items no picker, which is the behaviour
 worth keeping and is covered by a test.
 
-### F5. Day-end summary after Hearth
+### F5 / F6. The score — **done**
 
-Show the day's result on screen: completed vs skipped, a level-up style progress
-bar, and a message with some humour.
+One number, counted in items rather than minutes: how much of the day you
+finished against what it asked of you.
 
-The data is already there — day `blocks` carry `status`, and the log has one row
-per complete/skip. Prefer counting from the day's blocks so it works offline and
-does not depend on log retention (**Reroll Stats erases the log**, so a summary
-built from logs would vanish).
+- **+1** for each item completed, **-1** for each skipped.
+- **+2** for finishing something that had already fallen off: the day had no
+  room for it and you did it anyway, so an overbooked day has a way back up
+  rather than only a way down.
+- **Nothing counts on a day you never started** — that is a day off, not a
+  failure.
+- **Event days and days holding appointments forgive what fell off**, because
+  the schedule squeezed it out and no adherence would have saved it. A skip you
+  chose still counts on those days.
 
-### F6. Stats history over time
+The day's own delta is stored on the day document. That is what lets **Respawn**
+take back exactly what the day contributed instead of recomputing it from
+evidence Respawn is about to erase; it also deletes that day's complete / skip
+log rows, so Stats agrees with the day. **Reroll** sets the total to 0 — it is
+the same history.
 
-The bigger version of F5 on the Stats page — completion rate across days with a
-larger progress bar.
-
-**Depends on a decision:** logs are the only history, and Reroll Stats erases
-them. Either accept that rerolling resets history, or keep aggregate day totals
-somewhere Reroll does not touch. Decide before building (see D4).
-
----
+The bar fills every hundred and starts again. The level is arbitrary and the UI
+says so; the total is the number that means anything. It sits under the greyed
+seal after Hearth with the day's delta beside it, and at the top of Stats.
 
 ## Decisions pending
 

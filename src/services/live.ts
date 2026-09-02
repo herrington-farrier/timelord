@@ -23,6 +23,8 @@ export type DayDoc = {
   sectionExtra?: Partial<Record<Slot, number>>;
   sectionUsed?: Partial<Record<Slot, number>>;
   eventStartedAt?: string | null;
+  /** What this day added to the running score, once it ended. */
+  scoreDelta?: number;
 };
 
 function tenantCol(uid: string, name: string) {
@@ -108,5 +110,16 @@ export function useLogs(uid: string | undefined, start: string, end: string) {
       setValue(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
   }, [uid, start, end]);
+  return value;
+}
+
+export function useScore(uid: string | undefined): number {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (!uid || !db) return;
+    return onSnapshot(doc(tenantCol(uid, 'score'), 'current'), (snap) => {
+      setValue(Number((snap.data() as DocumentData | undefined)?.total) || 0);
+    });
+  }, [uid]);
   return value;
 }

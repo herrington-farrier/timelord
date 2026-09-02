@@ -15,6 +15,7 @@ vi.mock('../services/live', () => ({
     { id: '3', type: 'skip', date: '2026-08-29', at: '2026-08-29T14:00:00.000Z', title: 'Floors' },
   ],
   useItems: () => [],
+  useScore: () => 0,
 }));
 
 describe('LogPage', () => {
