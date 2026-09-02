@@ -150,30 +150,25 @@ setting `dueAt` on each item — which is the reported mess.
 `itemHitsDate`, the Lists UI, and the Quest Log outline logic. Worth its own
 session, and worth writing the migration down before starting.
 
-### B3. "Menu still solid yellow" — not reproducible in the deployed CSS
+### B3. Controls went solid gold on press — **fixed**
 
-Reported again after the deploy, so it was checked properly rather than assumed.
-Every rule in the live stylesheet that touches a selected control was dumped:
+Confirmed fixed on device. Cause was `background-clip`, not the gradient.
 
-```
-@3565  .chrome-btn.is-on,.tab.is-on,.pills label:has(input:checked),.day-chips label:has(input:checked)
-       { background:transparent; border-color:var(--accent); color:var(--gold); animation:pick-on .5s }
-@3761  .chrome-btn.is-on:hover,.tab.is-on:hover { background:transparent; ... }
-@25124 .title-toggle[aria-expanded=true] { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), ... }
-```
+`background-clip: text` paints the ink into the letters; the `background`
+shorthand resets it to `border-box`, and `button:hover:not(:disabled)` (0,2,1)
+is more specific than the rule declaring the clip (0,1,0). So hover dropped the
+clip and the gradient filled the whole element — and on touch, `:hover` sticks
+after a tap, so it stayed. Only controls using `background-clip: text` were
+affected, which is why the menu items behaved and the action buttons did not.
 
-No solid fill, and no later rule re-adds one. Searching the whole file for a gold
-background returns only the title rule and pip, `.cal-day.is-today`,
-`.cal-cell.is-today`, and the card gradient — none of which is a menu control.
+Every control rule now uses `background-color`, never the shorthand.
+`src/test/buttonStyles.test.ts` parses the stylesheet and fails on a shorthand
+in any control rule — jsdom never loads CSS, so no rendering test could catch
+this class of bug.
 
-**Most likely a cached shell.** `index.html` is `no-cache` now, but a home-screen
-PWA can still be holding an `index.html` fetched while it was `max-age=3600`,
-which pins it to the old hashed CSS.
-
-**Diagnostic before any code:** open the site in a private Safari tab, *not* the
-home-screen app. If selection is an outline there, it is the PWA cache — remove
-and re-add the home-screen app. If it is still solid in a private tab, get a
-screenshot and the element, because the stylesheet does not explain it.
+**Keep in mind when styling controls:** the `background` shorthand also resets
+`background-clip`, `background-image`, `background-position` and the rest. On
+this codebase that silently breaks gradient text.
 
 ### B4. The Personal colour picker does nothing
 
