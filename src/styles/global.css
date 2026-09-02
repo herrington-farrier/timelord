@@ -132,7 +132,10 @@ button,
   min-height: var(--tap);
   border-radius: var(--btn-radius);
   border: 1px solid var(--border);
-  background: var(--control);
+  /* background-color, never the `background` shorthand: the shorthand resets
+     background-clip, and background-clip:text is what paints the gradient into
+     the letters rather than across the whole button. */
+  background-color: var(--control);
   color: var(--text);
   text-decoration: none;
   cursor: pointer;
@@ -144,7 +147,10 @@ button,
 button:hover:not(:disabled),
 .chrome-btn:hover,
 .tab:hover {
-  background: var(--control-hover);
+  /* see above: shorthand here would clobber background-clip on every
+     gradient-text button, painting it solid gold on hover and on the sticky
+     :hover a touch tap leaves behind. */
+  background-color: var(--control-hover);
   border-color: var(--accent);
   color: var(--text);
 }
@@ -170,7 +176,7 @@ button:disabled {
   min-height: var(--tap);
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--control);
+  background-color: var(--control);
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 700;
@@ -189,14 +195,14 @@ button:disabled {
 .tab.is-on,
 .pills label:has(input:checked),
 .day-chips label:has(input:checked) {
-  background: transparent;
+  background-color: transparent;
   border-color: var(--accent);
   color: var(--gold);
   animation: pick-on 0.5s ease-out;
 }
 .chrome-btn.is-on:hover,
 .tab.is-on:hover {
-  background: transparent;
+  background-color: transparent;
   border-color: var(--accent-hover);
   color: var(--gold);
 }
@@ -280,7 +286,6 @@ button:disabled {
 .btn--gold:hover:not(:disabled),
 .btn--red:hover:not(:disabled),
 .btn--green:hover:not(:disabled) {
-  background-image: var(--btn-ink);
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
@@ -681,7 +686,7 @@ button:disabled {
   margin: 0;
   padding: 4px 0;
   border: 0;
-  background: transparent;
+  background-color: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
@@ -691,7 +696,7 @@ button:disabled {
 }
 .bucket-toggle:hover,
 .bucket-toggle:focus-visible {
-  background: var(--control);
+  background-color: var(--control);
   border-color: transparent;
 }
 /* Bucket names are curated headings, not free text, so they take the
@@ -1360,9 +1365,6 @@ button:disabled {
 }
 .title-toggle:hover:not(:disabled),
 .title-toggle:active {
-  /* base button:hover uses the `background` shorthand, which would reset
-     background-image to none and blank the gradient-clipped letters. */
-  background-image: var(--wordmark-ink);
   background-color: transparent;
   color: transparent;
   -webkit-text-fill-color: transparent;
