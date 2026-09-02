@@ -1529,3 +1529,33 @@ button:disabled {
   .pills label:has(input:checked),
   .day-chips label:has(input:checked) { animation: none; }
 }
+
+/* --- Confirm dialog ------------------------------------------------- */
+.confirm {
+  margin: auto;
+  padding: 20px 22px 18px;
+  max-width: 22rem;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--danger);
+  border-radius: 12px;
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--danger) 16%, var(--panel)) 0%, var(--panel) 55%),
+    var(--panel);
+  color: var(--text);
+  box-shadow: 0 30px 70px -24px #000;
+}
+.confirm::backdrop {
+  background: rgba(5, 8, 14, 0.66);
+}
+.confirm__title {
+  margin: 0 0 16px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+.confirm__acts {
+  display: flex;
+  gap: 10px;
+}
+.confirm__acts button { flex: 1 1 0; min-width: 0; }

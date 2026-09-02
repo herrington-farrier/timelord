@@ -8,7 +8,7 @@ The routes never changed; only what the menu calls them.
 | --- | --- | --- |
 | `/` | Quest | Today |
 | `/calendar` | Quest Log | Calendar / the board |
-| `/edit` | Organize | Edit |
+| `/edit` | Strategize | Edit |
 | `/log` | Stats | Log |
 | `/guide` | Guide | Guide |
 
@@ -21,8 +21,8 @@ The routes never changed; only what the menu calls them.
 | End Day | Hearth |
 | Start Break | Rest ZZZ (green) |
 | End Break | End Rest |
-| Reset Today | Respawn — toast `Quests reset. +1 Life` |
-| — | Reroll Stats — erases the log (`clearLogs`); two presses, second reads `Erase Stats?` |
+| Reset Today | Respawn (green) — toast `Quests reset. +1 Life` |
+| — | Reroll Stats — erases the log (`clearLogs`), behind an `Erase all Stats?` dialog |
 
 The rest of this document uses the functional names, because "today" also means
 the date being packed and renaming that would make the packing rules ambiguous.
@@ -47,8 +47,8 @@ Work and weighted buckets set hours as **Week** or **Day**. Collapsed rows show 
 
 - **Personal** always exists. Morning Routine, Break, and Evening Routine durations are editable. Color can change. Cannot be renamed, removed, or given a list. Does not consume week hours.
 - **Work** always exists, weight 1, first in each **selected** section (one or more; toggles on Edit). Cannot be deleted or drag-reordered. Break is always midday. If Work is in midday, Break sits in that Work block (2-hour split). Morning/evening Work is not split. If Work is not in midday, Break still lands once there. Each Work list item packs in one selected section.
-- **Appointments** always exists. A container, not a scheduled bucket: no hours, no days, no sections of its own, and it cannot be renamed or deleted. Only its colour is editable, on Organize → Buckets where it sits first. Its items are added under Lists.
-- **Events** always exists. One or more **named** date ranges on the bucket (1-day ranges allowed). Add / remove / name them in Organize → Buckets; page Save writes them. An event whose last day has passed deletes itself, and its items with it. Collapsed row summarises them (`2 ranges · 6d`) or `off` — the dates themselves live in the form. No slot, no week hours, no day sections. Cannot be deleted.
+- **Appointments** always exists. A container, not a scheduled bucket: no hours, no days, no sections of its own, and it cannot be renamed or deleted. Only its colour is editable, on Strategize → Buckets where it sits first. Its items are added under Lists.
+- **Events** always exists. One or more **named** date ranges on the bucket (1-day ranges allowed). Add / remove / name them in Strategize → Buckets; page Save writes them. An event whose last day has passed deletes itself, and its items with it. Collapsed row summarises them (`2 ranges · 6d`) or `off` — the dates themselves live in the form. No slot, no week hours, no day sections. Cannot be deleted.
 - **Weighted buckets** can be added, removed, renamed, recolored, reweighted, and given days / slot / Week or Day hours.
 
 ## Today (normal day)
@@ -58,7 +58,7 @@ Buttons transform in place:
 - **Start Day** begins the morning countdown. Morning Routine happens on your own; there is no Start Routine step.
 - After Start Day, Today lists **this stretch only** (placed + falling-off) plus Personal pause controls. Completed and skipped items leave the list — Stats is the record. Break stays, being a control rather than an item.
 - Break: Start Break / End Break pauses/resumes the current timer.
-- After the list (and falling-off): **Start Next Chapter** + time remaining. Auto-skips leftover placed and falling-off items (same skip log rows as Skip), then opens the next stretch at its normal length. If the next stretch is 0, auto End Day. The countdown is wall-clock; hitting 0m sounds and does not start the next stretch.
+- After the list (and falling-off): **Start Next Chapter** + the next stretch's total. Auto-skips leftover placed and falling-off items (same skip log rows as Skip) — including a missed appointment, but **not** one that spans into a later section, which is still running. Leftover scheduled items renew on the bucket's next day; appointments and events do not, since a missed one is missed rather than deferred. Then opens the next stretch. If the next stretch is 0, auto End Day. The countdown is wall-clock; hitting 0m sounds and does not start the next stretch.
 - Evening: **End Day** after the list.
 - Appointments are items in the locked `appointments` bucket, packed before every other bucket in their section. Each declares the **sections it spans** (multi-select, at least one); its hours come out of the first of those and spill forward, and it stays on the list through every section it spans. Nothing is inferred from `apptTime`. They have no stopwatch: the duration you assign is what the day loses, its own section first and then spilling forward. Complete / Skip like any item; skipping cancels it and returns the hours. A cancelled appointment is not pushed to another day.
 

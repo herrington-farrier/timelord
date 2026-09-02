@@ -1,7 +1,7 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { EditPage } from '../pages/Edit';
@@ -28,9 +28,6 @@ vi.mock('../services/api', () => ({
 }));
 
 describe('Edit Day', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
 
   it('resets today from the Day tab', async () => {
     const user = userEvent.setup();
@@ -45,32 +42,7 @@ describe('Edit Day', () => {
     expect(api.resetToday).toHaveBeenCalled();
   });
 
-  // fireEvent is synchronous, so it does not deadlock against fake timers
-  // the way userEvent's awaited waits do.
-  it('keeps the erase confirm armed instead of expiring', () => {
-    vi.clearAllMocks();
-    vi.useFakeTimers();
-    render(
-      <ToastProvider>
-        <MemoryRouter>
-          <EditPage />
-        </MemoryRouter>
-      </ToastProvider>
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Reroll Stats' }));
-    expect(screen.getByRole('button', { name: 'Erase Stats?' })).toBeInTheDocument();
-
-    // A confirm that disarms itself mid-decision can never be completed.
-    act(() => {
-      vi.advanceTimersByTime(60000);
-    });
-    expect(screen.getByRole('button', { name: 'Erase Stats?' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Erase Stats?' }));
-    expect(api.clearLogs).toHaveBeenCalled();
-  });
-
-  it('needs two presses to erase the log', async () => {
+  it('asks before erasing the log, and only erases when confirmed', async () => {
     vi.clearAllMocks();
     const user = userEvent.setup();
     render(
@@ -81,10 +53,14 @@ describe('Edit Day', () => {
       </ToastProvider>
     );
     await user.click(screen.getByRole('button', { name: 'Reroll Stats' }));
+    expect(screen.getByText('Erase all Stats?')).toBeInTheDocument();
     expect(api.clearLogs).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: 'Erase Stats?' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.clearLogs).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Reroll Stats' }));
+    await user.click(screen.getByRole('button', { name: 'Erase' }));
     expect(api.clearLogs).toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Reroll Stats' })).toBeInTheDocument();
   });
 });

@@ -1,19 +1,27 @@
 import { addDaysKey, weekdayFromKey } from './cadence';
 import { todaySectionDropped, todaySectionItems } from './today';
-import { APPOINTMENTS_ID, EVENTS_ID, type Bucket, type ListItem, type PackedBlock, type Slot } from './types';
+import { APPOINTMENTS_ID, EVENTS_ID, SLOTS, type Bucket, type ListItem, type PackedBlock, type Slot } from './types';
 
 function isLeftover(block: PackedBlock): boolean {
   return (
     Boolean(block.itemId) &&
     block.kind !== 'personal' &&
-    block.kind !== 'appointment' &&
     (block.status === 'pending' || block.status === 'dropped')
   );
 }
 
+/** An appointment that carries on into a later section is not left over yet. */
+function spansPast(block: PackedBlock, section: Slot): boolean {
+  if (!block.slots?.length) return false;
+  const here = SLOTS.indexOf(section);
+  return block.slots.some((s) => SLOTS.indexOf(s) > here);
+}
+
 export function leftoverSectionBlocks(blocks: PackedBlock[], dropped: PackedBlock[], section: Slot): PackedBlock[] {
   return [
-    ...todaySectionItems(blocks, section).filter(isLeftover),
+    // A missed appointment is missed, and auto-skips like anything else — but
+    // only once the last section it spans is over.
+    ...todaySectionItems(blocks, section).filter((b) => isLeftover(b) && !spansPast(b, section)),
     ...todaySectionDropped(dropped, section).filter(isLeftover),
   ];
 }

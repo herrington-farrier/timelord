@@ -14,7 +14,7 @@ const CARDS: GuideCard[] = [
     id: 'pack-how',
     kicker: 'The idea',
     title: 'How a day gets packed',
-    lede: 'Set it up in Organize. Go Quest.',
+    lede: 'Set it up in Strategize. Go Quest.',
     body: 'Buckets fill morning, midday and evening in priority order, each capped at its own hours. No bucket borrows from another. Unused time is gone.',
   },
   {
@@ -55,7 +55,7 @@ const CARDS: GuideCard[] = [
   },
   {
     id: 'lists',
-    kicker: 'Organize tab',
+    kicker: 'Strategize tab',
     title: 'Lists',
     body: 'What gets packed, grouped by bucket. Zero-duration items are reminders and never drop.',
   },

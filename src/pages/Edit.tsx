@@ -5,6 +5,7 @@ import { SortableList } from '../components/SortableList';
 import { DaySectionsBar } from '../components/DaySectionsBar';
 import { WeekBudgetBar } from '../components/WeekBudgetBar';
 import { CollapsibleBucket } from '../components/CollapsibleBucket';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import {
   assignedWeekMinutes,
   collapsedSlotHours,
@@ -72,7 +73,7 @@ export function EditPage() {
   }
 
   return (
-    <Chrome title="Organize">
+    <Chrome title="Strategize">
       <nav className="tabs">
         {TABS.map((t) => (
           <button key={t} type="button" className={`tab${tab === t ? ' is-on' : ''}`} onClick={() => setTab(t)}>
@@ -147,10 +148,10 @@ function DayForm({
   onResetToday: () => Promise<void>;
   onReroll: () => Promise<void>;
 }) {
-  // Erasing the log cannot be undone, so it takes two presses. It stays
-  // armed until pressed: a timer here would silently disarm mid-decision,
-  // which is exactly the hesitation a confirm is meant to allow.
-  const [armed, setArmed] = useState(false);
+  // Erasing the log cannot be undone, so it asks. A dialog rather than a
+  // second press on the same button: a label that changes under your finger
+  // never reads as a question.
+  const [confirmReroll, setConfirmReroll] = useState(false);
   const day = splitMinutes(settings.dayMinutes);
   const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
   const dayMinutes = liveMinutes ?? settings.dayMinutes;
@@ -197,27 +198,26 @@ function DayForm({
         </div>
       </div>
       <div className="page-save">
-        <button type="button" className="btn--red" onClick={() => onResetToday()}>
+        <button type="button" className="btn--green" onClick={() => onResetToday()}>
           Respawn
         </button>
-        <button
-          type="button"
-          className="btn--red"
-          onClick={() => {
-            if (!armed) {
-              setArmed(true);
-              return;
-            }
-            setArmed(false);
-            onReroll();
-          }}
-        >
-          {armed ? 'Erase Stats?' : 'Reroll Stats'}
+        <button type="button" className="btn--red" onClick={() => setConfirmReroll(true)}>
+          Reroll Stats
         </button>
         <button type="submit" className="btn--gold">
           Save
         </button>
       </div>
+      <ConfirmDialog
+        open={confirmReroll}
+        title="Erase all Stats?"
+        confirmLabel="Erase"
+        onCancel={() => setConfirmReroll(false)}
+        onConfirm={() => {
+          setConfirmReroll(false);
+          onReroll();
+        }}
+      />
     </form>
   );
 }

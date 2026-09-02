@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { daySections, packDay, sectionMinutes } from '../domain/packDay';
+import { collectEndDaySkipPushes, daySections, packDay, sectionMinutes } from '../domain/packDay';
 import { todaySectionItems } from '../domain/today';
 import { PACK_RANGE_DAYS, packRange } from '../domain/packWeek';
 import { appointmentLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity } from '../domain/sections';
-import { nextAssignedDate, skipPushDate } from '../domain/skip';
+import { leftoverSectionBlocks, nextAssignedDate, skipPushDate } from '../domain/skip';
 import { APPOINTMENTS_BUCKET } from '../domain/seed';
-import { APPOINTMENTS_ID, EVENTS_ID } from '../domain/types';
+import { APPOINTMENTS_ID, EVENTS_ID, type PackedBlock } from '../domain/types';
 import { weekStart } from '../shared/dates';
 import { bucket, item, settings, workBucket } from './fixtures';
 
@@ -830,5 +830,71 @@ describe('packRange', () => {
     });
     expect(out.map((r) => r.date)).toEqual(['2026-08-31', '2026-09-01', '2026-09-02']);
     expect(out.every((r) => Array.isArray(r.result.blocks))).toBe(true);
+  });
+});
+
+describe('auto-skip when moving to the next section', () => {
+  const midday = (over: Record<string, unknown>) =>
+    ({
+      id: String(over.id),
+      itemId: String(over.itemId ?? over.id),
+      date: monday,
+      bucketId: 'house',
+      title: 'Thing',
+      kind: 'weighted',
+      slot: 'midday',
+      startMinutes: 0,
+      endMinutes: 30,
+      durationMinutes: 30,
+      status: 'pending',
+      color: 'fff',
+      flexible: true,
+      ...over,
+    }) as PackedBlock;
+
+  it('auto-skips a missed appointment but spares one still spanning ahead', () => {
+    const blocks = [
+      midday({ id: 'task' }),
+      midday({ id: 'spanning', kind: 'appointment', bucketId: APPOINTMENTS_ID, slots: ['midday', 'evening'] }),
+      midday({ id: 'missed', kind: 'appointment', bucketId: APPOINTMENTS_ID }),
+    ];
+    // leaving midday: the spanning one carries on, the missed one is missed
+    expect(leftoverSectionBlocks(blocks, [], 'midday').map((b) => b.id)).toEqual(['task', 'missed']);
+    // leaving evening: nothing follows, so the spanning one is left over too
+    expect(leftoverSectionBlocks(blocks, [], 'evening').map((b) => b.id)).toEqual(['spanning']);
+  });
+
+  it('still renews a scheduled item to the bucket’s next day', () => {
+    const house = bucket({ id: 'house', name: 'House', weight: 4, weeklyMinutes: 600, days: ['Mon', 'Thu'] });
+    const scheduled = item({
+      id: 'renew',
+      bucketId: 'house',
+      title: 'Deliver report',
+      type: 'scheduled',
+      dueAt: monday,
+      durationMinutes: 30,
+    });
+    const pushes = collectEndDaySkipPushes(monday, [midday({ id: 'renew' })], [], [scheduled], [house]);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].toDate).toBe('2026-09-03');
+  });
+
+  it('does not renew a cancelled appointment', () => {
+    const appt = item({
+      id: 'dentist',
+      bucketId: APPOINTMENTS_ID,
+      title: 'Dentist',
+      type: 'scheduled',
+      dueAt: monday,
+      durationMinutes: 60,
+    });
+    const pushes = collectEndDaySkipPushes(
+      monday,
+      [midday({ id: 'dentist', kind: 'appointment', bucketId: APPOINTMENTS_ID })],
+      [],
+      [appt],
+      [APPOINTMENTS_BUCKET]
+    );
+    expect(pushes).toEqual([]);
   });
 });

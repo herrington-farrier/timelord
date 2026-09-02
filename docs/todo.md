@@ -56,7 +56,7 @@ keeps no event history, and cost a migration.
 - An event item picks its **event** first, and the date input is then clamped to
   that event's range with `min`/`max`. `upsertItem` re-checks the date server-side
   and names the range in the error, since the client bound is only a hint.
-- Organize → Lists groups event items under their event, with the dates on the
+- Strategize → Lists groups event items under their event, with the dates on the
   group header, so nothing has to be remembered. Items whose event no longer
   exists collect under **Unassigned** rather than disappearing.
 - `eventRangeForItem` matches by id and falls back to the range the date sits in,
@@ -181,9 +181,9 @@ nothing a person did. `formatLogEvent` still renders existing rows.
 
 ## Features
 
-### F1. One Save for the whole Organize page
+### F1. One Save for the whole Strategize page
 
-Carried over, and the request now extends past Lists to **every Organize tab**.
+Carried over, and the request now extends past Lists to **every Strategize tab**.
 
 **Do not implement as a loop.** Every `upsertItem` runs a full repack, so saving
 N rows with N calls fires N repacks — the same duplicate-repack problem already
@@ -202,7 +202,7 @@ Worth doing **after E3**, so page Save repacks a scoped range rather than 42 day
 
 ### F2. Count Personal hours as day hours (toggle)
 
-A setting on Organize → Day. When on:
+A setting on Strategize → Day. When on:
 
 - Morning Routine and Evening Routine become completable / skippable items rather
   than silent pauses.
@@ -263,7 +263,7 @@ somewhere Reroll does not touch. Decide before building (see D4).
 ### D1. List item titles in caps
 
 Applied to Quest's day list and the falling-off rows, deliberately **not** to
-Stats rows (event sentences, not titles) or the Organize inputs (uppercasing text
+Stats rows (event sentences, not titles) or the Strategize inputs (uppercasing text
 as you type it is disorienting). Revert by deleting the marked TRIAL block at the
 end of `global.css`.
 
@@ -277,7 +277,7 @@ Log list day blocks, would make 14 days much faster to scan.
 Rerolling mid-day would erase the day's own completes and skips while the day is
 still running, leaving the progress bar and the day disagreeing. Refuse it
 server-side when today has `startedAt` and no `endedAt`, and disable the button
-in Organize with a reason. Server-side matters: the client check alone is a
+in Strategize with a reason. Server-side matters: the client check alone is a
 suggestion.
 
 ### D4. Should Respawn also delete today's log rows?
@@ -295,16 +295,16 @@ collection lose rows in a second place. Cheap either way; decide when F6 is buil
 Quest's item cards open on tap with no chevron, matching the preference for no
 menu indicator. If they prove hard to discover, add a faint one.
 
-### D6. Guide has no card for Stats or Organize
+### D6. Guide has no card for Stats or Strategize
 
 The Guide covers every bucket plus Quest, Quest Log and the Lists tab. Stats and
-Organize itself are missing, though the docs describe the Guide as a tour of what
+Strategize itself are missing, though the docs describe the Guide as a tour of what
 each bucket and page is for.
 
 ### Settled
 
 - **D7 — one appointment colour.** Per-appointment colour is dropped; the bucket
   colour applies. Recorded in B1.
-- **D8 — no Appointments tab.** The bucket lives in Organize → Buckets, pinned
+- **D8 — no Appointments tab.** The bucket lives in Strategize → Buckets, pinned
   first; its items sit under Lists. Recorded in B1.
 - **Events auto-drop** deletes outright; no history is kept. Recorded in B2.
