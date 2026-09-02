@@ -60,9 +60,21 @@ Tick as you go. Anything that fails, tell me the item number.
     was the bug where four 28-day appointments all appeared next week on the
     right weekday.
 
-20d. **The weekday follows the date** — with a start date set, the Start weekday
-    control shows that date's weekday and cannot be changed. Clear the date and
-    it becomes editable again.
+20d. **No weekday field** — Every N days shows only "Every N days" and "Start
+    date". A new item defaults its start date to today.
+
+## Transitions
+
+56. **A switch shows between buckets** — a section running two buckets shows a
+    faint `10m` between them. One bucket shows nothing, and Break inside Work
+    is not a switch.
+57. **It costs the day** — raise Transition minutes in Strategize → Day and save.
+    Days with several buckets in a section should push more into Falling off.
+58. **The countdown agrees** — the section timer starts lower by exactly the
+    switching time it charged. It must not hand back time the day does not have.
+59. **Quest Log is unaffected** — no switch chips on the board, and packed hours
+    still count work only.
+60. **Zero turns it off** — set Transition minutes to 0 and the markers vanish.
 
 ## Events
 
