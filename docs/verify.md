@@ -54,6 +54,16 @@ Tick as you go. Anything that fails, tell me the item number.
     should appear on every matching day in Quest Log, take its hours out of
     those days, and keep its Time label and sections.
 
+20c. **Every N days counts from the start date** — set two appointments to
+    Recurring, every 28 days, with start dates a week apart. Each should land on
+    its own start date and then 28 days later, not both on the same day. This
+    was the bug where four 28-day appointments all appeared next week on the
+    right weekday.
+
+20d. **The weekday follows the date** — with a start date set, the Start weekday
+    control shows that date's weekday and cannot be changed. Clear the date and
+    it becomes editable again.
+
 ## Events
 
 21. **Naming** — each range has a name field in Strategize → Buckets.
