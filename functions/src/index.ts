@@ -313,7 +313,26 @@ export const gateSignUp = beforeUserCreated(async (event) => {
   throw new HttpsError('permission-denied', 'This app is invite-only.');
 });
 
-export const bootstrap = onCall(async (request) => {
+/**
+ * `invoker: 'public'` is not optional, and not a loosening of anything.
+ *
+ * Cloud Run's IAM cannot validate a Firebase ID token, so every callable
+ * authenticates in its own body instead — which is why all 20 of these carry
+ * the allUsers invoker binding. bootstrap was somehow deployed without it, and
+ * so was rejected by the front end with an HTML 403 before a single line here
+ * ran. Nothing authenticated it; nothing could reach it.
+ *
+ * That is worth stating because it was invisible: no error ever appeared in
+ * this function's logs, precisely because the function never ran. What it broke
+ * was everything downstream — setCustomUserClaims never fired, so no account
+ * ever carried the allowlisted claim, so the client re-bootstrapped on every
+ * load, and a new tenant was never created at sign-in. Invited accounts got
+ * their buckets only when some later callable happened to run ensureTenant.
+ *
+ * Redeploying does not restore the binding. Removing this option silently
+ * reintroduces all of the above.
+ */
+export const bootstrap = onCall({ invoker: 'public' }, async (request) => {
   const uid = requireSignedIn(request);
   const tenant = tenantRef(uid);
 

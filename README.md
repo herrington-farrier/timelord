@@ -122,6 +122,43 @@ npm run dev
 Paste the Firebase web config into `.env.local`. Clients read Firestore; every
 write goes through a callable function.
 
+### If sign-in reports an internal error
+
+Every callable needs `allUsers` → `roles/run.invoker` on its Cloud Run service.
+This is not a loosening: Cloud Run's IAM cannot validate a Firebase ID token, so
+callables authenticate in their own code instead. `bootstrap` was once deployed
+without it and was refused by the Google front end — an HTML `403` — before a
+line of it ran.
+
+It is a nasty failure because it is silent. Nothing appears in that function's
+log, precisely because the function never runs, and the callable SDK reports the
+unparseable HTML as `functions/internal`. Everything downstream broke quietly:
+no account got the `allowlisted` claim, the client re-ran `bootstrap` on every
+page load, and a new tenant was not created at sign-in — invited accounts got
+their buckets only when some later callable happened to run `ensureTenant`.
+
+Check any function by asking for it without a token. Callable JSON means it ran;
+HTML means it did not:
+
+```bash
+curl -s -X POST https://us-central1-timelord-e0c80.cloudfunctions.net/bootstrap \
+  -H "Content-Type: application/json" -d '{"data":{}}'
+# want: {"error":{"message":"Sign in to continue.","status":"UNAUTHENTICATED"}}
+```
+
+Repair it, per function:
+
+```bash
+gcloud run services add-iam-policy-binding bootstrap \
+  --region us-central1 --project timelord-e0c80 \
+  --member=allUsers --role=roles/run.invoker
+```
+
+**Redeploying does not fix it**, and neither does the `invoker: 'public'` option
+in the code — that is honoured when a function is created, not when one is
+updated. The option is declared on `bootstrap` anyway, so a fresh deploy of a
+new project starts correct.
+
 ## Deploy
 
 ```bash

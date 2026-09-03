@@ -80,6 +80,15 @@ describe('the write gate', () => {
     expect(gate).not.toContain('allowlisted');
   });
 
+  it('keeps bootstrap declared publicly invokable', () => {
+    // Not a loosening: Cloud Run IAM cannot read a Firebase ID token, so every
+    // callable authenticates in its own body. bootstrap once lost this binding
+    // and was refused by the front end before it ran — silently, since a
+    // function that never runs logs nothing. See the README.
+    const decl = index.slice(index.indexOf('export const bootstrap'));
+    expect(decl.slice(0, 120)).toContain("invoker: 'public'");
+  });
+
   it('awaits the gate at every callable', () => {
     // An un-awaited gate assigns a Promise to uid and denies nobody, which
     // would be worse than the bug it replaced.
