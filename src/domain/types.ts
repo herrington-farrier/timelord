@@ -34,6 +34,13 @@ export type DaySettings = {
    * assignable week, and the routines become items you complete or skip.
    */
   personalCountsAsDay?: boolean;
+  /**
+   * How the day divides into its three stretches. Day Length stays the truth:
+   * a split that does not add back to it is stale — from a Day Length edited
+   * afterwards — and is ignored in favour of an even split rather than being
+   * allowed to contradict the total.
+   */
+  sectionSplit?: Record<Slot, number> | null;
 };
 
 export type Bucket = {
@@ -76,6 +83,12 @@ export type ListItem = {
   /** Events items only: the EventRange this belongs to. */
   eventId?: string;
   /**
+   * Recurring items only: the last date this may land on, inclusive. A cadence
+   * otherwise runs forever, which is wrong for anything with an end in sight —
+   * a course, a medication, a stretch of physio.
+   */
+  expiresAt?: string;
+  /**
    * Appointments only: the sections it spans. The first is where its time is
    * taken from; any overflow spills forward as usual. Declared, never inferred
    * from apptTime.
@@ -113,6 +126,12 @@ export type PackedBlock = {
   slots?: Slot[];
   /** Appointments only, display only — see ListItem.apptTime. */
   apptTime?: string;
+  /**
+   * The last time an expiring item comes round. Stamped by the packer, which is
+   * the only thing that knows both the cadence and the bucket's open days, so
+   * every screen can mark it without working it out again.
+   */
+  finalOccurrence?: boolean;
 };
 
 export type SkipPush = {

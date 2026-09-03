@@ -31,7 +31,8 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 - `dayMinutes` (productive time; split into three packer sections), `dayStartMinutes` (unused by the packer), `transitionMinutes`, `timezone`
 - `morningMinutes`, `breakMinutes`, `eveningMinutes` (Personal pause lengths; not in weekly capacity)
 - `timerSound`, `timerVibrate` (section timers)
-- `personalCountsAsDay` — when true, Personal minutes come out of the day and its sections rather than sitting beside them
+- `personalCountsAsDay` — when true, Personal minutes come out of the day and its sections rather than sitting beside them. The routines are then **static** on Quest and on the board: they take their time and are neither completed nor skipped
+- `sectionSplit` — `{ morning, midday, evening }`, the day's own division. Day Length stays the truth: a split that does not add back to it is stale and an even split is used instead
 - audit stamps
 
 ## buckets/{id}
@@ -47,6 +48,7 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 
 - `bucketId`, `title`, `type` (`recurring` | `scheduled`), `weight`, `durationMinutes` (0 is a reminder; never dropped). Timed duration cannot exceed the bucket’s daily hours.
 - `cadence` object, optional `dueAt`, `archived`. `everyNDays` may include `startDate`; no hits before it.
+- `expiresAt` — recurring only, inclusive. No hits after it; the last occurrence is stamped `finalOccurrence` on its block so every screen can mark it.
 - Work items may have `slot` when the Work bucket has more than one section. Each item packs in that one section.
 - Events items are always `scheduled`, carry `eventId`, and their `dueAt` must fall inside that event's range. Cadence is unused. Items with no matching event show under Unassigned in Lists.
 

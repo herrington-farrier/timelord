@@ -1,5 +1,5 @@
 import { assignWeeklyBudgets, dailyBudgetFor, personalCountsAsDay } from './budget';
-import { cadenceHitsDate } from './cadence';
+import { cadenceHitsDate, isFinalOccurrence, itemExpired } from './cadence';
 import { isAppointmentBucket } from './seed';
 import { bucketSlots, capsAfterLoad, isEventDay, itemSlots, sectionCapacity, slotIndex, itemWorkSlot, transitionLoad } from './sections';
 import { skipPushDate } from './skip';
@@ -71,6 +71,9 @@ function itemHitsDate(
   // An appointment is a one-off by default, but a standing one — therapy every
   // Tuesday — runs on a cadence like any other recurring item.
   if (item.bucketId === APPOINTMENTS_ID && item.type === 'scheduled') return item.dueAt === dateKey;
+  // An expiry ends the stream. Checked after the dated kinds above, since an
+  // appointment or event is pinned to one date and has nothing to expire from.
+  if (itemExpired(item.expiresAt, dateKey)) return false;
   // The bucket's days bound its items. Passing them here is what makes a
   // 60-day chore land on a day the bucket actually runs.
   return cadenceHitsDate(item.cadence, dateKey, bucket?.days);
@@ -217,6 +220,9 @@ export function packDay(input: PackDayInput): PackDayResult {
       slot,
       ...(spans && spans.length > 1 ? { slots: spans } : {}),
       ...(item.apptTime ? { apptTime: item.apptTime } : {}),
+      ...(isFinalOccurrence(item.cadence, date, item.expiresAt, bucket.days)
+        ? { finalOccurrence: true }
+        : {}),
     });
   }
 

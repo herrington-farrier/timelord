@@ -99,9 +99,9 @@ describe('weekStart', () => {
 });
 
 describe('placedChips', () => {
-  it('hides personal and transitions on the board', () => {
+  it('hides transitions and a routine that costs nothing', () => {
     const shown = placedChips([
-      block({ id: 'morning', kind: 'personal' }),
+      block({ id: 'morning', kind: 'personal', durationMinutes: 0 }),
       block({ id: 'trans', kind: 'transition' }),
       block({ id: 'house', kind: 'weighted' }),
       block({ id: 'meet', kind: 'appointment' }),
@@ -109,6 +109,16 @@ describe('placedChips', () => {
       block({ id: 'break', kind: 'personal', title: 'Break' }),
     ]);
     expect(shown.map((b) => b.id)).toEqual(['house', 'meet', 'trip', 'break']);
+  });
+
+  it('shows a routine that takes time out of the day', () => {
+    // With Personal counted as day time the routines carry real minutes, and a
+    // cell that omits them reads as emptier than the day actually is.
+    const shown = placedChips([
+      block({ id: 'morning', kind: 'personal', durationMinutes: 60 }),
+      block({ id: 'house', kind: 'weighted' }),
+    ]);
+    expect(shown.map((b) => b.id)).toEqual(['morning', 'house']);
   });
 });
 

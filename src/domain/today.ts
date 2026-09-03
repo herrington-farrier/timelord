@@ -80,6 +80,32 @@ export function isEventPacked(blocks: PackedBlock[]): boolean {
   return productive.length > 0 && productive.every((b) => b.kind === 'event');
 }
 
+/**
+ * A Personal routine — Morning or Evening — as opposed to Break, which is a
+ * control you start and end. A routine is never completed or skipped: when
+ * Personal counts as day time it simply takes its minutes out of the section,
+ * the same way an appointment does.
+ */
+export function isRoutineBlock(block: { kind?: string; title?: string; id?: string }): boolean {
+  return block.kind === 'personal' && !isBreakBlock(block);
+}
+
+/**
+ * Reading order for a section: what is already committed first — appointments,
+ * then the routines that Personal has taken out of the day — and then the work
+ * you actually choose between. Both groups cost time you never get to spend, so
+ * they belong above the list rather than scattered through it.
+ *
+ * Stable within each group, so the packer's own ordering survives.
+ */
+export function orderSectionItems(blocks: PackedBlock[]): PackedBlock[] {
+  const rank = (b: PackedBlock) => (b.kind === 'appointment' ? 0 : isRoutineBlock(b) ? 1 : 2);
+  return blocks
+    .map((block, i) => ({ block, i }))
+    .sort((a, b) => rank(a.block) - rank(b.block) || a.i - b.i)
+    .map((row) => row.block);
+}
+
 export function isBreakBlock(block: { title?: string; id?: string }): boolean {
   return block.title === 'Break' || String(block.id || '').endsWith(':break');
 }

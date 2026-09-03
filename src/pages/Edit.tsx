@@ -24,7 +24,7 @@ import { durationFromInputs, durationInputs, formatDuration, hoursToMinutes, spl
 import { eventRangeForItem, eventRangeName, eventRanges, newEventRangeId, parseEventRanges } from '../domain/events';
 import { PACK_RANGE_DAYS } from '../domain/packWeek';
 import { canDeleteBucket, canRenameBucket, listCadenceDays, listableBuckets, splitEditBuckets } from '../domain/seed';
-import { bucketSlots, itemSlots, itemWorkSlot, workShowsItemSlot } from '../domain/sections';
+import { bucketSlots, evenSectionSplit, itemSlots, itemWorkSlot, sectionMinutes, workShowsItemSlot } from '../domain/sections';
 import { isAppointmentBucket } from '../domain/seed';
 import {
   APPOINTMENTS_ID,
@@ -158,17 +158,46 @@ function DayForm({
   // never reads as a question.
   const [confirmReroll, setConfirmReroll] = useState(false);
   const day = splitMinutes(settings.dayMinutes);
-  const [liveMinutes, setLiveMinutes] = useState<number | null>(null);
-  const dayMinutes = liveMinutes ?? settings.dayMinutes;
+  const [live, setLive] = useState<{ dayMinutes: number; split: Record<Slot, number> } | null>(null);
+  const savedSplit = sectionMinutes(settings);
+  const dayMinutes = live ? live.dayMinutes : settings.dayMinutes;
+  const split = live ? live.split : savedSplit;
+  const splitTotal = SLOTS.reduce((sum, slot) => sum + split[slot], 0);
+  // Day Length is the truth; the three stretches divide it. Saying so while the
+  // numbers are being typed beats refusing them afterwards.
+  const splitOff = splitTotal - dayMinutes;
+  // Remount the fields when Even Split rewrites them: they are uncontrolled,
+  // so nothing else would move what is on screen.
+  const [splitKey, setSplitKey] = useState(0);
+  const [evenSplit, setEvenSplit] = useState<Record<Slot, number> | null>(null);
+
+  function readLive(form: HTMLElement) {
+    const nextDay = durationFrom(form, 'day', settings.dayMinutes);
+    setLive({
+      dayMinutes: nextDay,
+      split: {
+        morning: durationFrom(form, 'sec-morning', savedSplit.morning),
+        midday: durationFrom(form, 'sec-midday', savedSplit.midday),
+        evening: durationFrom(form, 'sec-evening', savedSplit.evening),
+      },
+    });
+  }
+
+  const shown = evenSplit ?? split;
   return (
     <form
       className="edit-page"
-      onInput={(e) => setLiveMinutes(durationFrom(e.currentTarget, 'day', settings.dayMinutes))}
+      onInput={(e) => readLive(e.currentTarget)}
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         onSave({
           dayMinutes: hoursToMinutes(fd.get('dayH'), fd.get('dayM')),
+          sectionSplit: {
+            morning: hoursToMinutes(fd.get('sec-morningH'), fd.get('sec-morningM')),
+            midday: hoursToMinutes(fd.get('sec-middayH'), fd.get('sec-middayM')),
+            evening: hoursToMinutes(fd.get('sec-eveningH'), fd.get('sec-eveningM')),
+          },
           dayStartMinutes: settings.dayStartMinutes,
           transitionMinutes: Number(fd.get('trans')),
           timezone: 'America/Chicago',
@@ -181,13 +210,56 @@ function DayForm({
         });
       }}
     >
-      <DaySectionsBar dayMinutes={dayMinutes} />
+      <DaySectionsBar dayMinutes={dayMinutes} split={split} />
       <div className="edit-card meta-form">
         <div className="fields">
           <DurationFields name="day" label="Day Length" h={day.hours} m={day.minutes} />
           <FormField label="Transition minutes">
             <input name="trans" type="number" min={0} defaultValue={settings.transitionMinutes} />
           </FormField>
+        </div>
+      </div>
+      <div className="edit-card meta-form">
+        <h3 className="group-h">Sections</h3>
+        <div className="fields" key={splitKey}>
+          {SLOTS.map((slot) => {
+            const parts = splitMinutes(shown[slot]);
+            return (
+              <DurationFields
+                key={slot}
+                name={`sec-${slot}`}
+                label={slot[0].toUpperCase() + slot.slice(1)}
+                h={parts.hours}
+                m={parts.minutes}
+                invalid={splitOff !== 0}
+              />
+            );
+          })}
+        </div>
+        <div className="split-sum">
+          <p className={splitOff === 0 ? 'hint' : 'err'}>
+            {splitOff === 0
+              ? `Sections total ${formatDuration(splitTotal)}, matching the day.`
+              : splitOff > 0
+                ? `Sections total ${formatDuration(splitTotal)} — ${formatDuration(splitOff)} more than the day.`
+                : `Sections total ${formatDuration(splitTotal)} — ${formatDuration(-splitOff)} short of the day.`}
+          </p>
+          <button
+            type="button"
+            className="chrome-btn"
+            onClick={() => {
+              const even = evenSectionSplit(dayMinutes);
+              setEvenSplit(even);
+              setLive({ dayMinutes, split: even });
+              setSplitKey((k) => k + 1);
+            }}
+          >
+            Even Split
+          </button>
+        </div>
+      </div>
+      <div className="edit-card meta-form">
+        <div className="fields">
           <div className="field">
             <span>Personal time</span>
             <div className="pills" role="group" aria-label="Personal time">
@@ -956,6 +1028,7 @@ function itemPayloadFromForm(form: HTMLFormElement, buckets: Bucket[]): Record<s
     durationMinutes: durationFromInputs(fd.get('iH'), fd.get('iM'), ITEM_DEFAULT_MINUTES),
     cadence,
     dueAt: type === 'scheduled' ? fd.get('dueAt') : '',
+    expiresAt: type === 'recurring' ? String(fd.get('expiresAt') || '') : '',
     ...(apptItem
       ? { slots: fd.getAll('slots') }
       : bucket && workShowsItemSlot(bucket)
@@ -1057,6 +1130,14 @@ function ItemFields({
               ))}
             </select>
           </FormField>
+        ) : !eventItem && slotOptions.length === 1 ? (
+          // One section is not a choice, but it is still worth knowing. Shown
+          // rather than hidden so you can see when an item runs without opening
+          // its bucket to remember.
+          <div className="field">
+            <span>Time of day</span>
+            <p className="field-static">{slotOptions[0]}</p>
+          </div>
         ) : null}
         {eventItem ? (
           <>
@@ -1115,7 +1196,19 @@ function ItemFields({
                   required
                 />
               </FormField>
-            ) : null}
+            ) : (
+              // Only a cadence can expire: a scheduled item already names the
+              // one day it runs. Optional — most things genuinely do go on
+              // forever, and a required end date would invent one.
+              <FormField label="Expires (optional)">
+                <input
+                  name="expiresAt"
+                  type="date"
+                  className={invalid('expiresAt').trim() || undefined}
+                  defaultValue={item?.expiresAt || ''}
+                />
+              </FormField>
+            )}
             {apptItem ? (
               <FormField label="Time (label only)">
                 <input name="apptTime" type="time" defaultValue={item?.apptTime || ''} />

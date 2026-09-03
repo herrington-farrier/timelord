@@ -176,12 +176,13 @@ function Chip({ block, overflow }: { block: PackedBlock; overflow?: boolean }) {
   const brk = isBreakBlock(block);
   return (
     <div
-      className={`cal-chip${overflow ? ' overflow' : ''}${isAccentChip(block) ? ' cal-chip--appt' : ''}${brk ? ' cal-chip--break' : ''}`}
+      className={`cal-chip${overflow ? ' overflow' : ''}${isAccentChip(block) ? ' cal-chip--appt' : ''}${brk ? ' cal-chip--break' : ''}${block.finalOccurrence ? ' is-final' : ''}`}
       style={{ ['--bcolor' as string]: `#${block.color}` }}
     >
       {block.apptTime ? <b className="cal-chip__when">{formatApptTime(block.apptTime)}</b> : null}
       {block.title}
       {block.durationMinutes ? ` · ${formatDuration(block.durationMinutes)}` : ''}
+      {block.finalOccurrence ? <span className="final-tag">Final</span> : null}
     </div>
   );
 }
@@ -230,7 +231,14 @@ export function listShowsDay(
 }
 
 export function placedChips(blocks: PackedBlock[]): PackedBlock[] {
-  return blocks.filter((b) => b.kind !== 'transition' && (b.kind !== 'personal' || isBreakBlock(b)));
+  return blocks.filter((b) => {
+    if (b.kind === 'transition') return false;
+    // A routine carrying minutes is time the day has actually lost, so the board
+    // has to show it or the cell reads as emptier than the day is. Carrying
+    // none, it is an invisible marker and stays off.
+    if (b.kind === 'personal') return isBreakBlock(b) || b.durationMinutes > 0;
+    return true;
+  });
 }
 
 function listRank(block: PackedBlock): number {

@@ -99,3 +99,35 @@ export function cadenceHitsDate(cadence: Cadence, dateKey: string, openDays?: We
   }
   return false;
 }
+
+/**
+ * Past its expiry, a cadence stops. Inclusive: an item expiring on the 14th
+ * still runs on the 14th, because a date typed into a field reads as "up to and
+ * including this day" to everyone who is not a computer.
+ */
+export function itemExpired(expiresAt: string | undefined, dateKey: string): boolean {
+  return Boolean(expiresAt) && dateKey > String(expiresAt);
+}
+
+/**
+ * Whether this is the last time an item comes round.
+ *
+ * Only expiring items have a last time — an open-ended cadence has none, and
+ * saying otherwise would mark an arbitrary day as final. Scans forward for the
+ * next hit rather than computing one, because "the next open day the bucket
+ * runs" is already a rule with corners in it, and there is no sense in having a
+ * second implementation of it that can disagree with the first.
+ */
+export function isFinalOccurrence(
+  cadence: Cadence,
+  dateKey: string,
+  expiresAt: string | undefined,
+  openDays?: Weekday[]
+): boolean {
+  if (!expiresAt || dateKey > expiresAt) return false;
+  if (!cadenceHitsDate(cadence, dateKey, openDays)) return false;
+  for (let next = addDaysKey(dateKey, 1); next <= expiresAt; next = addDaysKey(next, 1)) {
+    if (cadenceHitsDate(cadence, next, openDays)) return false;
+  }
+  return true;
+}

@@ -11,6 +11,8 @@ import {
   nextSectionMinutes,
   openBlocks,
   bookedMinutes,
+  isRoutineBlock,
+  orderSectionItems,
   signalSectionEnd,
   slotLabel,
   todayEventItems,
@@ -88,7 +90,8 @@ export function TodayPage() {
 
   const placed = day?.blocks || [];
   const dropped = day?.dropped || [];
-  const sectionItems = started && section ? openBlocks(todaySectionItems(placed, section)) : [];
+  const sectionItems =
+    started && section ? orderSectionItems(openBlocks(todaySectionItems(placed, section))) : [];
   const sectionDropped = started && section ? openBlocks(todaySectionDropped(dropped, section)) : [];
   const eventItems = eventDay ? openBlocks(todayEventItems(placed)) : [];
 
@@ -141,6 +144,8 @@ export function TodayPage() {
           {sectionItems.map((b, i) =>
             b.kind === 'transition' ? (
               <TransitionRow key={b.id} minutes={b.durationMinutes} index={i} />
+            ) : isRoutineBlock(b) ? (
+              <RoutineRow key={b.id} block={b} index={i} />
             ) : b.title === 'Break' ? (
               <BreakControl
                 key={b.id}
@@ -158,12 +163,7 @@ export function TodayPage() {
       ) : null}
 
       {!eventDay && started && sectionDropped.length ? (
-        <section className="fall-wrap">
-          <h2>Falling off</h2>
-          {sectionDropped.map((b) => (
-            <FallRow key={b.id} block={b} date={date} act={act} />
-          ))}
-        </section>
+        <FallingOff blocks={sectionDropped} date={date} act={act} />
       ) : null}
 
       {!eventDay && started && section ? (
@@ -177,6 +177,60 @@ export function TodayPage() {
         />
       ) : null}
     </Chrome>
+  );
+}
+
+/**
+ * A Personal routine, when Personal counts as day time. Static on purpose:
+ * there is nothing to complete here, because the day has already paid for it.
+ * It states what the section lost, the way an appointment does, and then gets
+ * out of the way of the list you are actually working through.
+ */
+function RoutineRow({ block, index }: { block: PackedBlock; index?: number }) {
+  return (
+    <div
+      className="item item--static"
+      style={{ ['--bcolor' as string]: `#${block.color}`, ...stagger(index) }}
+    >
+      <div className="item-top">
+        <span className="item-title">{block.title}</span>
+        <span className="item-hours">{formatDuration(block.durationMinutes)}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * What the day had no room for. Shut by default and counted on its own line:
+ * it is the part of the day you are not doing, so it should not be the longest
+ * thing on the page — but hiding it outright would undo the point of showing
+ * what will not fit at all.
+ */
+function FallingOff({
+  blocks,
+  date,
+  act,
+}: {
+  blocks: PackedBlock[];
+  date: string;
+  act: (label: string, fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="fall-wrap">
+      <button
+        type="button"
+        className={`fall-toggle${open ? ' is-open' : ''}`}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="fall-toggle__label">Falling off</span>
+        <span className="fall-toggle__count">{blocks.length}</span>
+      </button>
+      {open
+        ? blocks.map((b) => <FallRow key={b.id} block={b} date={date} act={act} />)
+        : null}
+    </section>
   );
 }
 
@@ -405,7 +459,9 @@ function ItemCard({
 }) {
   const [open, setOpen] = useState(false);
   const actsId = useId();
-  const cls = `${block.status === 'complete' ? ' complete' : block.status === 'skipped' ? ' skipped' : ''}`;
+  const cls = `${block.status === 'complete' ? ' complete' : block.status === 'skipped' ? ' skipped' : ''}${
+    block.finalOccurrence ? ' is-final' : ''
+  }`;
   const pending = block.status === 'pending';
   const title = (
     <>
@@ -413,6 +469,7 @@ function ItemCard({
       {block.kind === 'appointment' ? <span className="item-tag">Appt</span> : null}
       {block.title}
       {block.apptTime ? <span className="item-when">{formatApptTime(block.apptTime)}</span> : null}
+      {block.finalOccurrence ? <span className="final-tag">Final</span> : null}
     </>
   );
   const hours = block.durationMinutes ? formatDuration(block.durationMinutes) : null;

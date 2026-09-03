@@ -15,13 +15,45 @@ export function daySections(settings: Pick<DaySettings, 'dayMinutes' | 'dayStart
   };
 }
 
-export function sectionMinutes(settings: Pick<DaySettings, 'dayMinutes'>): Record<Slot, number> {
-  const third = Math.floor(settings.dayMinutes / 3);
-  return {
-    morning: third,
-    midday: third,
-    evening: settings.dayMinutes - 2 * third,
-  };
+/** An even split, with the remainder on evening so the three add back exactly. */
+export function evenSectionSplit(dayMinutes: number): Record<Slot, number> {
+  const day = Math.max(0, Math.round(Number(dayMinutes) || 0));
+  const third = Math.floor(day / 3);
+  return { morning: third, midday: third, evening: day - 2 * third };
+}
+
+/**
+ * A stored split counts only when it adds back to the day. Day Length is the
+ * truth, so a split left over from a longer or shorter day is stale rather than
+ * authoritative — honouring it would let the three stretches quietly disagree
+ * with the total every other screen is measured against.
+ */
+export function sectionSplitFits(
+  split: Partial<Record<Slot, number>> | null | undefined,
+  dayMinutes: number
+): boolean {
+  if (!split) return false;
+  let sum = 0;
+  for (const slot of SLOTS) {
+    const value = Number(split[slot]);
+    if (!Number.isFinite(value) || value < 0) return false;
+    sum += Math.round(value);
+  }
+  return sum === Math.max(0, Math.round(Number(dayMinutes) || 0));
+}
+
+export function sectionMinutes(
+  settings: Pick<DaySettings, 'dayMinutes'> & { sectionSplit?: Partial<Record<Slot, number>> | null }
+): Record<Slot, number> {
+  const split = settings.sectionSplit;
+  if (sectionSplitFits(split, settings.dayMinutes)) {
+    return {
+      morning: Math.round(Number(split?.morning)),
+      midday: Math.round(Number(split?.midday)),
+      evening: Math.round(Number(split?.evening)),
+    };
+  }
+  return evenSectionSplit(settings.dayMinutes);
 }
 
 export function nextSlot(slot: Slot): Slot | null {

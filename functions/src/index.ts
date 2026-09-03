@@ -9,15 +9,16 @@ import { beforeUserCreated } from 'firebase-functions/v2/identity';
 import { eventRangeName, eventRanges, expiredEventRanges, parseEventRanges } from '../../src/domain/events';
 import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
+import { formatDuration } from '../../src/domain/duration';
 import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
 import { applyDelta, dayHasAppointments, scoreDay } from '../../src/domain/score';
 import { PACK_RANGE_DAYS } from '../../src/domain/packWeek';
-import { reservedLoad, bucketSlots, capsAfterLoad, eatFromSections, isEventDay, itemWorkSlot, liveSectionState, nextSlot, parseBucketSlots, sectionCapacity, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
+import { reservedLoad, bucketSlots, capsAfterLoad, eatFromSections, isEventDay, itemWorkSlot, liveSectionState, nextSlot, parseBucketSlots, sectionCapacity, sectionSplitFits, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
 import { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate } from '../../src/domain/skip';
 import { elapsedSince, sectionRemainingNow } from '../../src/domain/timer';
 import { nextItemWeight } from '../../src/domain/order';
 import type { Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Slot, Weekday } from '../../src/domain/types';
-import { APPOINTMENTS_ID, EVENTS_ID, WORK_ID } from '../../src/domain/types';
+import { APPOINTMENTS_ID, EVENTS_ID, SLOTS, WORK_ID } from '../../src/domain/types';
 import { addDaysKey, weekStart } from '../../src/shared/dates';
 import { stampCreated, stampLastUpdated } from './actorAudit';
 import { asNumber, asString, authEmail, newId, requireSignedIn, requireUid } from './http';
@@ -38,6 +39,25 @@ function domainCall<T>(fn: () => T): T {
     const msg = err instanceof Error ? err.message : 'Could not pack this week.';
     throw new HttpsError('failed-precondition', msg);
   }
+}
+
+/**
+ * The three stretches, or nothing at all. Absent means an even split, which is
+ * what every account had before the fields existed — so leaving it off has to
+ * stay meaningful rather than collapsing to three zeroes.
+ */
+function parseSectionSplit(value: unknown): Record<Slot, number> | null {
+  if (value == null || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const out = {} as Record<Slot, number>;
+  for (const slot of SLOTS) {
+    const n = Number(raw[slot]);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new HttpsError('invalid-argument', `${slot} must be a number of minutes.`);
+    }
+    out[slot] = Math.round(n);
+  }
+  return out;
 }
 
 function assertWeeklyFits(settings: DaySettings, buckets: Bucket[]): void {
@@ -415,9 +435,20 @@ export const saveSettings = onCall(async (request) => {
     timerSound: data.timerSound !== false,
     timerVibrate: data.timerVibrate === true,
     personalCountsAsDay: data.personalCountsAsDay === true,
+    sectionSplit: parseSectionSplit(data.sectionSplit),
   };
   if (patch.dayMinutes < 60) {
     throw new HttpsError('invalid-argument', 'Day length must be at least 1 hour.');
+  }
+  // Day Length is the truth, so the three stretches have to add back to it.
+  // Refused here rather than quietly re-split, because silently moving time a
+  // person just typed is worse than telling them the sum is wrong.
+  if (patch.sectionSplit && !sectionSplitFits(patch.sectionSplit, patch.dayMinutes)) {
+    const total = SLOTS.reduce((sum, slot) => sum + (patch.sectionSplit?.[slot] || 0), 0);
+    throw new HttpsError(
+      'invalid-argument',
+      `Morning, midday and evening add up to ${formatDuration(total)}, not the ${formatDuration(patch.dayMinutes)} day.`
+    );
   }
   const loaded = await loadTenant(uid);
   assertWeeklyFits(patch, loaded.buckets as Bucket[]);
@@ -624,6 +655,10 @@ function buildItemPayload(
   // Events are pinned to a date. Appointments choose, like any other item.
   const type = eventItem ? 'scheduled' : asString(data.type, 'Type');
   const dueAt = type === 'scheduled' ? asString(data.dueAt, 'Date') : '';
+  const expiresAt = typeof data.expiresAt === 'string' ? data.expiresAt.trim() : '';
+  if (expiresAt && !/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
+    throw label('the expiry date is not a date.', 'expiresAt');
+  }
   let eventId = '';
   if (eventItem) {
     const ranges = eventRanges(bucket);
@@ -646,6 +681,10 @@ function buildItemPayload(
     // Display only. Never read by the packer.
     apptTime: apptItem && typeof data.apptTime === 'string' ? data.apptTime.trim().slice(0, 40) : '',
     eventId,
+    // Only a cadence can expire. A scheduled item already names its one date,
+    // and storing an expiry beside it would be a second answer to the same
+    // question — one the packer would have to pick between.
+    expiresAt: type === 'recurring' ? expiresAt : '',
   };
   if (apptItem && bucket) {
     // An appointment declares the sections it spans. At least one, always —
