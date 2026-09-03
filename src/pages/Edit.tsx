@@ -60,13 +60,19 @@ export function EditPage() {
 
   // No success message: the page re-renders from live data, which is the
   // confirmation. Failures show where they happened instead.
-  async function act(label: string, fn: () => Promise<unknown>, failed?: string) {
+  //
+  // Returns whether the write landed, because an Add New form must be emptied
+  // on success and must NOT be emptied on failure — clearing it after a refused
+  // save would throw away what was typed.
+  async function act(label: string, fn: () => Promise<unknown>, failed?: string): Promise<boolean> {
     setError(null);
     try {
       await fn();
+      return true;
     } catch (err) {
       console.error(err);
       setError(toActionError(err, failed || label.replace(/\.$/, '')));
+      return false;
     }
   }
 
@@ -143,9 +149,9 @@ function DayForm({
   onReroll,
 }: {
   settings: DaySettings;
-  onSave: (payload: Record<string, unknown>) => Promise<void>;
-  onResetToday: () => Promise<void>;
-  onReroll: () => Promise<void>;
+  onSave: (payload: Record<string, unknown>) => Promise<boolean>;
+  onResetToday: () => Promise<boolean>;
+  onReroll: () => Promise<boolean>;
 }) {
   // Erasing the log cannot be undone, so it asks. A dialog rather than a
   // second press on the same button: a label that changes under your finger
@@ -336,11 +342,15 @@ function BucketsForm({
 }: {
   settings: DaySettings;
   buckets: Bucket[];
-  onSave: (payload: Record<string, unknown>) => Promise<void>;
-  onReorder: (ids: string[]) => Promise<void>;
-  onRemove: (id: string) => Promise<void>;
+  onSave: (payload: Record<string, unknown>) => Promise<boolean>;
+  onReorder: (ids: string[]) => Promise<boolean>;
+  onRemove: (id: string) => Promise<boolean>;
 }) {
   const [rangeError, setRangeError] = useState<string | null>(null);
+  // Add New is an uncontrolled form, so a saved bucket's details sit there
+  // afterwards and the next Save submits them again as another new bucket.
+  // Remounting on success empties it; on failure it keeps what was typed.
+  const [addKey, setAddKey] = useState(0);
   const { personal, appointments, work, events, weighted } = splitEditBuckets(buckets);
   const ids = weighted.map((b) => b.id);
   const saved = useMemo(
@@ -375,14 +385,14 @@ function BucketsForm({
       </SortableList>
       <div className="edit-card add-card">
         <h3 className="group-h">Add New</h3>
-        <BucketFields kind="new" />
+        <BucketFields key={addKey} kind="new" />
       </div>
       <div className="page-save">
         {rangeError ? <p className="err page-save__err">{rangeError}</p> : null}
         <button
           type="button"
           className="btn--gold"
-          onClick={(e) => {
+          onClick={async (e) => {
             const root = e.currentTarget.closest('.edit-page');
             if (!(root instanceof HTMLElement)) return;
             const personalForm = root.querySelector<HTMLFormElement>('form[data-kind="personal"]');
@@ -445,7 +455,8 @@ function BucketsForm({
               if (payload.name) rows.push(payload);
             }
             const personalFd = personalForm ? new FormData(personalForm) : null;
-            onSave({
+            const added = Boolean(addForm && rows.some((r) => !r.id));
+            const ok = await onSave({
               personal: {
                 morningMinutes: personalForm ? hoursToMinutes(personalFd?.get('mH'), personalFd?.get('mM')) : settings.morningMinutes,
                 breakMinutes: personalForm ? hoursToMinutes(personalFd?.get('bH'), personalFd?.get('bM')) : settings.breakMinutes,
@@ -454,6 +465,7 @@ function BucketsForm({
               },
               buckets: rows,
             });
+            if (ok && added) setAddKey((k) => k + 1);
           }}
         >
           Save
@@ -595,7 +607,8 @@ function BucketCard({
   onRemove,
 }: {
   bucket: Bucket;
-  onRemove?: (id: string) => Promise<void>;
+  /** The card fires and forgets; whether the write landed is the page's business. */
+  onRemove?: (id: string) => Promise<unknown>;
 }) {
   return (
     <CollapsibleBucket
@@ -773,10 +786,13 @@ function ListsForm({
   buckets: Bucket[];
   items: ListItem[];
   error: ActionError | null;
-  onSaveAll: (rows: Record<string, unknown>[]) => Promise<void>;
-  onReorder: (ids: string[]) => Promise<void>;
-  onRemove: (id: string) => Promise<void>;
+  onSaveAll: (rows: Record<string, unknown>[]) => Promise<boolean>;
+  onReorder: (ids: string[]) => Promise<boolean>;
+  onRemove: (id: string) => Promise<boolean>;
 }) {
+  // Same trap as the Buckets tab: a saved item's title stays in Add New, and
+  // the next Save writes it again as a second item.
+  const [addKey, setAddKey] = useState(0);
   const grouped = useMemo(() => {
     const map: Record<string, ListItem[]> = {};
     for (const it of items) {
@@ -791,7 +807,7 @@ function ListsForm({
     <div className="edit-page">
       <div className="edit-card add-card">
         <h3 className="group-h">Add New</h3>
-        <ItemFields buckets={buckets} error={error} />
+        <ItemFields key={addKey} buckets={buckets} error={error} />
       </div>
       {buckets.map((b) => {
         const rows = grouped[b.id] || [];
@@ -871,7 +887,7 @@ function ListsForm({
         <button
           type="button"
           className="btn--gold"
-          onClick={(e) => {
+          onClick={async (e) => {
             const root = e.currentTarget.closest('.edit-page');
             if (!(root instanceof HTMLElement)) return;
             // Collapsed groups are hidden, not removed, so their fields are
@@ -879,7 +895,8 @@ function ListsForm({
             const rows = [...root.querySelectorAll<HTMLFormElement>('form[data-kind="item"]')]
               .map((form) => itemPayloadFromForm(form, buckets))
               .filter((row): row is Record<string, unknown> => row !== null);
-            onSaveAll(rows);
+            const added = rows.some((r) => !r.id);
+            if ((await onSaveAll(rows)) && added) setAddKey((k) => k + 1);
           }}
         >
           Save
