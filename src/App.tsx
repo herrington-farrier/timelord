@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ChunkBoundary, clearChunkReloadFlag } from './components/ChunkBoundary';
+import { Toasts } from './components/Toasts';
 
 import { SignInPage } from './pages/SignIn';
 import { TodayPage } from './pages/Today';
@@ -31,6 +32,9 @@ export default function App() {
   return (
     <>
       <BackdropSeal />
+      {/* DEBUG TOASTS: outside the auth gate, so a failure during sign-in
+          reports itself too. See the note in shared/toastBus.ts. */}
+      <Toasts />
       {!ready ? (
         <p className="hint">Loading…</p>
       ) : !user ? (

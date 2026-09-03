@@ -1,15 +1,31 @@
 import { httpsCallable } from 'firebase/functions';
 
+import { describeError, pushToast } from '../shared/toastBus';
 import { functions } from './firebase';
 
+/**
+ * DEBUG TOASTS: every callable reports itself here. This is the one place all
+ * of them pass through, so it catches a failure even on a page that renders no
+ * error of its own — which is how a refused save came to look like a save that
+ * quietly did nothing. See the note in `shared/toastBus.ts`; delete the two
+ * pushToast calls to remove it.
+ */
 function call<TReq, TRes>(name: string) {
   return async (payload?: TReq): Promise<TRes> => {
     if (!functions) {
+      pushToast('fail', name, 'Firebase is not configured.');
       throw new Error('Firebase is not configured.');
     }
     const fn = httpsCallable<TReq, TRes>(functions, name);
-    const res = await fn(payload);
-    return res.data;
+    const started = Date.now();
+    try {
+      const res = await fn(payload);
+      pushToast('ok', name, undefined, Date.now() - started);
+      return res.data;
+    } catch (err) {
+      pushToast('fail', name, describeError(err), Date.now() - started);
+      throw err;
+    }
   };
 }
 

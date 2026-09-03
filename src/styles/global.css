@@ -1643,3 +1643,75 @@ button:disabled {
   .score__fill { transition: none; }
   .score__delta { animation: none; }
 }
+
+/* ── DEBUG TOASTS ──────────────────────────────────────────────────────────
+   Temporary diagnostic layer. Delete this block along with
+   shared/toastBus.ts, components/Toasts.tsx, the pushToast calls in
+   services/api.ts, and the <Toasts /> in App.tsx. */
+.toasts {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 900;
+  width: min(100%, 34rem);
+  padding: 0.4rem 0.5rem calc(0.4rem + env(safe-area-inset-top, 0px));
+  display: grid;
+  gap: 0.3rem;
+  justify-items: stretch;
+}
+.toasts__bar {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+.toasts__act {
+  font-size: 0.7rem;
+  padding: 0.2em 0.7em;
+  min-height: 0;
+}
+.toast {
+  display: grid;
+  gap: 0.1rem;
+  text-align: left;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background-color: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.74rem;
+  box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.85);
+  animation: toast-in 0.18s ease-out both;
+}
+.toast--ok {
+  border-color: var(--ok);
+  background-color: var(--ok-bg);
+}
+.toast--fail {
+  border-color: var(--danger);
+  background-color: var(--danger-bg);
+}
+.toast__label {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.toast--ok .toast__label { color: var(--ok); }
+.toast--fail .toast__label { color: var(--danger); }
+.toast__ms {
+  font-weight: 400;
+  color: var(--muted);
+}
+.toast__detail {
+  color: var(--text);
+  /* the raw callable error, which is long and must not be clipped */
+  overflow-wrap: anywhere;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
