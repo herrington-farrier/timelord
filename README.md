@@ -58,6 +58,8 @@ Nothing, at three layers:
   touching Auth or Firestore, so a refused sign-in costs no reads and no writes.
   Each instance logs a given denial once rather than per attempt, so hammering
   the endpoint cannot run up writes.
+- **`requireUid`** gates all 19 mutating callables against that same list, so
+  every write asks the same question sign-up did.
 - **Firestore rules** admit only the claim, the floor, or the document.
 
 Where to look afterwards: the `accessLogs` collection holds every new signup, and
@@ -66,15 +68,17 @@ you removed them. A stranger stopped by `gateSignUp` never gets that far, so
 those refusals show up in the Cloud Functions log for `gateSignUp`, not in
 Firestore.
 
-**Caveat on removal.** The rules also admit anyone carrying the `allowlisted`
-custom claim, and `bootstrap` calls `setCustomUserClaims` on every sign-in — so
-by design, removing an address does *not* revoke someone who has signed in
-before. In practice the claim is not landing on any account today
-(`firebase auth:export` shows no `customAttributes` on any of the three), which
-is why removal works right now. That is a bug, not the design, so do not build
-on it. If you need revocation to be guaranteed, drop the
-`request.auth.token.allowlisted == true` clause from `firestore.rules`; the
-floor and the document still authorize everyone who should get in.
+**Caveat on removal.** Removing an address stops every **write** within about
+five minutes — the invite list's cache TTL — because `requireUid` asks the
+document and deliberately does not accept the `allowlisted` claim in its place.
+
+**Reads** are the exception. `firestore.rules` still admits anyone carrying that
+claim, and `bootstrap` calls `setCustomUserClaims` on every sign-in, so someone
+removed from the list may keep reading their own tenant. If you need read
+revocation too, drop the `request.auth.token.allowlisted == true` clause from
+`firestore.rules`; the floor and the document still authorize everyone who
+should get in. Nobody else's data is exposed either way — the rules scope every
+read to `tenants/{their own uid}`.
 
 ## Screens
 

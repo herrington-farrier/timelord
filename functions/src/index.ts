@@ -353,7 +353,7 @@ export const bootstrap = onCall(async (request) => {
 });
 
 export const wipeAccount = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const tenant = tenantRef(uid);
   const collections = ['settings', 'buckets', 'items', 'appointments', 'days', 'skipPushes', 'logs'];
   for (const col of collections) {
@@ -365,7 +365,7 @@ export const wipeAccount = onCall(async (request) => {
 
 /** Reroll Stats: erases the whole log. Deliberately irreversible. */
 export const clearLogs = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
   // Rerolling mid-day would erase the day's own completes and skips while it is
   // still running, leaving the day and its record disagreeing. Enforced here
@@ -382,7 +382,7 @@ export const clearLogs = onCall(async (request) => {
 });
 
 export const saveSettings = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
   const data = request.data as Record<string, unknown>;
   const patch = {
@@ -408,7 +408,7 @@ export const saveSettings = onCall(async (request) => {
 });
 
 export const upsertBucket = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
   const data = request.data as Record<string, unknown>;
   const id = typeof data.id === 'string' && data.id.trim() ? data.id.trim() : newId();
@@ -447,7 +447,7 @@ export const upsertBucket = onCall(async (request) => {
 });
 
 export const saveBuckets = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
   const data = request.data as Record<string, unknown>;
   const loaded = await loadTenant(uid);
@@ -510,7 +510,7 @@ export const saveBuckets = onCall(async (request) => {
 });
 
 export const archiveBucket = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const id = asString(request.data?.id, 'Bucket');
   const snap = await tenantRef(uid).collection('buckets').doc(id).get();
   if (!snap.exists) throw new HttpsError('not-found', 'Bucket not found.');
@@ -524,7 +524,7 @@ export const archiveBucket = onCall(async (request) => {
 });
 
 export const reorderBuckets = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const ids = request.data?.weightedOrderIds;
   if (!Array.isArray(ids)) {
     throw new HttpsError('invalid-argument', 'Drag order is required.');
@@ -663,7 +663,7 @@ function buildItemPayload(
  * Validate everything first, write once, repack once.
  */
 export const saveItems = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
   const rows = Array.isArray(request.data?.rows) ? (request.data.rows as Record<string, unknown>[]) : [];
   if (!rows.length) return { ok: true, saved: 0 };
@@ -716,7 +716,7 @@ export const saveItems = onCall(async (request) => {
 });
 
 export const reorderItems = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const ids = request.data?.orderedIds;
   if (!Array.isArray(ids)) {
     throw new HttpsError('invalid-argument', 'Drag order is required.');
@@ -734,7 +734,7 @@ export const reorderItems = onCall(async (request) => {
 });
 
 export const archiveItem = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const id = asString(request.data?.id, 'Item');
   const stamp = await stampLastUpdated(uid, nowIso());
   const itemRef = tenantRef(uid).collection('items').doc(id);
@@ -775,7 +775,7 @@ function asPackInput(
 }
 
 export const rebuildRange = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
   const start = asString(request.data?.start || todayKey(), 'Start date');
   const days = Number(request.data?.days) || PACK_RANGE_DAYS;
@@ -784,7 +784,7 @@ export const rebuildRange = onCall(async (request) => {
 });
 
 export const resetToday = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
   const date = asString(request.data?.date || todayKey(), 'Date');
   const loaded = await loadTenant(uid);
@@ -896,7 +896,7 @@ async function refundSkippedAppointment(uid: string, date: string): Promise<void
 }
 
 export const completeBlock = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
   const id = asString(request.data?.id, 'Block');
   const { block } = await patchBlock(uid, date, id, 'complete');
@@ -919,7 +919,7 @@ export const completeBlock = onCall(async (request) => {
 });
 
 export const skipBlock = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
   const id = asString(request.data?.id, 'Block');
   const { item, block } = await patchBlock(uid, date, id, 'skipped');
@@ -1002,7 +1002,7 @@ async function beginSection(uid: string, date: string, section: Slot | 'event'):
 }
 
 export const startDay = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
   const eventsSnap = await tenantRef(uid).collection('buckets').doc(EVENTS_ID).get();
   const events = eventsSnap.exists ? ({ id: EVENTS_ID, ...eventsSnap.data() } as Bucket) : undefined;
@@ -1012,7 +1012,7 @@ export const startDay = onCall(async (request) => {
 });
 
 export const startNext = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
   const dayRef = tenantRef(uid).collection('days').doc(date);
   const snap = await dayRef.get();
@@ -1090,7 +1090,7 @@ export const startNext = onCall(async (request) => {
 });
 
 export const startBreak = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
   const dayRef = tenantRef(uid).collection('days').doc(date);
   const snap = await dayRef.get();
@@ -1104,7 +1104,7 @@ export const startBreak = onCall(async (request) => {
 });
 
 export const endBreak = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
   const stamp = await stampLastUpdated(uid, nowIso());
   await tenantRef(uid).collection('days').doc(date).set({ pausedAt: null, sectionStartedAt: nowIso(), ...stamp }, { merge: true });
@@ -1153,7 +1153,7 @@ async function scoreFinishedDay(
 }
 
 export const endDay = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
   const dayRef = tenantRef(uid).collection('days').doc(date);
   const snap = await dayRef.get();

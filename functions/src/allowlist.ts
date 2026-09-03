@@ -1,6 +1,6 @@
 import { getFirestore } from 'firebase-admin/firestore';
 
-import { ALLOWED_EMAILS } from '../../src/domain/allowlist';
+import { ALLOWED_EMAILS, isInvitedEmail, normalizeEmail } from '../../src/domain/allowlist';
 
 /**
  * The invite list lives at `config/allowlist` so adding someone is one edit in
@@ -18,7 +18,7 @@ let cache: Cached | null = null;
 const TTL_MS = 5 * 60 * 1000;
 
 function normalize(value: unknown): string {
-  return String(value ?? '').trim().toLowerCase();
+  return normalizeEmail(value as string | undefined | null);
 }
 
 export function seedEmails(): Set<string> {
@@ -45,9 +45,8 @@ export async function allowedEmails(): Promise<Set<string>> {
 }
 
 export async function isInvited(email: string | undefined | null): Promise<boolean> {
-  const normalized = normalize(email);
-  if (!normalized) return false;
-  return (await allowedEmails()).has(normalized);
+  if (!normalize(email)) return false;
+  return isInvitedEmail(email, await allowedEmails());
 }
 
 /**

@@ -1,6 +1,6 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 
-import { isAllowedEmail } from '../../src/domain/allowlist';
+import { isInvited } from './allowlist';
 
 export function requireSignedIn(request: CallableRequest): string {
   const uid = request.auth?.uid;
@@ -18,10 +18,23 @@ export function authEmail(request: CallableRequest, fallback?: string): string {
   return fromToken || fromIdentities || fallback || '';
 }
 
-export function requireUid(request: CallableRequest): string {
+/**
+ * The gate on every write. It reads `config/allowlist` — the same list the
+ * sign-up trigger and the security rules read — because the whole point of that
+ * document is that inviting someone costs one console edit and no deploy. This
+ * used to check only the hardcoded floor, so a console-invited account could
+ * sign in and read its own data but was refused on every single mutation.
+ *
+ * `isInvited` seeds itself from that floor, so a missing or mangled document
+ * still cannot lock the owner out, and its cache makes the steady state free.
+ *
+ * The `allowlisted` claim is deliberately not a fast path here. It buys nothing
+ * once the list is cached, and honouring it would mean removing someone from
+ * the document never revoked their writes.
+ */
+export async function requireUid(request: CallableRequest): Promise<string> {
   const uid = requireSignedIn(request);
-  const claimed = request.auth?.token?.allowlisted === true;
-  if (claimed || isAllowedEmail(authEmail(request))) return uid;
+  if (await isInvited(authEmail(request))) return uid;
   throw new HttpsError('permission-denied', 'This app is invite-only.');
 }
 

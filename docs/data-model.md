@@ -15,6 +15,13 @@ cannot lock the owner out. Everyone else is added to the document only.
 The rules check the seed **first**, so the owners cost no extra reads; only an
 invited non-owner pays the document lookup.
 
+Every mutating callable reads this same list through `requireUid`. It once
+checked only `ALLOWED_EMAILS`, so an account invited from the console could sign
+in and read its own data but was refused on every write — the console edit that
+is supposed to need no deploy only ever reached two thirds of the app. The
+`allowlisted` claim is not accepted in place of the list, so removing an address
+revokes writes once the cache expires.
+
 ## accessLogs/{id}
 
 Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `email`, `uid`, `at`. Watch this in the Firebase console to see new friends and blocked attempts.
