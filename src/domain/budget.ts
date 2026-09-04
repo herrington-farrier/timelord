@@ -146,7 +146,9 @@ export function formatBucketHours(bucket: Bucket): string {
 }
 
 export function collapsedSlotHours(slot: Slot | Slot[], hours: string): string {
-  const label = Array.isArray(slot) ? slot.join('+') : slot;
+  // A dot, not a plus: these are the sections a bucket runs in, not a sum of
+  // them, and the arithmetic sign read as though it meant something.
+  const label = Array.isArray(slot) ? slot.join(' · ') : slot;
   return `${label} · ${hours}`;
 }
 

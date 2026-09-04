@@ -15,11 +15,26 @@ export function daySections(settings: Pick<DaySettings, 'dayMinutes' | 'dayStart
   };
 }
 
-/** An even split, with the remainder on evening so the three add back exactly. */
+/**
+ * An even split in **whole hours**. A day is planned in hours, so a stretch of
+ * 4h40m is not a number anyone wants to read or reason about; a third of 14h is
+ * 4h, 5h, 5h instead. Spare hours go to the later stretches, which is where the
+ * day has the most room.
+ *
+ * A day that is not a whole number of hours keeps its odd minutes on evening,
+ * so the three still add back exactly rather than quietly losing them.
+ */
 export function evenSectionSplit(dayMinutes: number): Record<Slot, number> {
   const day = Math.max(0, Math.round(Number(dayMinutes) || 0));
-  const third = Math.floor(day / 3);
-  return { morning: third, midday: third, evening: day - 2 * third };
+  const hours = Math.floor(day / 60);
+  const oddMinutes = day - hours * 60;
+  const base = Math.floor(hours / 3);
+  const spare = hours - base * 3;
+  return {
+    morning: base * 60,
+    midday: (base + (spare > 1 ? 1 : 0)) * 60,
+    evening: (base + (spare > 0 ? 1 : 0)) * 60 + oddMinutes,
+  };
 }
 
 /**

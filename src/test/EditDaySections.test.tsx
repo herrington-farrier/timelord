@@ -40,39 +40,45 @@ function renderDay() {
 describe('the section steppers', () => {
   beforeEach(() => api.saveSettings.mockClear());
 
-  it('starts from the day divided evenly', () => {
+  it('starts from the day divided into whole hours', () => {
     renderDay();
-    // 14h in three.
-    expect(stepperValue('morning')).toBe('4h 40m');
-    expect(stepperValue('evening')).toBe('4h 40m');
+    // 14h is 4h, 5h, 5h — never 4h40m, which is not how a day is planned.
+    expect(stepperValue('morning')).toBe('4h');
+    expect(stepperValue('midday')).toBe('5h');
+    expect(stepperValue('evening')).toBe('5h');
+  });
+
+  it('offers no minute field anywhere in the day settings', () => {
+    renderDay();
+    expect(document.querySelector('input[name="dayM"]')).toBeNull();
+    expect(document.querySelector('input[name="sec-morningM"]')).toBeNull();
   });
 
   it('steps in whole hours, with no minute field to fill in', async () => {
     const user = renderDay();
     await user.click(screen.getByRole('button', { name: 'More Morning' }));
-    expect(stepperValue('morning')).toBe('5h 40m');
-    expect(document.querySelector('input[name="sec-morningM"]')).toBeNull();
+    expect(stepperValue('morning')).toBe('5h');
   });
 
   it('takes the hour it gives out of the next stretch', async () => {
     const user = renderDay();
     await user.click(screen.getByRole('button', { name: 'More Morning' }));
-    expect(stepperValue('midday')).toBe('3h 40m');
-    expect(stepperValue('evening')).toBe('4h 40m');
+    expect(stepperValue('midday')).toBe('4h');
+    expect(stepperValue('evening')).toBe('5h');
   });
 
   it('hands the hour back to the next stretch when taken away', async () => {
     const user = renderDay();
     await user.click(screen.getByRole('button', { name: 'Less Morning' }));
-    expect(stepperValue('morning')).toBe('3h 40m');
-    expect(stepperValue('midday')).toBe('5h 40m');
+    expect(stepperValue('morning')).toBe('3h');
+    expect(stepperValue('midday')).toBe('6h');
   });
 
   it('wraps, so evening borrows from morning', async () => {
     const user = renderDay();
     await user.click(screen.getByRole('button', { name: 'More Evening' }));
-    expect(stepperValue('evening')).toBe('5h 40m');
-    expect(stepperValue('morning')).toBe('3h 40m');
+    expect(stepperValue('evening')).toBe('6h');
+    expect(stepperValue('morning')).toBe('3h');
   });
 
   it('never lets the three drift from the day', async () => {
@@ -92,11 +98,11 @@ describe('the section steppers', () => {
 
   it('stops offering a step the next stretch cannot pay for', async () => {
     const user = renderDay();
-    // Drain midday into morning: 4h40m gives four whole hours, then 40m is left.
-    for (let i = 0; i < 4; i += 1) {
+    // Drain midday into morning: 5h gives five hours and then has nothing left.
+    for (let i = 0; i < 5; i += 1) {
       await user.click(screen.getByRole('button', { name: 'More Morning' }));
     }
-    expect(stepperValue('midday')).toBe('40m');
+    expect(stepperValue('midday')).toBe('0m');
     expect(screen.getByRole('button', { name: 'More Morning' })).toBeDisabled();
   });
 
@@ -104,8 +110,8 @@ describe('the section steppers', () => {
     const user = renderDay();
     await user.click(screen.getByRole('button', { name: 'More Morning' }));
     await user.click(screen.getByRole('button', { name: 'Even Split' }));
-    expect(stepperValue('morning')).toBe('4h 40m');
-    expect(stepperValue('midday')).toBe('4h 40m');
+    expect(stepperValue('morning')).toBe('4h');
+    expect(stepperValue('midday')).toBe('5h');
   });
 
   it('sends the balance with the day', async () => {
@@ -116,7 +122,7 @@ describe('the section steppers', () => {
     expect(api.saveSettings).toHaveBeenCalledTimes(1);
     expect(api.saveSettings.mock.calls[0][0]).toMatchObject({
       dayMinutes: 840,
-      sectionSplit: { morning: 340, midday: 220, evening: 280 },
+      sectionSplit: { morning: 300, midday: 240, evening: 300 },
     });
   });
 
@@ -126,8 +132,8 @@ describe('the section steppers', () => {
     const dayHours = document.querySelector('input[name="dayH"]') as HTMLInputElement;
     await user.clear(dayHours);
     await user.type(dayHours, '7');
-    // Half the day, so half of each stretch: morning stays the largest.
-    expect(stepperValue('morning')).toBe('2h 50m');
-    expect(stepperValue('midday')).toBe('1h 50m');
+    // Half the day, so half of each stretch, and morning keeps its extra hour.
+    expect(stepperValue('morning')).toBe('2h 30m');
+    expect(stepperValue('midday')).toBe('2h');
   });
 });

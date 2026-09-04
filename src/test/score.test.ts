@@ -115,3 +115,23 @@ describe('dayHasAppointments', () => {
     expect(dayHasAppointments([block({ id: 'a', kind: 'appointment' })])).toBe(true);
   });
 });
+
+describe('the level', () => {
+  it('is never below one, whatever the total says', () => {
+    // applyDelta already floors the total at zero, but the band is what the
+    // screen reads from, so it holds the floor itself rather than trusting it.
+    expect(scoreBand(0).level).toBe(1);
+    expect(scoreBand(-50).level).toBe(1);
+    expect(scoreBand(Number.NaN).level).toBe(1);
+  });
+
+  it('never shows negative progress into a level', () => {
+    expect(scoreBand(-50).into).toBe(0);
+    expect(scoreBand(-50).pct).toBe(0);
+  });
+
+  it('counts up from there in bands of a hundred', () => {
+    expect(scoreBand(99).level).toBe(1);
+    expect(scoreBand(100).level).toBe(2);
+  });
+});

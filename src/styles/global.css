@@ -1616,29 +1616,58 @@ button:disabled {
 .score {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  max-width: 22rem;
+  max-width: 26rem;
   margin: 0 auto;
 }
+/* Stats gives it the whole column; Quest keeps it to the width of the seal. */
+.score--wide { max-width: none; }
 .score__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   font-variant-numeric: tabular-nums;
 }
-.score__level {
-  font-size: var(--label-size);
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-indent: 0.16em;
+/* The level reads as a plate stamped on the bar, not a caption above it. */
+.score__badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0.25em 0.7em;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 22%, transparent), transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--gold) 30%, transparent);
+}
+.score__badge-word {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--head);
 }
+.score__badge-num {
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--gold);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--gold) 55%, transparent);
+}
+.score__xp {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.score__xp i {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--muted);
+}
 .score__total {
   margin-left: auto;
-  font-size: 1.05rem;
-  font-weight: 700;
+  font-size: 1.15rem;
+  font-weight: 800;
   color: var(--gold);
 }
 .score__delta {
@@ -1652,24 +1681,64 @@ button:disabled {
   from { opacity: 0; transform: translateY(6px) scale(0.9); }
   to { opacity: 1; transform: none; }
 }
+/* Taller, inset, and notched, so it reads as a gauge being filled. */
 .score__track {
-  height: 12px;
-  border: 1px solid var(--border);
+  position: relative;
+  height: 22px;
   border-radius: 999px;
-  background: var(--control);
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, var(--border));
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.15)),
+    var(--glow-2);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(0, 0, 0, 0.35);
   overflow: hidden;
 }
 .score__fill {
+  position: relative;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #a97a24 0%, var(--gold) 55%, #fbeccb 100%);
-  box-shadow: 0 0 12px -2px rgba(230, 185, 104, 0.9);
+  background: linear-gradient(180deg, #fbeccb 0%, var(--gold) 42%, #a97a24 100%);
+  box-shadow:
+    0 0 14px -1px color-mix(in srgb, var(--gold) 85%, transparent),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.3);
   /* slow enough to read as filling, not as a jump */
   transition: width 0.9s cubic-bezier(0.22, 0.68, 0.28, 1);
+}
+/* A highlight sliding along the filled part — the only motion once it settles. */
+.score__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 80%
+  );
+  animation: score-shine 3.2s ease-in-out infinite;
+}
+@keyframes score-shine {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+/* Tick marks every tenth, so progress is readable without counting. */
+.score__notches {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-evenly;
+  pointer-events: none;
+}
+.score__notches i {
+  width: 1px;
+  background: rgba(0, 0, 0, 0.45);
 }
 @media (prefers-reduced-motion: reduce) {
   .score__fill { transition: none; }
   .score__delta { animation: none; }
+  .score__shine { animation: none; opacity: 0; }
 }
 
 /* ── DEBUG TOASTS ──────────────────────────────────────────────────────────

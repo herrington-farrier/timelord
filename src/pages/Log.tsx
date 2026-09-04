@@ -17,7 +17,7 @@ export function LogPage() {
   const score = useScore(user?.uid);
   return (
     <Chrome title="Stats" stamp={`${LOG_DAYS} days`}>
-      <ScoreBar total={score} />
+      <ScoreBar total={score} wide />
       {logs
         .slice()
         .sort((a, b) => String(b.at).localeCompare(String(a.at)))

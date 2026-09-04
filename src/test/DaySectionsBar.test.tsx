@@ -4,18 +4,19 @@ import { describe, expect, it } from 'vitest';
 import { DaySectionsBar } from '../components/DaySectionsBar';
 
 describe('DaySectionsBar', () => {
-  it('shows the three equal section lengths for a 14h day', () => {
+  it('shows whole hours for a 14h day, the spare hour going later', () => {
     render(<DaySectionsBar dayMinutes={14 * 60} />);
     expect(screen.getByText('Morning')).toBeInTheDocument();
     expect(screen.getByText('Midday')).toBeInTheDocument();
     expect(screen.getByText('Evening')).toBeInTheDocument();
-    expect(screen.getAllByText('4h 40m')).toHaveLength(3);
+    expect(screen.getByText('4h')).toBeInTheDocument();
+    expect(screen.getAllByText('5h')).toHaveLength(2);
   });
 
-  it('puts leftover minutes on Evening', () => {
+  it('puts the odd minutes of a part-hour day on Evening', () => {
     render(<DaySectionsBar dayMinutes={10 * 60 + 10} />);
-    expect(screen.getAllByText('3h 23m')).toHaveLength(2);
-    expect(screen.getByText('3h 24m')).toBeInTheDocument();
+    expect(screen.getAllByText('3h')).toHaveLength(2);
+    expect(screen.getByText('4h 10m')).toBeInTheDocument();
   });
 
   it('shows 5h sections for a 15h day', () => {

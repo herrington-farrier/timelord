@@ -24,32 +24,36 @@ function base() {
 }
 
 describe('daySections', () => {
-  it('splits the day into three equal thirds with remainder on evening', () => {
+  it('divides the day into whole hours, the spare ones later in the day', () => {
+    // 14h is 4h, 5h, 5h — never 4h40m three times. A day is planned in hours.
     const even = daySections(settings({ dayMinutes: 14 * 60, dayStartMinutes: 7 * 60 }));
-    expect(even.morning).toEqual({ start: 7 * 60, end: 7 * 60 + 280 });
-    expect(even.midday).toEqual({ start: 7 * 60 + 280, end: 7 * 60 + 560 });
-    expect(even.evening).toEqual({ start: 7 * 60 + 560, end: 7 * 60 + 14 * 60 });
+    expect(even.morning).toEqual({ start: 7 * 60, end: 7 * 60 + 240 });
+    expect(even.midday).toEqual({ start: 7 * 60 + 240, end: 7 * 60 + 540 });
+    expect(even.evening).toEqual({ start: 7 * 60 + 540, end: 7 * 60 + 14 * 60 });
+  });
+
+  it('keeps the odd minutes of a part-hour day on evening', () => {
     const rem = daySections(settings({ dayMinutes: 10 * 60 + 10, dayStartMinutes: 0 }));
-    expect(rem.morning.end - rem.morning.start).toBe(203);
-    expect(rem.midday.end - rem.midday.start).toBe(203);
-    expect(rem.evening.end - rem.evening.start).toBe(204);
+    expect(rem.morning.end - rem.morning.start).toBe(3 * 60);
+    expect(rem.midday.end - rem.midday.start).toBe(3 * 60);
+    expect(rem.evening.end - rem.evening.start).toBe(4 * 60 + 10);
   });
 });
 
 describe('sectionMinutes', () => {
-  it('reports each third as hours and leftover minutes', () => {
+  it('reports whole hours, with the spare ones on the later stretches', () => {
     expect(sectionMinutes(settings({ dayMinutes: 14 * 60 }))).toEqual({
-      morning: 280,
-      midday: 280,
-      evening: 280,
+      morning: 4 * 60,
+      midday: 5 * 60,
+      evening: 5 * 60,
     });
   });
 
-  it('puts leftover minutes on evening, not on morning or midday', () => {
+  it('puts the odd minutes on evening, not on morning or midday', () => {
     expect(sectionMinutes(settings({ dayMinutes: 10 * 60 + 10 }))).toEqual({
-      morning: 203,
-      midday: 203,
-      evening: 204,
+      morning: 3 * 60,
+      midday: 3 * 60,
+      evening: 4 * 60 + 10,
     });
   });
 
@@ -635,9 +639,10 @@ describe('section carry', () => {
 
   it('eats appointment time from the current section then the next', () => {
     const caps = sectionCapacity(settings(), {}, {});
+    // Morning is 4h on a 14h day, so 5h of appointment spills an hour forward.
     const after = eatFromSections(caps, 'morning', 300);
     expect(after.morning).toBe(0);
-    expect(after.midday).toBe(caps.midday - 20);
+    expect(after.midday).toBe(caps.midday - 60);
     expect(nextSlot('evening')).toBeNull();
   });
 

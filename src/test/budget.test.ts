@@ -122,7 +122,8 @@ describe('weekly budget', () => {
 
   it('puts slot next to hours on collapsed Work and weighted rows', () => {
     expect(collapsedSlotHours('morning', '8h/wk')).toBe('morning · 8h/wk');
-    expect(collapsedSlotHours(['morning', 'midday'], '8h/wk')).toBe('morning+midday · 8h/wk');
+    // A dot, not a plus: these are the sections a bucket runs in, not a sum.
+    expect(collapsedSlotHours(['morning', 'midday'], '8h/wk')).toBe('morning · midday · 8h/wk');
   });
 
 });

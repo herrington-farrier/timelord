@@ -87,9 +87,14 @@ describe('the packer and an expiring item', () => {
 });
 
 describe('the day split', () => {
-  it('divides evenly by default, remainder on evening', () => {
-    expect(evenSectionSplit(14 * 60)).toMatchObject({ morning: 280, midday: 280, evening: 280 });
-    expect(evenSectionSplit(100)).toMatchObject({ morning: 33, midday: 33, evening: 34 });
+  it('divides into whole hours, the spare ones later in the day', () => {
+    expect(evenSectionSplit(14 * 60)).toMatchObject({ morning: 240, midday: 300, evening: 300 });
+    expect(evenSectionSplit(15 * 60)).toMatchObject({ morning: 300, midday: 300, evening: 300 });
+    expect(evenSectionSplit(13 * 60)).toMatchObject({ morning: 240, midday: 240, evening: 300 });
+  });
+
+  it('keeps the odd minutes of a part-hour day on evening', () => {
+    expect(evenSectionSplit(100)).toMatchObject({ morning: 0, midday: 0, evening: 100 });
   });
 
   it('uses a stored split that adds back to the day', () => {
@@ -101,9 +106,9 @@ describe('the day split', () => {
     // Day Length is the truth: a stale split must not contradict it.
     const stale = { morning: 240, midday: 300, evening: 300 };
     expect(sectionMinutes({ dayMinutes: 600, sectionSplit: stale })).toMatchObject({
-      morning: 200,
-      midday: 200,
-      evening: 200,
+      morning: 180,
+      midday: 180,
+      evening: 240,
     });
   });
 
@@ -176,9 +181,9 @@ describe('changing the day length', () => {
 
   it('falls back to an even split when there was no day to scale from', () => {
     expect(rescaleSectionSplit({ morning: 0, midday: 0, evening: 0 }, 0, 300)).toMatchObject({
-      morning: 100,
-      midday: 100,
-      evening: 100,
+      morning: 60,
+      midday: 120,
+      evening: 120,
     });
   });
 });

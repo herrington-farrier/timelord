@@ -251,7 +251,11 @@ function DayForm({
       <DaySectionsBar dayMinutes={dayMinutes} split={split} />
       <div className="edit-card meta-form">
         <div className="fields">
-          <DurationFields name="day" label="Day Length" h={day.hours} m={day.minutes} />
+          {/* Hours only. The day is planned in hours, and a minute field here
+              would put the stretches back to reading 4h40m. */}
+          <FormField label="Day Length (hrs)">
+            <input name="dayH" type="number" min={1} max={24} defaultValue={day.hours} />
+          </FormField>
           <FormField label="Transition minutes">
             <input name="trans" type="number" min={0} defaultValue={settings.transitionMinutes} />
           </FormField>
