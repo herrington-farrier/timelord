@@ -1,182 +1,103 @@
 # Manual checks
 
-Things I cannot verify myself — visual, interactive, or dependent on your real
-data. Tests, typecheck and lint pass; this is the rest.
+**This list is deliberately short.** Anything a test can assert belongs in
+`src/test/`, not here — 342 tests across 45 files cover the packing rules,
+cadences, appointments, events, the score, validation, ordering, and the shapes
+each page renders. What is left is what a test genuinely cannot reach.
+
+Four things keep an item on this list:
+
+- **Rendered appearance.** jsdom loads no CSS and lays nothing out, so colour,
+  size, spacing and animation are unverifiable in a test. (`buttonStyles.test.ts`
+  parses the stylesheet as text, which catches a rule being wrong — never that
+  the result looks right.)
+- **A real device.** Touch, hover-after-tap, sound, vibration, scrolling.
+- **The real backend.** Auth, IAM, security rules, deploys, live data.
+- **Feel.** Whether something is fast enough, or legible at a glance.
+
+If you find yourself adding an item that is none of those, write a test instead.
 
 Tick as you go. Anything that fails, tell me the item number.
 
-## Quest
+## Appearance
 
-1. **Start Quest** — the app icon, large and round, with a slow halo. Tapping it
-   starts the day.
-2. **Day ended** — after Hearth, the same icon greyed out. No "Day ended" text.
-3. **Countdown** — big gold numerals, section name beneath in caps.
-4. **Rest** — `REST ZZZ` is green, becomes `END REST` (red). While resting the
-   section name reads `RESTING` and the timer greys.
-5. **Header stats** — `DAY / BOOKED / PACKED`. Booked only appears when the day
-   has appointments, and is colour-coded like Packed.
-6. **Tap to expand** — an item shows nothing until tapped; Complete and Skip
-   appear side by side, and there is dead space down the right edge to scroll on.
-7. **Finished items leave the list** — completing or skipping removes the row.
-   Break stays after use.
-8. **Falling off** — faded, dashed, indented, no strikethrough. Full opacity on
-   hover or when opened.
-9. **Start Next Chapter** — gold outlined medallion with a halo; the time shown
-   is the **next** stretch's total, not the current countdown.
-10. **Break colour** — the Break card takes the Personal bucket's colour, not
-    gold. Change the Personal colour in Strategize → Buckets and re-check.
-11. **Menu** — the `TIMELORD` title opens it; it closes on selection, on Escape,
-    and whenever you navigate. Nothing renders solid gold when pressed.
+1. **Start Quest** — the app icon, large and round, with a slow halo. After
+   Hearth the same icon, greyed. No "Day ended" text.
+2. **Countdown** — big gold numerals, section name beneath in caps. While
+   resting the name reads `RESTING` and the timer greys.
+3. **Rest** — `REST ZZZ` is green and becomes `END REST` in red.
+4. **Falling off** — the collapsed line is muted with a rule above it and the
+   count in a chip. Open, the rows are faded, dashed and indented, with no
+   strikethrough, and come to full opacity on hover.
+5. **A routine, when Personal counts as day time** — static under the
+   appointments, reading as committed rather than pending.
+6. **The last time round** — an expiring item shows a gold `FINAL` tag and a
+   dashed trailing edge, on Quest and on the board. Noticeable while scanning,
+   not alarming.
+7. **Start Next Chapter** — gold outlined medallion with a halo.
+8. **Header stats** — `DAY / BOOKED / PACKED`, colour-coded on the load scale.
+9. **Quest Log** — each day in the side list is its own bordered block; today is
+   gold-tinted; event days are outlined in the Events colour even when empty.
+10. **Stats rows** — every row's text takes its row colour. No row has a
+    coloured edge with white text.
+11. **Forms read left-aligned** — fields in even columns, Title on its own row.
+12. **Selected is one treatment** — gold wash, gold edge, normal text — on the
+    current page, Edit tabs, day chips and pills. Solid gold only on actions.
 
-## Appointments
+## On a device
 
-12. **Appt tag and time** — an appointment shows an `APPT` tag and its time as
-    `2:30 PM` (stored from the time picker).
-13. **Placement** — an appointment set to Evening takes evening time and leaves
-    your morning alone.
-14. **Spanning** — one set to midday **and** evening stays on the list in both,
-    rather than vanishing when the next stretch opens.
-15. **The day feels it** — an appointment longer than its section pushes work
-    into Falling off, including work in *later* sections.
-16. **Cancel refunds** — skipping an appointment gives the hours back: displaced
-    work returns, and the running countdown grows by what that section recovered.
-17. **Complete does not refund** — by design. The hours were taken when the day
-    was packed.
-18. **Auto-skip** — Start Next Chapter marks a missed appointment as skipped, but
-    **not** one still spanning into a later section.
-19. **Not deferred** — a cancelled appointment does not reappear tomorrow. An
-    ordinary scheduled item still renews on its bucket's next day.
-20. **Migration** — appointments created before the rewrite are still there, now
-    under Strategize → Lists in the Appointments group. Their per-appointment
-    colours are gone by design; the bucket colour applies.
+13. **Nothing renders solid gold when pressed.** This is the `background-clip`
+    bug: `:hover` sticks after a tap, so it only appears on touch.
+    `buttonStyles.test.ts` guards the cause; this checks the effect.
+14. **Tap to expand** — an item opens on tap, and there is dead space down the
+    right edge to scroll on without opening anything.
+15. **Timer alerts** — the sound and vibrate toggles do what they say when a
+    section runs out.
+16. **The menu** — opens from the title, closes on selection, on Escape, and
+    whenever you navigate.
 
-20b. **Repeating** — set an appointment to Recurring with a weekly cadence. It
-    should appear on every matching day in Quest Log, take its hours out of
-    those days, and keep its Time label and sections.
+## Against the real backend
 
-20c. **Every N days counts from the start date** — set two appointments to
-    Recurring, every 28 days, with start dates a week apart. Each should land on
-    its own start date and then 28 days later, not both on the same day. This
-    was the bug where four 28-day appointments all appeared next week on the
-    right weekday.
-
-20d. **No weekday field** — Every N days shows only "Every N days" and "Start
-    date". A new item defaults its start date to today.
-
-## Transitions
-
-56. **A switch shows between buckets** — a section running two buckets shows a
-    faint `10m` between them. One bucket shows nothing, and Break inside Work
-    is not a switch.
-57. **It costs the day** — raise Transition minutes in Strategize → Day and save.
-    Days with several buckets in a section should push more into Falling off.
-58. **The countdown agrees** — the section timer starts lower by exactly the
-    switching time it charged. It must not hand back time the day does not have.
-59. **Quest Log is unaffected** — no switch chips on the board, and packed hours
-    still count work only.
-60. **Zero turns it off** — set Transition minutes to 0 and the markers vanish.
-
-## Events
-
-21. **Naming** — each range has a name field in Strategize → Buckets.
-22. **Items pick an event** — an Events item chooses its event, then a date the
-    picker limits to that event's range.
-23. **Grouping** — Lists groups event items under their event name with its dates.
-24. **Pre-existing items** — event items created before this land in the right
-    group by date, with none under **Unassigned** unless they genuinely match no
-    event.
-25. **Auto-delete** — an event whose last day has passed disappears with its
-    items on the next save.
-
-## Strategize
-
-26. **One Save per tab** — Day, Buckets and Lists each save as a page. No per-row
-    Save buttons; Remove is still per-row.
-27. **Collapsed groups still save** — edit an item, collapse its group, hit Save,
-    and the edit persists.
-28. **Errors land in place** — save an appointment with no sections ticked. The
-    message names the row, the row is outlined, the field is marked, and nothing
-    floats over the page.
-29. **Nothing half-saves** — with one bad row among several, no row is written.
-30. **Respawn** is green; **Reroll Stats** opens an `Erase all Stats?` dialog with
-    Cancel / Erase.
-31. **Reroll is blocked mid-day** — start the day, then try Reroll Stats: it
-    should refuse with "Finish the day before rerolling Stats."
-32. **Forms read left-aligned** — fields in even columns, Title on its own row.
-32b. **Every bucket picks sections** — Buckets shows section toggles on every
-    bucket, not a dropdown. Give a weighted bucket two sections; its items in
-    Lists then get a section picker offering just those two.
-
-44. **Personal as day time** — Strategize → Day, tick "Counts as day hours".
-    Morning Routine and Evening Routine then appear on Quest as items with their
-    minutes, come out of their sections, and the assignable week in Buckets
-    shrinks by the Personal total. Untick it and they go back to invisible
-    markers. With a full week already assigned, turning it on should be refused
-    by the week cap rather than silently overbooking.
-
-## Quest Log
-
-33. **Booked per day** — days with appointments show `2h booked` in the
-    appointment colour, beside the packed-hours mark.
-34. **Chips lead with the time** — appointment chips read `2:30 PM Dentist · 1h`.
-35. **Day blocks** — each day in the side list is its own bordered block; today
-    is gold-tinted.
-36. **Event days** — outlined in the Events colour.
-
-## Stats
-
-37. **Wording** — `Quest Completed: X`, `Quest Failed: X`, `Quest Log Packed`.
-38. **Row colour matches its text** — green complete, red skip, gold for packs
-    and system events. No row has a coloured edge with white text.
-39. **No pack spam** — saving in Strategize no longer adds a "Quest Log Packed"
-    row every time.
-40. **Readable dates** — `Sat Aug 29 · 7:00 AM · 20m`, not raw ISO strings.
-
-## Score
-
-45. **After Hearth** — the bar appears under the greyed seal, animates, and
-    shows the day's delta (`+4`) beside the running total.
-46. **Counting** — finish two items and skip one: `+1`. Complete something in
-    Falling off: that one is worth `+2`.
-47. **Forgiven days** — on a day with an appointment, items left in Falling off
-    do not subtract. A skip you chose still does.
-48. **A day never started** scores nothing at all.
-49. **Respawn** takes back exactly what today added, and today's rows leave Stats.
-50. **Reroll Stats** sets the total to 0 along with the history.
-51. **Stats** — the same bar sits at the top of the page.
-
-## Speed and cost
-
-41. **Quest feels quicker** — Complete, Skip and Start Next Chapter should
-    respond noticeably faster than before; saves no longer rewrite all 42 days.
-42. **Adding an appointment is fast** — it repacks only the dates it touches.
-
-## New account
-
-43. Seeds show one or two of each thing: an appointment today at 2:30 PM, two
-    Work items on different cadences, a home item, a 0-duration reminder, a
-    weekly errand, and an event a fortnight out with an item in it.
-    *(Only testable on a fresh account.)*
-
-## Access
-
-52. **Adding someone** — put their address in `config/allowlist` (Firestore
+17. **Adding someone** — put their address in `config/allowlist` (Firestore
     console, lowercase). They can sign in within about five minutes; the
-    functions cache the list that long.
-53. **A stranger** — signing in with an uninvited Google account should refuse
-    with "This app is invite-only" and sign them straight back out.
-54. **You are never locked out** — the owner addresses are hardcoded as a floor
-    in both the rules and the code, so even an empty or deleted
-    `config/allowlist` leaves your own access intact.
+    functions cache the list that long, and every write asks that same list.
+18. **A stranger** — an uninvited Google account is refused with "This app is
+    invite-only" and signed straight back out.
+19. **You are never locked out** — the owner addresses are a floor in both the
+    rules and the code, so an empty or deleted `config/allowlist` leaves your
+    own access intact.
+20. **Every callable is reachable.** A function missing its `allUsers`
+    run-invoker binding is refused by the front end before it runs, logs
+    nothing, and surfaces as `functions/internal`. See the README for the curl
+    that tells a reachable function from a blocked one — worth running after any
+    deploy that creates a function.
+21. **A page after a deploy** — with the app open, redeploy and then navigate to
+    a page you have not visited. It should reload itself rather than showing a
+    blank background.
+22. **A brand-new account** — first sign-in creates the tenant, seeds one or two
+    of each thing, and packs six weeks. *(Only testable on a fresh account; what
+    is seeded is covered by `seed.test.ts`, but that it happens at sign-in is
+    not.)*
+23. **Appointments created before the rewrite** are still there under
+    Strategize → Lists, in the Appointments group, with the bucket colour.
+    *(Real data; the migration runs once per tenant.)*
+24. **Event items created before events had ids** land in the right group by
+    date, with none under **Unassigned** unless they genuinely match no event.
 
-55. **A page after a deploy** — with the app open, if a page is redeployed and
-    you then navigate to one you have not visited, it should reload itself
-    rather than showing a blank background. This is the Guide blank-page bug.
+## Feel
+
+25. **Quest responds quickly** — Complete, Skip and Start Next Chapter. Saves
+    rewrite only the days that changed, not all 42.
+26. **Adding an appointment is fast** — it repacks only the dates it touches.
+27. **The day is readable at a glance** — what you are doing now is the first
+    thing you see, and what will not fit is legible without being loud.
 
 ## Known by design — not bugs
 
 - Completing an appointment does not change remaining time. The hours come out
-  when the day is packed; that is what lets Falling off be right in advance.
+  when the day is packed; that is what lets falling-off be right in advance.
 - An appointment reserves its section even if you never mark it, until the
   section it spans is over.
+- A Personal routine is never completed or skipped. When Personal counts as day
+  time the day has already paid for it, exactly as it has for an appointment.
 - Reroll Stats erases history permanently. There is no undo.

@@ -13,3 +13,6 @@ Stack: Vitest + Testing Library. Tests live in `src/test/` mirroring source name
 - No snapshot tests. No smoke tests.
 - Domain tests use factories, not copy-pasted literals.
 - Fake timers for clock/ETA tests.
+- A behaviour a test can assert belongs in a test, not in `docs/verify.md`. That
+  file is only for what a test cannot reach: rendered appearance, a real device,
+  the real backend, and feel.
