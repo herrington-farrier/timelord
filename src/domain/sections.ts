@@ -42,6 +42,57 @@ export function sectionSplitFits(
   return sum === Math.max(0, Math.round(Number(dayMinutes) || 0));
 }
 
+/** The section a step borrows from, wrapping so every stretch has a neighbour. */
+export function nextSectionSlot(slot: Slot): Slot {
+  return SLOTS[(SLOTS.indexOf(slot) + 1) % SLOTS.length];
+}
+
+/**
+ * Move time into one stretch by taking it out of the one after it.
+ *
+ * Balancing beats validating: the three always add back to the day because a
+ * step never creates or destroys minutes, only moves them. There is nothing to
+ * refuse, and no arithmetic left for a person to do.
+ *
+ * Returns the split unchanged when the neighbour cannot cover the move, so the
+ * caller can offer the step or not by asking whether anything happened.
+ */
+export function stepSectionSplit(
+  split: Record<Slot, number>,
+  slot: Slot,
+  deltaMinutes: number
+): Record<Slot, number> {
+  const from = nextSectionSlot(slot);
+  const delta = Math.round(deltaMinutes);
+  if (!delta) return split;
+  // Whichever way it goes, one of the pair pays. Neither may go below nothing.
+  if (delta > 0 && split[from] < delta) return split;
+  if (delta < 0 && split[slot] < -delta) return split;
+  return { ...split, [slot]: split[slot] + delta, [from]: split[from] - delta };
+}
+
+/**
+ * Carry a split onto a different day length, keeping its proportions. Editing
+ * Day Length should not throw away the balance someone just set, and re-evening
+ * it silently would.
+ */
+export function rescaleSectionSplit(
+  split: Record<Slot, number>,
+  fromDay: number,
+  toDay: number
+): Record<Slot, number> {
+  const day = Math.max(0, Math.round(toDay));
+  if (fromDay <= 0) return evenSectionSplit(day);
+  const morning = Math.round((split.morning / fromDay) * day);
+  const midday = Math.round((split.midday / fromDay) * day);
+  // Evening takes the rounding, so the three still add back exactly.
+  return {
+    morning: Math.min(morning, day),
+    midday: Math.min(midday, Math.max(0, day - morning)),
+    evening: Math.max(0, day - morning - midday),
+  };
+}
+
 export function sectionMinutes(
   settings: Pick<DaySettings, 'dayMinutes'> & { sectionSplit?: Partial<Record<Slot, number>> | null }
 ): Record<Slot, number> {

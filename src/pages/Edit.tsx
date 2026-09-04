@@ -24,7 +24,7 @@ import { durationFromInputs, durationInputs, formatDuration, hoursToMinutes, spl
 import { eventRangeForItem, eventRangeName, eventRanges, newEventRangeId, parseEventRanges } from '../domain/events';
 import { PACK_RANGE_DAYS } from '../domain/packWeek';
 import { canDeleteBucket, canRenameBucket, listCadenceDays, listableBuckets, splitEditBuckets } from '../domain/seed';
-import { bucketSlots, evenSectionSplit, itemSlots, itemWorkSlot, sectionMinutes, workShowsItemSlot } from '../domain/sections';
+import { bucketSlots, evenSectionSplit, itemSlots, itemWorkSlot, rescaleSectionSplit, sectionMinutes, stepSectionSplit, workShowsItemSlot } from '../domain/sections';
 import { isAppointmentBucket } from '../domain/seed';
 import {
   APPOINTMENTS_ID,
@@ -142,6 +142,57 @@ export function EditPage() {
   );
 }
 
+const STEP = 60;
+
+/**
+ * One stretch, stepped in whole hours. No minute field: a day is planned in
+ * hours, and the arithmetic that used to need one is now done by the step
+ * itself — an hour added here is an hour taken from the next stretch, so the
+ * three always add back to the day and there is nothing to get wrong.
+ *
+ * A step is offered only when it can actually happen, so the buttons never
+ * promise something the neighbouring stretch cannot pay for.
+ */
+function SectionStepper({
+  slot,
+  split,
+  onStep,
+}: {
+  slot: Slot;
+  split: Record<Slot, number>;
+  onStep: (deltaMinutes: number) => void;
+}) {
+  const name = slot[0].toUpperCase() + slot.slice(1);
+  const canAdd = stepSectionSplit(split, slot, STEP) !== split;
+  const canTake = stepSectionSplit(split, slot, -STEP) !== split;
+  return (
+    <div className="stepper" data-slot={slot}>
+      <span className="stepper__name">{name}</span>
+      <div className="stepper__row">
+        <button
+          type="button"
+          className="stepper__btn"
+          aria-label={`Less ${name}`}
+          disabled={!canTake}
+          onClick={() => onStep(-STEP)}
+        >
+          −
+        </button>
+        <b className="stepper__value">{formatDuration(split[slot])}</b>
+        <button
+          type="button"
+          className="stepper__btn"
+          aria-label={`More ${name}`}
+          disabled={!canAdd}
+          onClick={() => onStep(STEP)}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DayForm({
   settings,
   onSave,
@@ -158,46 +209,33 @@ function DayForm({
   // never reads as a question.
   const [confirmReroll, setConfirmReroll] = useState(false);
   const day = splitMinutes(settings.dayMinutes);
-  const [live, setLive] = useState<{ dayMinutes: number; split: Record<Slot, number> } | null>(null);
-  const savedSplit = sectionMinutes(settings);
-  const dayMinutes = live ? live.dayMinutes : settings.dayMinutes;
-  const split = live ? live.split : savedSplit;
-  const splitTotal = SLOTS.reduce((sum, slot) => sum + split[slot], 0);
-  // Day Length is the truth; the three stretches divide it. Saying so while the
-  // numbers are being typed beats refusing them afterwards.
-  const splitOff = splitTotal - dayMinutes;
-  // Remount the fields when Even Split rewrites them: they are uncontrolled,
-  // so nothing else would move what is on screen.
-  const [splitKey, setSplitKey] = useState(0);
-  const [evenSplit, setEvenSplit] = useState<Record<Slot, number> | null>(null);
+  // The split is held here rather than read off the inputs, because a step
+  // changes two stretches at once: there is nothing sensible to read from a
+  // field halfway through being balanced.
+  const [dayMinutes, setDayMinutes] = useState(settings.dayMinutes);
+  const [split, setSplit] = useState<Record<Slot, number>>(() => sectionMinutes(settings));
 
-  function readLive(form: HTMLElement) {
+  function readDay(form: HTMLElement) {
     const nextDay = durationFrom(form, 'day', settings.dayMinutes);
-    setLive({
-      dayMinutes: nextDay,
-      split: {
-        morning: durationFrom(form, 'sec-morning', savedSplit.morning),
-        midday: durationFrom(form, 'sec-midday', savedSplit.midday),
-        evening: durationFrom(form, 'sec-evening', savedSplit.evening),
-      },
-    });
+    // A field halfway through being retyped reads as 0 for a keystroke or two.
+    // Rescaling to that would collapse the balance to nothing and then spread
+    // the new day evenly, quietly undoing whatever was just set.
+    if (nextDay <= 0 || nextDay === dayMinutes) return;
+    // Carry the balance onto the new day rather than discarding it.
+    setSplit((prev) => rescaleSectionSplit(prev, dayMinutes, nextDay));
+    setDayMinutes(nextDay);
   }
 
-  const shown = evenSplit ?? split;
   return (
     <form
       className="edit-page"
-      onInput={(e) => readLive(e.currentTarget)}
+      onInput={(e) => readDay(e.currentTarget)}
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         onSave({
           dayMinutes: hoursToMinutes(fd.get('dayH'), fd.get('dayM')),
-          sectionSplit: {
-            morning: hoursToMinutes(fd.get('sec-morningH'), fd.get('sec-morningM')),
-            midday: hoursToMinutes(fd.get('sec-middayH'), fd.get('sec-middayM')),
-            evening: hoursToMinutes(fd.get('sec-eveningH'), fd.get('sec-eveningM')),
-          },
+          sectionSplit: split,
           dayStartMinutes: settings.dayStartMinutes,
           transitionMinutes: Number(fd.get('trans')),
           timezone: 'America/Chicago',
@@ -221,39 +259,19 @@ function DayForm({
       </div>
       <div className="edit-card meta-form">
         <h3 className="group-h">Sections</h3>
-        <div className="fields" key={splitKey}>
-          {SLOTS.map((slot) => {
-            const parts = splitMinutes(shown[slot]);
-            return (
-              <DurationFields
-                key={slot}
-                name={`sec-${slot}`}
-                label={slot[0].toUpperCase() + slot.slice(1)}
-                h={parts.hours}
-                m={parts.minutes}
-                invalid={splitOff !== 0}
-              />
-            );
-          })}
+        <div className="steppers">
+          {SLOTS.map((slot) => (
+            <SectionStepper
+              key={slot}
+              slot={slot}
+              split={split}
+              onStep={(delta) => setSplit((prev) => stepSectionSplit(prev, slot, delta))}
+            />
+          ))}
         </div>
         <div className="split-sum">
-          <p className={splitOff === 0 ? 'hint' : 'err'}>
-            {splitOff === 0
-              ? `Sections total ${formatDuration(splitTotal)}, matching the day.`
-              : splitOff > 0
-                ? `Sections total ${formatDuration(splitTotal)} — ${formatDuration(splitOff)} more than the day.`
-                : `Sections total ${formatDuration(splitTotal)} — ${formatDuration(-splitOff)} short of the day.`}
-          </p>
-          <button
-            type="button"
-            className="chrome-btn"
-            onClick={() => {
-              const even = evenSectionSplit(dayMinutes);
-              setEvenSplit(even);
-              setLive({ dayMinutes, split: even });
-              setSplitKey((k) => k + 1);
-            }}
-          >
+          <p className="hint">An hour added to one stretch comes out of the next.</p>
+          <button type="button" className="chrome-btn" onClick={() => setSplit(evenSectionSplit(dayMinutes))}>
             Even Split
           </button>
         </div>

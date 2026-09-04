@@ -32,7 +32,7 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 - `morningMinutes`, `breakMinutes`, `eveningMinutes` (Personal pause lengths; not in weekly capacity)
 - `timerSound`, `timerVibrate` (section timers)
 - `personalCountsAsDay` — when true, Personal minutes come out of the day and its sections rather than sitting beside them. The routines are then **static** on Quest and on the board: they take their time and are neither completed nor skipped
-- `sectionSplit` — `{ morning, midday, evening }`, the day's own division. Day Length stays the truth: a split that does not add back to it is stale and an even split is used instead
+- `sectionSplit` — `{ morning, midday, evening }`, the day's own division, balanced in whole hours on Strategize → Day. Day Length stays the truth: a split that does not add back to it is stale and an even split is used instead
 - audit stamps
 
 ## buckets/{id}

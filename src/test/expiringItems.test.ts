@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { isFinalOccurrence, itemExpired } from '../domain/cadence';
-import { evenSectionSplit, sectionMinutes, sectionSplitFits } from '../domain/sections';
+import {
+  evenSectionSplit,
+  rescaleSectionSplit,
+  sectionMinutes,
+  sectionSplitFits,
+  stepSectionSplit,
+} from '../domain/sections';
 import { packDay } from '../domain/packDay';
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { bucket, item, workBucket } from './fixtures';
@@ -107,5 +113,72 @@ describe('the day split', () => {
 
   it('allows a stretch of nothing at all', () => {
     expect(sectionSplitFits({ morning: 0, midday: 420, evening: 420 }, 840)).toBe(true);
+  });
+});
+
+describe('stepping a stretch', () => {
+  const even = { morning: 280, midday: 280, evening: 280 };
+
+  it('takes the hour it gives out of the next stretch', () => {
+    expect(stepSectionSplit(even, 'morning', 60)).toMatchObject({
+      morning: 340,
+      midday: 220,
+      evening: 280,
+    });
+  });
+
+  it('gives the hour it drops back to the next stretch', () => {
+    expect(stepSectionSplit(even, 'morning', -60)).toMatchObject({
+      morning: 220,
+      midday: 340,
+      evening: 280,
+    });
+  });
+
+  it('wraps, so evening borrows from morning', () => {
+    expect(stepSectionSplit(even, 'evening', 60)).toMatchObject({
+      morning: 220,
+      midday: 280,
+      evening: 340,
+    });
+  });
+
+  it('keeps the day the same length however it is stepped', () => {
+    let split = even;
+    for (const slot of ['morning', 'midday', 'evening', 'morning'] as const) {
+      split = stepSectionSplit(split, slot, 60);
+    }
+    expect(split.morning + split.midday + split.evening).toBe(840);
+  });
+
+  it('refuses a step the next stretch cannot pay for', () => {
+    const tight = { morning: 800, midday: 40, evening: 0 };
+    expect(stepSectionSplit(tight, 'morning', 60)).toBe(tight);
+  });
+
+  it('refuses to take a stretch below nothing', () => {
+    const tight = { morning: 0, midday: 420, evening: 420 };
+    expect(stepSectionSplit(tight, 'morning', -60)).toBe(tight);
+  });
+});
+
+describe('changing the day length', () => {
+  it('keeps the proportions that were set', () => {
+    // A quarter, a quarter, a half — on a day twice as long.
+    const scaled = rescaleSectionSplit({ morning: 210, midday: 210, evening: 420 }, 840, 1680);
+    expect(scaled).toMatchObject({ morning: 420, midday: 420, evening: 840 });
+  });
+
+  it('still adds back to the new day exactly', () => {
+    const scaled = rescaleSectionSplit({ morning: 250, midday: 300, evening: 290 }, 840, 500);
+    expect(scaled.morning + scaled.midday + scaled.evening).toBe(500);
+  });
+
+  it('falls back to an even split when there was no day to scale from', () => {
+    expect(rescaleSectionSplit({ morning: 0, midday: 0, evening: 0 }, 0, 300)).toMatchObject({
+      morning: 100,
+      midday: 100,
+      evening: 100,
+    });
   });
 });

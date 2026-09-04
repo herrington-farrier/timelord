@@ -1779,6 +1779,61 @@ button:disabled {
   padding: 0 2px;
 }
 .split-sum p { margin: 0; }
+/* Three stretches, stepped in hours. Wide tap targets, because this is the
+   control you nudge repeatedly to find a balance. */
+.steppers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.stepper {
+  display: grid;
+  gap: 4px;
+}
+.stepper__name {
+  font-size: var(--label-size);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--head);
+}
+.stepper__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background-color: var(--control);
+}
+.stepper__btn {
+  flex: 0 0 auto;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background-color: var(--panel);
+  color: var(--gold);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.stepper__btn:hover:not(:disabled) {
+  background-color: var(--control-hover);
+  border-color: var(--accent);
+}
+.stepper__btn:disabled {
+  opacity: 0.35;
+  color: var(--muted);
+}
+.stepper__value {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
 /* A routine when Personal counts as day time: it states what the section lost
    and offers nothing to press, so it reads as committed rather than pending. */
 .item--static {
