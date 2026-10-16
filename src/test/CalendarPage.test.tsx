@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../domain/types';
 import { CalendarPage } from '../pages/Calendar';
 
-vi.mock('../shared/auth', () => ({
+vi.mock('../shared/useAuth', () => ({
   useAuth: () => ({ user: { uid: 'u1' }, logOut: vi.fn() }),
 }));
 

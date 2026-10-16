@@ -23,7 +23,7 @@ const { api } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../shared/auth', () => ({ useAuth: () => ({ user: { uid: 'u1' } }) }));
+vi.mock('../shared/useAuth', () => ({ useAuth: () => ({ user: { uid: 'u1' } }) }));
 vi.mock('../services/api', () => ({ api }));
 vi.mock('../services/live', () => ({
   useSettings: () => DEFAULT_SETTINGS,

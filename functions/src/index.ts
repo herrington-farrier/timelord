@@ -26,6 +26,8 @@ import {
   type TenantData,
 } from '../../src/domain/dayFlow';
 import { applyDelta } from '../../src/domain/score';
+import { findEventsBucket, isEventsBucket } from '../../src/domain/predicates';
+import { pushesNeededFrom, pushPruneCutoff, repackableDates } from '../../src/domain/skip';
 import { PACK_RANGE_DAYS } from '../../src/domain/packWeek';
 import { bucketSlots, itemWorkSlot, parseBucketSlots, sectionSplitFits, workShowsItemSlot } from '../../src/domain/sections';
 import { sectionRemainingNow } from '../../src/domain/timer';
@@ -43,7 +45,7 @@ import {
 } from '../../src/domain/validate';
 import type { Bucket, BucketKind, DaySettings, HoursMode, ListItem, Slot } from '../../src/domain/types';
 import { APPOINTMENTS_ID, EVENTS_ID, SLOTS } from '../../src/domain/types';
-import { addDaysKey, weekStart } from '../../src/shared/dates';
+import { addDaysKey, todayKey, weekStart } from '../../src/shared/dates';
 import { stampCreated, stampLastUpdated } from './actorAudit';
 import { asDateKey, asId, asNumber, asString, authEmail, newId, requireSignedIn, requireUid, validated } from './http';
 import { ensureAllowlistDoc, inviteProblem, isInvited } from './allowlist';
@@ -102,27 +104,19 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function todayKey(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
-}
-
 function firestoreDoc(row: Record<string, unknown>): Record<string, unknown> {
   return JSON.parse(JSON.stringify(row)) as Record<string, unknown>;
 }
 
-async function writeLog(
-  uid: string,
-  row: { type: string; date: string; itemId?: string; bucketId?: string; minutes?: number; title?: string; section?: string }
-): Promise<void> {
-  const stamp = await stampCreated(uid, nowIso());
-  await tenantRef(uid)
-    .collection('logs')
-    .doc(newId())
-    .set({
-      ...row,
-      at: stamp.created_at,
-      ...stamp,
-    });
+/** Break start and end: the day patch and its log row commit together, under one actor lookup. */
+async function patchDayWithLog(uid: string, date: string, patch: Record<string, unknown>, type: 'start_break' | 'end_break'): Promise<void> {
+  const iso = nowIso();
+  const { created, updated } = await actorStamps(uid, iso);
+  const root = tenantRef(uid);
+  const batch = getFirestore().batch();
+  batch.set(root.collection('days').doc(date), { ...patch, ...updated }, { merge: true });
+  batch.set(root.collection('logs').doc(newId()), { type, date, at: iso, ...created });
+  await batch.commit();
 }
 
 function hoursModeOf(value: unknown): HoursMode {
@@ -167,15 +161,27 @@ function bucketFields(data: Record<string, unknown>, resolvedKind: string, resol
  * complete / skip / pack, so a tenant can easily hold more than that.
  * Delete in chunks rather than one batch.
  */
-async function deleteAllDocs(col: FirebaseFirestore.CollectionReference): Promise<number> {
-  const docs = await col.listDocuments();
+async function deleteRefs(refs: FirebaseFirestore.DocumentReference[]): Promise<number> {
   const db = getFirestore();
-  for (let i = 0; i < docs.length; i += 400) {
+  for (let i = 0; i < refs.length; i += 400) {
     const batch = db.batch();
-    for (const doc of docs.slice(i, i + 400)) batch.delete(doc);
+    for (const ref of refs.slice(i, i + 400)) batch.delete(ref);
     await batch.commit();
   }
-  return docs.length;
+  return refs.length;
+}
+
+async function deleteAllDocs(col: FirebaseFirestore.CollectionReference): Promise<number> {
+  return deleteRefs(await col.listDocuments());
+}
+
+/** Skip pushes that landed before this week can no longer change any packed day. */
+async function pruneStalePushes(uid: string): Promise<void> {
+  const stale = await tenantRef(uid)
+    .collection('skipPushes')
+    .where('toDate', '<', pushPruneCutoff(todayKey()))
+    .get();
+  await deleteRefs(stale.docs.map((d) => d.ref));
 }
 
 /**
@@ -191,6 +197,7 @@ async function deleteAllDocs(col: FirebaseFirestore.CollectionReference): Promis
  */
 async function writePackedRange(uid: string, start: string, days: number): Promise<void> {
   const from = weekStart(start);
+  await pruneStalePushes(uid);
   await writePackedDates(
     uid,
     Array.from({ length: days }, (_, i) => addDaysKey(from, i))
@@ -210,7 +217,7 @@ async function pruneExpiredEvents(
   loaded: Awaited<ReturnType<typeof loadTenant>>
 ): Promise<Awaited<ReturnType<typeof loadTenant>>> {
   const buckets = loaded.buckets as Bucket[];
-  const events = buckets.find((b) => !b.archived && (b.kind === 'event' || b.id === EVENTS_ID));
+  const events = findEventsBucket(buckets);
   if (!events) return loaded;
   const ranges = eventRanges(events);
   const expired = expiredEventRanges(ranges, todayKey());
@@ -264,9 +271,10 @@ function setDay(
  * event entry — changes one or two days, not the whole range, so it says so
  * rather than rebuilding six weeks.
  */
-async function writePackedDates(uid: string, dates: string[]): Promise<void> {
+async function writePackedDates(uid: string, requested: string[]): Promise<void> {
+  const dates = repackableDates(requested, todayKey());
   if (!dates.length) return;
-  let loaded = await loadTenant(uid);
+  let loaded = await loadTenant(uid, pushesNeededFrom([...dates].sort()[0], todayKey()));
   loaded = await pruneExpiredEvents(uid, loaded);
   const tenant = loaded as unknown as TenantData;
   const now = nowOf();
@@ -294,7 +302,7 @@ async function mutateDay(
   date: string,
   planner: (prev: DayState | null, tenant: TenantData, now: Now) => DayPlan
 ): Promise<DayPlan> {
-  const tenant = (await loadTenant(uid)) as unknown as TenantData;
+  const tenant = (await loadTenant(uid, pushesNeededFrom(date, todayKey()))) as unknown as TenantData;
   const now = nowOf();
   const { created, updated } = await actorStamps(uid, now.iso);
   const root = tenantRef(uid);
@@ -469,7 +477,6 @@ export const saveSettings = onCall(async (request) => {
     dayMinutes: asNumber(data.dayMinutes, 'Day length'),
     dayStartMinutes: asNumber(data.dayStartMinutes, 'Day start'),
     transitionMinutes: asNumber(data.transitionMinutes, 'Transition'),
-    timezone: asString(data.timezone || 'America/Chicago', 'Timezone'),
     morningMinutes: asNumber(data.morningMinutes, 'Morning Routine'),
     breakMinutes: asNumber(data.breakMinutes, 'Break'),
     eveningMinutes: asNumber(data.eveningMinutes, 'Evening Routine'),
@@ -491,7 +498,7 @@ export const saveSettings = onCall(async (request) => {
       `Morning, midday and evening add up to ${formatDuration(total)}, not the ${formatDuration(patch.dayMinutes)} day.`
     );
   }
-  const loaded = await loadTenant(uid);
+  const loaded = await loadTenant(uid, todayKey());
   assertWeeklyFits(patch, loaded.buckets as Bucket[]);
   const stamp = await stampLastUpdated(uid, nowIso());
   await tenantRef(uid).collection('settings').doc('current').set({ ...patch, ...stamp }, { merge: true });
@@ -502,7 +509,7 @@ export const saveBuckets = onCall(async (request) => {
   const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
   const data = request.data as Record<string, unknown>;
-  const loaded = await loadTenant(uid);
+  const loaded = await loadTenant(uid, todayKey());
   const settings = loaded.settings as DaySettings;
   const personal = (data.personal || {}) as Record<string, unknown>;
   const nextSettings: DaySettings = {
@@ -539,7 +546,7 @@ export const saveBuckets = onCall(async (request) => {
   assertWeeklyFits(nextSettings, [...kept.filter((b) => !b.archived), ...nextBuckets]);
   assertItemsFit(loaded.items as ListItem[], nextBuckets);
   const now = nowIso();
-  const stamp = await stampLastUpdated(uid, now);
+  const { created, updated: stamp } = await actorStamps(uid, now);
   const existingIds = new Set((loaded.buckets as Bucket[]).map((b) => b.id));
   const batch = getFirestore().batch();
   batch.set(tenantRef(uid).collection('settings').doc('current'), { ...nextSettings, ...stamp }, { merge: true });
@@ -553,7 +560,7 @@ export const saveBuckets = onCall(async (request) => {
   for (const bucket of nextBuckets) {
     const { id, ...payload } = bucket;
     const ref = tenantRef(uid).collection('buckets').doc(id);
-    const rowStamp = existingIds.has(id) ? stamp : await stampCreated(uid, now);
+    const rowStamp = existingIds.has(id) ? stamp : created;
     batch.set(ref, { ...payload, ...rowStamp }, { merge: true });
   }
   await batch.commit();
@@ -622,10 +629,7 @@ function datesForItemEdit(
 ): string[] | null {
   const datedBucket =
     bucket &&
-    (bucket.kind === 'event' ||
-      bucket.id === EVENTS_ID ||
-      bucket.kind === 'appointment' ||
-      bucket.id === APPOINTMENTS_ID);
+    (isEventsBucket(bucket) || bucket.kind === 'appointment' || bucket.id === APPOINTMENTS_ID);
   // A repeating appointment runs on a cadence, so it can land anywhere in the
   // range and cannot be scoped to a pair of dates.
   if (!datedBucket || type !== 'scheduled') return null;
@@ -743,8 +747,8 @@ function buildItemPayload(
 }
 
 /**
- * One Save for the whole Lists tab. Deliberately not a loop over upsertItem:
- * that runs a full repack per row, so twenty rows would mean twenty rebuilds.
+ * One Save for the whole Lists tab. Deliberately not a per-row callable: that
+ * would run a full repack per row, so twenty rows would mean twenty rebuilds.
  * Validate everything first, write once, repack once.
  */
 export const saveItems = onCall(async (request) => {
@@ -752,7 +756,7 @@ export const saveItems = onCall(async (request) => {
   await ensureTenant(uid, nowIso());
   const rows = Array.isArray(request.data?.rows) ? (request.data.rows as Record<string, unknown>[]) : [];
   if (!rows.length) return { ok: true, saved: 0 };
-  const loaded = await loadTenant(uid);
+  const loaded = await loadTenant(uid, todayKey());
   const buckets = loaded.buckets as Bucket[];
   const items = loaded.items as ListItem[];
 
@@ -770,8 +774,7 @@ export const saveItems = onCall(async (request) => {
   });
 
   const now = nowIso();
-  const created = await stampCreated(uid, now);
-  const updated = await stampLastUpdated(uid, now);
+  const { created, updated } = await actorStamps(uid, now);
   const batch = getFirestore().batch();
   for (const row of prepared) {
     batch.set(
@@ -823,7 +826,7 @@ export const archiveItem = onCall(async (request) => {
   const before = await itemRef.get();
   const row = before.exists ? (before.data() as { bucketId?: string; dueAt?: string }) : undefined;
   await itemRef.set({ archived: true, ...stamp }, { merge: true });
-  const loaded = await loadTenant(uid);
+  const loaded = await loadTenant(uid, todayKey());
   const bucket = (loaded.buckets as Bucket[]).find((b) => b.id === row?.bucketId);
   const scoped = datesForItemEdit(bucket, before.exists ? (row as { type?: string })?.type : undefined, row?.dueAt, undefined);
   if (scoped) await writePackedDates(uid, scoped);
@@ -890,18 +893,14 @@ export const startBreak = onCall(async (request) => {
   if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
   const data = snap.data() as DayState;
   const remaining = sectionRemainingNow(data.sectionRemainingMinutes || 0, data.sectionStartedAt, data.pausedAt, Date.now());
-  const stamp = await stampLastUpdated(uid, nowIso());
-  await dayRef.set({ pausedAt: nowIso(), sectionRemainingMinutes: remaining, ...stamp }, { merge: true });
-  await writeLog(uid, { type: 'start_break', date });
+  await patchDayWithLog(uid, date, { pausedAt: nowIso(), sectionRemainingMinutes: remaining }, 'start_break');
   return { ok: true };
 });
 
 export const endBreak = onCall(async (request) => {
   const uid = await requireUid(request);
   const date = asDateKey(request.data?.date || todayKey(), 'Date');
-  const stamp = await stampLastUpdated(uid, nowIso());
-  await tenantRef(uid).collection('days').doc(date).set({ pausedAt: null, sectionStartedAt: nowIso(), ...stamp }, { merge: true });
-  await writeLog(uid, { type: 'end_break', date });
+  await patchDayWithLog(uid, date, { pausedAt: null, sectionStartedAt: nowIso() }, 'end_break');
   return { ok: true };
 });
 

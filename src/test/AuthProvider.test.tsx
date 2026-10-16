@@ -18,7 +18,8 @@ vi.mock('firebase/auth', () => ({
 vi.mock('../services/firebase', () => ({ auth: {}, googleProvider: {} }));
 vi.mock('../services/api', () => ({ api: { bootstrap: mocks.bootstrap } }));
 
-import { AuthProvider, useAuth } from '../shared/auth';
+import { AuthProvider } from '../shared/auth';
+import { useAuth } from '../shared/useAuth';
 
 function Probe() {
   const { user, gateError, ready } = useAuth();

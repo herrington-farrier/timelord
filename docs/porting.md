@@ -44,7 +44,7 @@ modules), which is why the packer cannot drift between them.
 | `cadence` | when a recurring item hits a date |
 | `skip` | leftovers, auto-skip, and skip-push (renewal) |
 | `score` | the XP score |
-| `events`, `seed`, `order`, `today`, `timer`, `duration`, `log`, `etas` | supporting rules |
+| `events`, `seed`, `order`, `today`, `timer`, `duration`, `log`, `predicates` | supporting rules (`predicates` holds the Events-bucket and routine-block checks) |
 | `types` | every shape, plus the ids (`WORK_ID`, `EVENTS_ID`, …) |
 
 The 50 test files in `src/test/` are the specification. Port them too; if a rewrite passes
@@ -177,17 +177,15 @@ callables rule.
 emails in `src/domain/allowlist.ts` *and* `firestore.rules` that must be kept in
 sync), and the whole UI.
 
-**Fix the timezone before anything else.** `America/Chicago` is hardcoded in
-**nine places across five files**, including `todayKey()` in `src/shared/dates.ts`,
-`functions/src/index.ts`, `functions/src/tenant.ts`, and `DEFAULT_SETTINGS`.
-
-The trap: `settings.timezone` **exists as a stored field and is never read**.
-`todayKey()` takes a timezone parameter, but every caller invokes it with no
-argument, so the default always wins. Anyone porting will reasonably assume the
-setting works. It does not. Every date key in the system — every `days/{date}`
-document id, every `dueAt`, every cadence match — derives from that one
-function, so this is the single most invasive thing to change later and the
-cheapest to change first.
+**Fix the timezone before anything else.** `America/Chicago` is the default
+parameter of `todayKey()`, `nowMinutes()` and `formatClock()` in
+`src/shared/dates.ts`, and nothing passes another. `functions/src/index.ts` and
+`tenant.ts` use that same `todayKey()`. There is no `settings.timezone` field:
+it was stored and never read, so it was removed. Every date key in the system
+(every `days/{date}` document id, every `dueAt`, every cadence match) derives
+from that one function, so this is the single most invasive thing to change
+later and the cheapest to change first. Old `settings/current` documents may
+still carry a `timezone` value; nothing reads it.
 
 **Watch for:** anything that recomputes a rule the domain already owns. Every
 serious bug in this project's history came from the same shape — a rule

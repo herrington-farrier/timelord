@@ -53,7 +53,7 @@ Buckets pack by **weight** (lower number = higher priority) inside their slot. E
 
 ## Day container
 
-Edit → Day shows the live morning / midday / evening section lengths, plus timer sound / vibrate, and **Reset Today** (re-packs today fresh and clears its start, end and timers; that day's own complete and skip log rows and the skip pushes it made are deleted, and its score is unwound). Edit → Buckets shows assigned weekly hours vs leftover. Personal hours are not subtracted from the week. Leftover week time stays unassigned. Save refuses a week that is over that cap.
+Edit → Day shows the live morning / midday / evening section lengths, plus timer sound / vibrate, and **Reset Today** (re-packs today fresh and clears its start, end and timers; that day's own complete and skip log rows and the skip pushes it made are deleted, and its score is unwound). Every day action — Complete, Skip, Start Quest, Start Next Chapter, Hearth, Reset Today — is decided by a planner in `src/domain/dayFlow.ts` and commits in one transaction with its log rows, skip pushes and score; repeating one does nothing. Edit → Buckets shows assigned weekly hours vs leftover. Personal hours are not subtracted from the week. Leftover week time stays unassigned. Save refuses a week that is over that cap.
 
 Each Strategize tab has one **Save** (Lists keeps per-row Remove). Add New empties itself once the write lands, so a second Save does not add the same bucket or item again; a refused save keeps what was typed. Lists saves through `saveItems`: every row validated first, then one batch and one repack. After a successful write, this week’s Sunday + 6 weeks (42 days) rebuild. Buckets Save is `saveBuckets`: Personal settings + Work + Events + weighted buckets (Add New if named), cap check, then pack. Item Save keeps the stored list weight. An unstarted day packs with fresh section thirds. A started or ended day keeps Complete / Skip and its score, and packs with its carried section time (`sectionExtra` / `sectionUsed`).
 
@@ -127,7 +127,7 @@ End Day: each leftover, in whichever section it sits, gets a skip log row. Lefto
 - Today and the Edit tabs that wait on live data show `Loading…` until it arrives.
 - A success is silent: the page re-rendering is the confirmation. Respawn is the exception (`Quests reset. +1 Life`).
 - When the server names a row and field, that row is also marked in place on Lists.
-- There is **no pack button**: every write that changes the schedule repacks 42 days on its own — inside the callable (`saveBuckets`, `resetBucket`, `upsertItem`, `reorderItems`, `archiveItem`, `reorderBuckets`) or via the client rebuild that follows it (`saveSettings`, `archiveBucket`, `upsertAppointment`, `archiveAppointment`).
+- There is **no pack button**: every write that changes the schedule repacks 42 days on its own — inside the callable (`saveBuckets`, `reorderBuckets`, `saveItems`, `reorderItems`, `archiveItem`) or via the client `rebuildRange` call that follows it (`saveSettings`, `archiveBucket`).
 - Guide is a short tour of what each bucket and page is for, plus the hard limits.
 - The chrome is navy and antique gold from the app icon.
 - The current page is marked in the menu.

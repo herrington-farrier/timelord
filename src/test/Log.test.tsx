@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { LogPage } from '../pages/Log';
 
-vi.mock('../shared/auth', () => ({
+vi.mock('../shared/useAuth', () => ({
   useAuth: () => ({ user: { uid: 'u1' } }),
 }));
 

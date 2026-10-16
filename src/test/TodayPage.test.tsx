@@ -39,7 +39,7 @@ const { api } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../shared/auth', () => ({
+vi.mock('../shared/useAuth', () => ({
   useAuth: () => ({ user: { uid: 'u1' }, logOut: vi.fn() }),
 }));
 

@@ -1,9 +1,10 @@
 import { collectEndDaySkipPushes, packDay, type DroppedBucket } from './packDay';
 import { dayHasAppointments, scoreDay } from './score';
 import { capsAfterLoad, isEventDay, liveSectionState, nextSlot, reservedLoad, sectionCapacity } from './sections';
+import { findEventsBucket, isEveningRoutine, isMorningRoutine } from './predicates';
 import { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate } from './skip';
 import { elapsedSince } from './timer';
-import { EVENTS_ID, type Bucket, type DaySettings, type ListItem, type PackedBlock, type SkipPush, type Slot } from './types';
+import { type Bucket, type DaySettings, type ListItem, type PackedBlock, type SkipPush, type Slot } from './types';
 
 /**
  * Day transitions as pure planners. Each takes the stored day plus what it needs
@@ -132,18 +133,6 @@ export function asPackInput(
 
 const NOT_FOUND_DAY = 'That day is not packed yet.';
 
-function isMorningRoutine(b: PackedBlock): boolean {
-  return b.title === 'Morning Routine' || String(b.id || '').endsWith(':morning');
-}
-
-function isEveningRoutine(b: PackedBlock): boolean {
-  return b.title === 'Evening Routine' || String(b.id || '').endsWith(':evening');
-}
-
-function eventsBucket(tenant: TenantData): Bucket | undefined {
-  return tenant.buckets.find((b) => b.id === EVENTS_ID || b.kind === 'event');
-}
-
 function requireDay(prev: DayState | null): DayState {
   if (!prev) throw new DayFlowError('not-found', NOT_FOUND_DAY);
   return prev;
@@ -232,7 +221,7 @@ export function planSkip(
   const item = tenant.items.find((i) => i.id === block.itemId);
   if (item?.type === 'scheduled') {
     const bucket = tenant.buckets.find((b) => b.id === item.bucketId);
-    const toDate = skipPushDate(item, bucket, date, eventsBucket(tenant));
+    const toDate = skipPushDate(item, bucket, date, findEventsBucket(tenant.buckets));
     // A split item is one item: its second skipped half adds no second push.
     if (toDate && !alreadyPushed(tenant, [...blocks, ...dropped], item.id, date, blockId)) pushes.push({ itemId: item.id, toDate, fromDate: date });
   }
@@ -275,7 +264,7 @@ export function planStartDay(
   const day = requireDay(prev);
   if (day.startedAt && !day.endedAt) return NO_PLAN;
   const logs = [{ type: 'start_day' as const, date }];
-  if (isEventDay(eventsBucket(tenant), date)) {
+  if (isEventDay(findEventsBucket(tenant.buckets), date)) {
     return {
       day: {
         startedAt: day.startedAt || now.iso,
@@ -444,7 +433,7 @@ export function planFinishDay(
 
   const score = scoreDay(blocks, dropped, {
     started: Boolean(day.startedAt),
-    isEventDay: isEventDay(eventsBucket(tenant), date),
+    isEventDay: isEventDay(findEventsBucket(tenant.buckets), date),
     hasAppointments: dayHasAppointments(blocks),
   });
   const eventMinutes =

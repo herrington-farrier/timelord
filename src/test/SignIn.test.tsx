@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { SignInPage } from '../pages/SignIn';
 
-vi.mock('../shared/auth', () => ({
+vi.mock('../shared/useAuth', () => ({
   useAuth: () => ({
     signIn: vi.fn(),
     gateError: 'Sign in: someone@gmail.com is not invited.',

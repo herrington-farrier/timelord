@@ -22,7 +22,6 @@ export type DaySettings = {
   dayMinutes: number;
   dayStartMinutes: number;
   transitionMinutes: number;
-  timezone: string;
   morningMinutes: number;
   breakMinutes: number;
   eveningMinutes: number;
@@ -161,7 +160,6 @@ export const DEFAULT_SETTINGS: DaySettings = {
   dayMinutes: 14 * 60,
   dayStartMinutes: 7 * 60,
   transitionMinutes: 10,
-  timezone: 'America/Chicago',
   morningMinutes: 60,
   breakMinutes: 30,
   eveningMinutes: 120,

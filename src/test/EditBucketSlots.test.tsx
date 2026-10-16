@@ -8,7 +8,7 @@ import { DEFAULT_SETTINGS } from '../domain/types';
 import { EditPage } from '../pages/Edit';
 import { bucket } from './fixtures';
 
-vi.mock('../shared/auth', () => ({
+vi.mock('../shared/useAuth', () => ({
   useAuth: () => ({ user: { uid: 'u1' } }),
 }));
 

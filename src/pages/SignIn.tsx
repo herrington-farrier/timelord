@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { useAuth } from '../shared/auth';
+import { useAuth } from '../shared/useAuth';
 import { firebaseConfigured } from '../services/firebase';
 import { formatActionError } from '../shared/formatActionError';
 

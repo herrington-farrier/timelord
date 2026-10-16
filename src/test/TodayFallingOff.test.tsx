@@ -24,7 +24,7 @@ function block(partial: Partial<PackedBlock> & Pick<PackedBlock, 'id' | 'kind'>)
 
 const dayState: { current: Record<string, unknown> } = { current: {} };
 
-vi.mock('../shared/auth', () => ({ useAuth: () => ({ user: { uid: 'u1' }, logOut: vi.fn() }) }));
+vi.mock('../shared/useAuth', () => ({ useAuth: () => ({ user: { uid: 'u1' }, logOut: vi.fn() }) }));
 vi.mock('../services/api', () => ({ api: {} }));
 vi.mock('../services/live', () => ({
   useSettings: () => DEFAULT_SETTINGS,

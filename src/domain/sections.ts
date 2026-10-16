@@ -1,5 +1,6 @@
 import { eventRanges } from './events';
-import { EVENTS_ID, SLOTS, WORK_ID, type Bucket, type DaySettings, type Slot } from './types';
+import { SLOTS, WORK_ID, type Bucket, type DaySettings, type Slot } from './types';
+import { isEventsBucket } from './predicates';
 
 export function daySections(settings: Pick<DaySettings, 'dayMinutes' | 'dayStartMinutes'>): {
   morning: { start: number; end: number };
@@ -174,7 +175,7 @@ export function slotIndex(slot: Slot | undefined): number {
 
 export function isEventDay(bucket: Bucket | undefined, date: string): boolean {
   if (!bucket || bucket.archived) return false;
-  if (bucket.kind !== 'event' && bucket.id !== EVENTS_ID) return false;
+  if (!isEventsBucket(bucket)) return false;
   return eventRanges(bucket).some((range) => date >= range.startDate && date <= range.endDate);
 }
 

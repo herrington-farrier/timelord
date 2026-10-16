@@ -1,4 +1,5 @@
 import { getAuth } from 'firebase-admin/auth';
+import { HttpsError } from 'firebase-functions/v2/https';
 
 export async function stampCreated(uid: string, nowIso: string): Promise<Record<string, string>> {
   const signature = await signatureFor(uid);
@@ -21,12 +22,17 @@ export async function stampLastUpdated(uid: string, nowIso: string): Promise<Rec
   };
 }
 
+/**
+ * The name written beside every stamp. Failing to look the user up fails the
+ * request: a stamp that silently reads as a bare uid would hide a broken auth
+ * lookup, and the audit trail is the one place that must not be guessed.
+ */
 async function signatureFor(uid: string): Promise<string> {
+  let user;
   try {
-    const user = await getAuth().getUser(uid);
-    const name = user.displayName?.trim() || user.email?.trim() || uid;
-    return name;
+    user = await getAuth().getUser(uid);
   } catch {
-    return uid;
+    throw new HttpsError('internal', 'Could not look up the signed-in user. Try again.');
   }
+  return user.displayName?.trim() || user.email?.trim() || uid;
 }

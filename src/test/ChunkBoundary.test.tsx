@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-import { ChunkBoundary, clearChunkReloadFlag } from '../components/ChunkBoundary';
+import { ChunkBoundary } from '../components/ChunkBoundary';
+import { clearChunkReloadFlag } from '../components/chunkReload';
 
 function Boom({ message }: { message: string }): never {
   throw new Error(message);

@@ -11,7 +11,7 @@ import { EditPage } from '../pages/Edit';
 import { clearToasts } from '../shared/toastBus';
 import { api } from '../services/api';
 
-vi.mock('../shared/auth', () => ({
+vi.mock('../shared/useAuth', () => ({
   useAuth: () => ({ user: { uid: 'u1' } }),
 }));
 
@@ -64,7 +64,7 @@ describe('Edit Events ranges', () => {
     expect(screen.getByDisplayValue('2026-08-31')).toBeInTheDocument();
     expect(screen.getByDisplayValue('2026-09-02')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Add range' }));
+    await user.click(screen.getByRole('button', { name: 'Add New' }));
     const starts = screen.getAllByLabelText('Start');
     const ends = screen.getAllByLabelText('End');
     expect(starts).toHaveLength(2);
@@ -130,7 +130,7 @@ describe('Edit Buckets regressions', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Buckets' }));
     await user.click(screen.getByRole('button', { name: /Events,/ }));
-    await user.click(screen.getByRole('button', { name: 'Add range' }));
+    await user.click(screen.getByRole('button', { name: 'Add New' }));
     await user.type(screen.getAllByLabelText('Start')[1], '2026-09-10');
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByText(/Save Buckets — Each event range needs a start and end date/)).toBeInTheDocument();

@@ -2,7 +2,7 @@ import { formatDuration } from '../domain/duration';
 import { formatLogEvent, logEventTone } from '../domain/log';
 import { addDaysKey, formatClock, formatDayLabel, todayKey } from '../shared/dates';
 import { useItems, useLogs, useScore } from '../services/live';
-import { useAuth } from '../shared/auth';
+import { useAuth } from '../shared/useAuth';
 import { Chrome } from '../components/Chrome';
 import { ScoreBar } from '../components/ScoreBar';
 

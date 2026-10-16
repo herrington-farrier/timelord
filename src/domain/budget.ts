@@ -1,6 +1,7 @@
 import { daysBetween, weekdayFromKey } from './cadence';
 import { formatDuration } from './duration';
-import { APPOINTMENTS_ID, EVENTS_ID, PERSONAL_ID, WORK_ID, type Bucket, type DaySettings, type HoursMode, type Slot, type Weekday } from './types';
+import { APPOINTMENTS_ID, PERSONAL_ID, WORK_ID, type Bucket, type DaySettings, type HoursMode, type Slot, type Weekday } from './types';
+import { isEventsBucket } from './predicates';
 
 export type DailyBudgetMap = Record<string, number>;
 
@@ -37,7 +38,7 @@ export function assignableWeekMinutes(settings: DaySettings): number {
 
 export function assignedWeekMinutes(buckets: Bucket[]): number {
   return buckets
-    .filter((b) => !b.archived && b.kind !== 'personal' && b.kind !== 'event' && b.id !== PERSONAL_ID && b.id !== EVENTS_ID)
+    .filter((b) => !b.archived && b.kind !== 'personal' && !isEventsBucket(b) && b.id !== PERSONAL_ID)
     .reduce((sum, b) => sum + bucketAssignedMinutes(b), 0);
 }
 
@@ -107,7 +108,7 @@ export function assignWeeklyBudgets(settings: DaySettings, buckets: Bucket[]): B
 }
 
 export function assignedDayBudget(bucket: Bucket): number {
-  if (bucket.archived || bucket.kind === 'personal' || bucket.kind === 'event') return 0;
+  if (bucket.archived || bucket.kind === 'personal' || isEventsBucket(bucket)) return 0;
   const days = activeDays(bucket);
   if (!days.length) return 0;
   if (hoursModeOf(bucket) === 'day') {
@@ -125,7 +126,7 @@ export function dailyBudgetFor(bucket: Bucket, dateKey: string): number {
 
 export function itemFitsBucket(durationMinutes: number, bucket: Bucket | undefined): boolean {
   if (durationMinutes === 0) return true;
-  if (!bucket || bucket.kind === 'event' || bucket.id === EVENTS_ID) return true;
+  if (!bucket || isEventsBucket(bucket)) return true;
   // Appointments are fixed commitments in a bucket with no hours, so there is
   // no daily budget to measure them against.
   if (bucket.kind === 'appointment' || bucket.id === APPOINTMENTS_ID) return true;

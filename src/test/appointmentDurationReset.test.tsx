@@ -7,7 +7,7 @@ import { APPOINTMENTS_BUCKET } from '../domain/seed';
 import { APPOINTMENTS_ID, DEFAULT_SETTINGS } from '../domain/types';
 import { EditPage } from '../pages/Edit';
 
-vi.mock('../shared/auth', () => ({
+vi.mock('../shared/useAuth', () => ({
   useAuth: () => ({ user: { uid: 'u1' } }),
 }));
 

@@ -946,6 +946,7 @@ button:disabled {
   gap: 4px;
   min-width: 0;
 }
+.field--spaced { margin-top: 10px; }
 .field > span {
   font-size: var(--label-size);
   letter-spacing: 0.06em;

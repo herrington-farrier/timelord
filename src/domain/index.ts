@@ -6,7 +6,7 @@ export { assignWeeklyBudgets, assignableWeekMinutes, personalCountsAsDay, person
 export { eventRanges, eventRangeForItem, eventRangeName, expiredEventRanges, liveEventRanges, newEventRangeId, parseEventRanges } from './events';
 export { packDay, collectEndDaySkipPushes, daySections, sectionMinutes } from './packDay';
 export { PACK_RANGE_DAYS, packRange } from './packWeek';
-export { recomputeEtas } from './etas';
+export { findEventsBucket, isEveningRoutine, isEventsBucket, isMorningRoutine } from './predicates';
 export { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate, nextAssignedDate } from './skip';
 export { SEED_BUCKETS, seedItems, seedEventRanges, PERSONAL_BUCKET, WORK_BUCKET, EVENTS_BUCKET, APPOINTMENTS_BUCKET, isAppointmentBucket, defaultSettings, canDeleteBucket, canRenameBucket, splitEditBuckets, listableBuckets, listCadenceDays, bucketsToBackfill } from './seed';
 export { applyBucketOrder, applyItemOrder, sortByWeight, nextItemWeight } from './order';

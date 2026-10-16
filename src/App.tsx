@@ -1,12 +1,13 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
-import { ChunkBoundary, clearChunkReloadFlag } from './components/ChunkBoundary';
+import { ChunkBoundary } from './components/ChunkBoundary';
+import { clearChunkReloadFlag } from './components/chunkReload';
 import { Toasts } from './components/Toasts';
 
 import { SignInPage } from './pages/SignIn';
 import { TodayPage } from './pages/Today';
-import { useAuth } from './shared/auth';
+import { useAuth } from './shared/useAuth';
 
 // Today is the landing screen and stays in the first chunk. The rest load on
 // navigation, which keeps @dnd-kit (Edit only) out of the initial download.

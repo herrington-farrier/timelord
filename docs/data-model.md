@@ -36,12 +36,12 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 
 ## settings/current
 
-- `dayMinutes` (productive time; split into three packer sections), `dayStartMinutes` (unused by the packer), `transitionMinutes`, `timezone`
+- `dayMinutes` (productive time; split into three packer sections), `dayStartMinutes` (unused by the packer), `transitionMinutes`
 - `morningMinutes`, `breakMinutes`, `eveningMinutes` (Personal pause lengths; not in weekly capacity)
 - `timerSound`, `timerVibrate` (section timers)
 - `personalCountsAsDay` — when true, Personal minutes come out of the day and its sections rather than sitting beside them. The routines are then **static** on Quest and on the board: they take their time and are neither completed nor skipped
 - `sectionSplit` — `{ morning, midday, evening }`, the day's own division, balanced in whole hours on Strategize → Day. The even default is whole hours too (`14h` is `4h / 5h / 5h`), so a stretch never reads `4h 40m`. Day Length stays the truth: a split that does not add back to it is stale and an even split is used instead
-- audit stamps
+- audit stamps (the signature is the user's display name, else email, else uid; a failed user lookup fails the write rather than falling back to the uid)
 
 ## buckets/{id}
 
@@ -101,3 +101,4 @@ Append-only: `type`, `at`, `date`, `itemId`, `bucketId`, `minutes`, optional `ti
 ## skipPushes/{id}
 
 - `itemId`, `fromDate`, `toDate`
+- A push matters only on its `toDate`. `loadTenant` reads pushes whose `toDate` is on or after the first day the caller packs or acts on (or today, whichever is earlier), so the collection's age does not slow every request. Each range pack (`writePackedRange`) first deletes pushes whose `toDate` is before the start of the current week, which is the earliest day any pack covers. No repack rewrites a day before the current week (`repackableDates`), so a pruned push can never be needed again; editing a past-dated event or appointment leaves that past day as it was.

@@ -17,6 +17,7 @@ import {
   type SkipPush,
   type Slot,
 } from './types';
+import { EVENING_ROUTINE_TITLE, findEventsBucket, isEventsBucket, MORNING_ROUTINE_TITLE } from './predicates';
 
 export type PackDayInput = {
   date: string;
@@ -81,7 +82,7 @@ function itemHitsDate(
 ): boolean {
   if (item.archived) return false;
   // A bucket with no open days is closed, and a closed bucket hits nothing.
-  if (bucket && !bucket.days?.length && bucket.id !== EVENTS_ID) return false;
+  if (bucket && !bucket.days?.length && !isEventsBucket(bucket)) return false;
   if (skipPushes.some((p) => p.itemId === item.id && p.toDate === dateKey)) return true;
   // Events always sit on one date inside their range.
   if (item.bucketId === EVENTS_ID) return item.dueAt === dateKey;
@@ -109,7 +110,7 @@ function blockId(date: string, suffix: string): string {
 function blockKind(bucket: Bucket): PackedBlock['kind'] {
   if (isAppointmentBucket(bucket)) return 'appointment';
   if (bucket.kind === 'work') return 'work';
-  if (bucket.kind === 'event') return 'event';
+  if (isEventsBucket(bucket)) return 'event';
   return 'weighted';
 }
 
@@ -136,7 +137,7 @@ export function packDay(input: PackDayInput): PackDayResult {
   if (!foundWork) throw new Error('Work bucket is required.');
   const work = foundWork;
   const personal = buckets.find((b) => b.kind === 'personal' || b.id === PERSONAL_ID);
-  const events = buckets.find((b) => b.kind === 'event' || b.id === EVENTS_ID);
+  const events = findEventsBucket(buckets);
 
   const blocks: PackedBlock[] = [];
   const dropped: PackedBlock[] = [];
@@ -178,7 +179,7 @@ export function packDay(input: PackDayInput): PackDayResult {
       status: 'dropped',
       color: bucket.color,
       flexible: true,
-      ...(bucket.kind === 'event' ? {} : { slot: slotForItem(item, bucket) }),
+      ...(isEventsBucket(bucket) ? {} : { slot: slotForItem(item, bucket) }),
     });
   }
 
@@ -196,7 +197,7 @@ export function packDay(input: PackDayInput): PackDayResult {
   pushBlock({
     id: blockId(date, 'morning'),
     bucketId: PERSONAL_ID,
-    title: 'Morning Routine',
+    title: MORNING_ROUTINE_TITLE,
     kind: 'personal',
     startMinutes: order++,
     durationMinutes: personalMins.morning,
@@ -208,7 +209,7 @@ export function packDay(input: PackDayInput): PackDayResult {
   pushBlock({
     id: blockId(date, 'evening'),
     bucketId: PERSONAL_ID,
-    title: 'Evening Routine',
+    title: EVENING_ROUTINE_TITLE,
     kind: 'personal',
     startMinutes: 900 + order++,
     durationMinutes: personalMins.evening,
@@ -303,7 +304,7 @@ export function packDay(input: PackDayInput): PackDayResult {
           (b) =>
             !b.archived &&
             b.kind !== 'personal' &&
-            b.kind !== 'event' &&
+            !isEventsBucket(b) &&
             bucketSlots(b).includes(slot) &&
             hittingFor(b).some((it) => slotForItem(it, b) === slot)
         ).length;
@@ -425,7 +426,7 @@ export function packDay(input: PackDayInput): PackDayResult {
       (b) =>
         !b.archived &&
         (b.kind === 'weighted' || b.kind === 'work' || isAppointmentBucket(b)) &&
-        b.id !== EVENTS_ID
+        !isEventsBucket(b)
     )
     // Appointments come first in every section, ahead of Work. Ordered by kind
     // rather than weight: Personal and Events are both weight 0 already, so a
@@ -487,7 +488,7 @@ export function packDay(input: PackDayInput): PackDayResult {
   }
 
   for (const b of buckets) {
-    if (b.archived || b.kind === 'personal' || b.kind === 'event') continue;
+    if (b.archived || b.kind === 'personal' || isEventsBucket(b)) continue;
     for (const it of hittingFor(b)) {
       if (!blocks.some((bl) => bl.itemId === it.id) && !dropped.some((d) => d.itemId === it.id)) {
         dropItem(it, b);
@@ -577,7 +578,7 @@ export function collectEndDaySkipPushes(
     const item = items.find((i) => i.id === block.itemId);
     if (!item || item.type !== 'scheduled') continue;
     const bucket = buckets.find((b) => b.id === item.bucketId);
-    const toDate = skipPushDate(item, bucket, date, buckets.find((b) => b.kind === 'event' || b.id === EVENTS_ID));
+    const toDate = skipPushDate(item, bucket, date, findEventsBucket(buckets));
     if (toDate) out.push({ itemId: item.id, toDate });
   }
   return out;

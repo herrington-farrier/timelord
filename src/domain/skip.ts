@@ -1,7 +1,9 @@
+import { weekStart } from '../shared/dates';
 import { addDaysKey, weekdayFromKey } from './cadence';
 import { isEventDay } from './sections';
 import { todaySectionDropped, todaySectionItems } from './today';
-import { APPOINTMENTS_ID, EVENTS_ID, SLOTS, type Bucket, type ListItem, type PackedBlock, type Slot } from './types';
+import { APPOINTMENTS_ID, SLOTS, type Bucket, type ListItem, type PackedBlock, type Slot } from './types';
+import { isEventsBucket } from './predicates';
 
 function isLeftover(block: PackedBlock): boolean {
   return (
@@ -59,7 +61,33 @@ export function skipPushDate(item: ListItem, bucket: Bucket | undefined, fromDat
   if (!bucket) return null;
   // Events and appointments are pinned to a date. Skipping one cancels it; it
   // does not reappear on the next day the bucket runs.
-  if (bucket.kind === 'event' || bucket.id === EVENTS_ID) return null;
+  if (isEventsBucket(bucket)) return null;
   if (bucket.kind === 'appointment' || bucket.id === APPOINTMENTS_ID) return null;
   return nextAssignedDate(bucket, fromDate, events);
+}
+
+/**
+ * The earliest `toDate` a caller needs loaded. A push only matters on the day it
+ * lands, so packing from `firstDate` needs pushes landing on or after it; today
+ * is the floor for a caller that packs only the future.
+ */
+export function pushesNeededFrom(firstDate: string, today: string): string {
+  return firstDate < today ? firstDate : today;
+}
+
+/**
+ * Pushes that landed before the first day any pack covers (the start of this
+ * week) can never change a day again. These are deleted when a range is packed.
+ */
+export function pushPruneCutoff(today: string): string {
+  return weekStart(today);
+}
+
+/**
+ * The dates a repack may rewrite. A past week is history, and the pushes that
+ * landed on it may already be pruned, so repacking it would drop pushed items.
+ */
+export function repackableDates(dates: string[], today: string): string[] {
+  const from = pushPruneCutoff(today);
+  return dates.filter((d) => d >= from);
 }

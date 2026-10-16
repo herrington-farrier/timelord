@@ -4,6 +4,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { bucketsToBackfill, PERSONAL_BUCKET, SEED_BUCKETS, seedEventRanges, seedItems } from '../../src/domain/seed';
 import type { Bucket } from '../../src/domain/types';
 import { APPOINTMENTS_ID, DEFAULT_SETTINGS, EVENTS_ID } from '../../src/domain/types';
+import { todayKey } from '../../src/shared/dates';
 import { stampCreated } from './actorAudit';
 
 export function tenantRef(uid: string) {
@@ -31,7 +32,7 @@ export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
     const batch = getFirestore().batch();
     batch.set(ref, { ...stamp, schema: TENANT_SCHEMA });
     batch.set(ref.collection('settings').doc('current'), { ...DEFAULT_SETTINGS, ...stamp });
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
+    const today = todayKey();
     for (const bucket of [PERSONAL_BUCKET, ...SEED_BUCKETS]) {
       // the example event needs live dates, not dates fixed at build time
       const seeded = bucket.id === EVENTS_ID ? { ...bucket, ranges: seedEventRanges(today) } : bucket;
@@ -91,7 +92,7 @@ export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
   if (existing.filter((b) => !b.archived).length === 0) {
     const itemsSnap = await ref.collection('items').get();
     if (itemsSnap.empty) {
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
+      const today = todayKey();
       for (const item of seedItems(today)) {
         batch.set(ref.collection('items').doc(item.id), { ...item, ...stamp });
       }
@@ -104,13 +105,18 @@ export async function ensureTenant(uid: string, nowIso: string): Promise<void> {
   await batch.commit();
 }
 
-export async function loadTenant(uid: string) {
+/**
+ * Everything a pack or a planner needs. `pushesFrom` is the earliest day the
+ * caller will pack or act on: skipPushes landing before it cannot affect that
+ * work, so they are not read.
+ */
+export async function loadTenant(uid: string, pushesFrom: string) {
   const ref = tenantRef(uid);
   const [settingsSnap, bucketsSnap, itemsSnap, pushesSnap] = await Promise.all([
     ref.collection('settings').doc('current').get(),
     ref.collection('buckets').get(),
     ref.collection('items').get(),
-    ref.collection('skipPushes').get(),
+    ref.collection('skipPushes').where('toDate', '>=', pushesFrom).get(),
   ]);
   if (!settingsSnap.exists) {
     throw new HttpsError('failed-precondition', 'This account is not set up yet.');

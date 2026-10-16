@@ -1,25 +1,10 @@
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { api } from '../services/api';
 import { auth, googleProvider } from '../services/firebase';
 import { AllowlistClaimError, gateErrorMessage, hasAllowlistClaim, requireAllowlistClaim, shouldSignOutOnGateError } from './authGate';
-
-type AuthContextValue = {
-  user: User | null;
-  ready: boolean;
-  gateError: string | null;
-  signIn: () => Promise<void>;
-  logOut: () => Promise<void>;
-};
-
-const AuthContext = createContext<AuthContextValue | null>(null);
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
-}
+import { AuthContext } from './useAuth';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);

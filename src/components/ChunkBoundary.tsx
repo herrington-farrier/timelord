@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
-const RELOAD_KEY = 'timelord:chunk-reload';
+import { RELOAD_KEY } from './chunkReload';
 
 /**
  * Catches the one failure a code-split app reliably produces: a page whose
@@ -58,14 +58,5 @@ export class ChunkBoundary extends Component<Props, State> {
       );
     }
     return this.props.children;
-  }
-}
-
-/** Called once the app is running, so the next stale chunk may reload again. */
-export function clearChunkReloadFlag(): void {
-  try {
-    sessionStorage.removeItem(RELOAD_KEY);
-  } catch {
-    /* nothing to clear */
   }
 }

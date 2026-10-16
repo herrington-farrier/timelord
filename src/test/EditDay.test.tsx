@@ -10,7 +10,7 @@ import { EditPage } from '../pages/Edit';
 import { clearToasts } from '../shared/toastBus';
 import { api } from '../services/api';
 
-vi.mock('../shared/auth', () => ({
+vi.mock('../shared/useAuth', () => ({
   useAuth: () => ({ user: { uid: 'u1' } }),
 }));
 

@@ -20,11 +20,13 @@ import {
   todaySectionItems,
 } from '../domain/today';
 import { sectionRemainingNow } from '../domain/timer';
-import { EVENTS_ID, type PackedBlock, type Slot } from '../domain/types';
+import { findEventsBucket } from '../domain/predicates';
+import { PERSONAL_BUCKET } from '../domain/seed';
+import type { PackedBlock, Slot } from '../domain/types';
 import { api } from '../services/api';
 import { isLoadFailed } from '../services/loadState';
 import { useBuckets, useDay, useScore, useSettings } from '../services/live';
-import { useAuth } from '../shared/auth';
+import { useAuth } from '../shared/useAuth';
 import { todayKey } from '../shared/dates';
 import { toastFailure } from '../shared/toastBus';
 
@@ -48,7 +50,7 @@ export function TodayPage() {
   const score = useScore(user?.uid);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const events = buckets?.find((b) => b.id === EVENTS_ID || b.kind === 'event');
+  const events = buckets ? findEventsBucket(buckets) : undefined;
   const eventDay = isEventDay(events, date);
   const started = Boolean(day?.startedAt) && !day?.endedAt;
   const ended = Boolean(day?.endedAt);
@@ -388,7 +390,7 @@ function BreakControl({
   return (
     // Break is the only Personal block Quest shows, so without --bcolor the
     // Personal colour never appeared anywhere on the page.
-    <div className="item" style={{ ['--bcolor' as string]: `#${color || '5b9bd5'}`, ...stagger(index) }}>
+    <div className="item" style={{ ['--bcolor' as string]: `#${color || PERSONAL_BUCKET.color}`, ...stagger(index) }}>
       <div className="item-top">
         <div className="item-title">Break</div>
       </div>

@@ -10,7 +10,7 @@ import { EditPage } from '../pages/Edit';
 const saveItems = vi.fn().mockResolvedValue({ ok: true });
 let itemsMock: () => unknown[] = () => [];
 
-vi.mock('../shared/auth', () => ({ useAuth: () => ({ user: { uid: 'u1' } }) }));
+vi.mock('../shared/useAuth', () => ({ useAuth: () => ({ user: { uid: 'u1' } }) }));
 vi.mock('../services/live', () => ({
   useSettings: () => DEFAULT_SETTINGS,
   useBuckets: () => [PERSONAL_BUCKET, WORK_BUCKET, APPOINTMENTS_BUCKET],

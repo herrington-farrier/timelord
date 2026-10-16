@@ -12,6 +12,7 @@ import {
   type ListItem,
   type Weekday,
 } from './types';
+import { findEventsBucket } from './predicates';
 
 export const PERSONAL_BUCKET: Bucket = {
   id: PERSONAL_ID,
@@ -224,7 +225,7 @@ export function splitEditBuckets(buckets: Bucket[]): {
   const live = buckets.filter((b) => !b.archived);
   const personal = live.find((b) => b.kind === 'personal' || b.id === PERSONAL_ID) ?? PERSONAL_BUCKET;
   const work = live.find((b) => b.kind === 'work' || b.id === WORK_ID) ?? WORK_BUCKET;
-  const events = live.find((b) => b.kind === 'event' || b.id === EVENTS_ID) ?? EVENTS_BUCKET;
+  const events = findEventsBucket(live) ?? EVENTS_BUCKET;
   const appointments = live.find((b) => isAppointmentBucket(b)) ?? APPOINTMENTS_BUCKET;
   const weighted = live
     .filter(
