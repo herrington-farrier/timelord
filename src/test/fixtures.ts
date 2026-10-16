@@ -1,4 +1,12 @@
-import { DEFAULT_SETTINGS, WORK_ID, type Bucket, type DaySettings, type ListItem } from '../domain/types';
+import type { DayState, TenantData } from '../domain/dayFlow';
+import {
+  DEFAULT_SETTINGS,
+  WORK_ID,
+  type Bucket,
+  type DaySettings,
+  type ListItem,
+  type PackedBlock,
+} from '../domain/types';
 
 export function settings(overrides: Partial<DaySettings> = {}): DaySettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
@@ -43,6 +51,52 @@ export function item(overrides: Partial<ListItem> & Pick<ListItem, 'id' | 'bucke
     weight: 1,
     durationMinutes: 30,
     cadence: { kind: 'daily' },
+    ...overrides,
+  };
+}
+
+export function packedBlock(
+  overrides: Partial<PackedBlock> & Pick<PackedBlock, 'id' | 'kind'>
+): PackedBlock {
+  return {
+    date: '2026-08-31',
+    bucketId: 'house',
+    title: overrides.title ?? overrides.id,
+    startMinutes: 0,
+    endMinutes: 30,
+    durationMinutes: 30,
+    status: 'pending',
+    color: '94a3b8',
+    flexible: true,
+    ...overrides,
+  };
+}
+
+/** A stored day doc. Defaults to an unstarted, packed, empty day. */
+export function dayState(overrides: Partial<DayState> = {}): DayState {
+  return {
+    blocks: [],
+    dropped: [],
+    droppedBuckets: [],
+    packedMinutes: 0,
+    droppedMinutes: 0,
+    remainingMinutes: 0,
+    packedAt: '2026-08-31T06:00:00.000Z',
+    startedAt: null,
+    endedAt: null,
+    section: null,
+    scoreDelta: 0,
+    ...overrides,
+  };
+}
+
+/** What a handler loads from the tenant: a Work bucket and nothing else by default. */
+export function tenantData(overrides: Partial<TenantData> = {}): TenantData {
+  return {
+    items: [],
+    buckets: [workBucket()],
+    settings: settings(),
+    skipPushes: [],
     ...overrides,
   };
 }

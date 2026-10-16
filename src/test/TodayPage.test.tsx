@@ -260,4 +260,31 @@ describe('TodayPage', () => {
     });
     expect(api.startNext).not.toHaveBeenCalled();
   });
+
+  it("disables Today's action buttons while a request is pending", async () => {
+    const user = userEvent.setup();
+    const startedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    dayState.current = {
+      startedAt,
+      section: 'morning',
+      sectionStartedAt: startedAt,
+      sectionRemainingMinutes: 120,
+      packedAt: startedAt,
+      packedMinutes: 30,
+      blocks: [],
+      dropped: [],
+    };
+    let release: (v: unknown) => void = () => {};
+    api.startNext.mockClear();
+    api.startNext.mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
+    renderToday();
+    const next = screen.getByRole('button', { name: /Start Next Chapter/ });
+    await user.click(next);
+    expect(next).toBeDisabled();
+    await user.click(next);
+    expect(api.startNext).toHaveBeenCalledTimes(1);
+
+    await act(async () => release({ ok: true }));
+    expect(next).toBeEnabled();
+  });
 });

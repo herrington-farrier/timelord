@@ -10,12 +10,26 @@ import { eventRangeName, eventRanges, expiredEventRanges, parseEventRanges } fro
 import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
 import { formatDuration } from '../../src/domain/duration';
-import { collectEndDaySkipPushes, packDay } from '../../src/domain/packDay';
-import { applyDelta, dayHasAppointments, scoreDay } from '../../src/domain/score';
+import {
+  asPackInput,
+  DayFlowError,
+  planComplete,
+  planFinishDay,
+  planRepack,
+  planRespawn,
+  planSkip,
+  planStartDay,
+  planStartNext,
+  stampLogTimes,
+  type DayPlan,
+  type DayState,
+  type Now,
+  type TenantData,
+} from '../../src/domain/dayFlow';
+import { applyDelta } from '../../src/domain/score';
 import { PACK_RANGE_DAYS } from '../../src/domain/packWeek';
-import { reservedLoad, bucketSlots, capsAfterLoad, eatFromSections, isEventDay, itemWorkSlot, liveSectionState, nextSlot, parseBucketSlots, sectionCapacity, sectionSplitFits, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
-import { leftoverSectionBlocks, markLeftoversSkipped, skipLogBlocks, skipPushDate } from '../../src/domain/skip';
-import { elapsedSince, sectionRemainingNow } from '../../src/domain/timer';
+import { bucketSlots, eatFromSections, itemWorkSlot, parseBucketSlots, sectionSplitFits, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
+import { sectionRemainingNow } from '../../src/domain/timer';
 import { nextItemWeight } from '../../src/domain/order';
 import type { Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Slot, Weekday } from '../../src/domain/types';
 import { APPOINTMENTS_ID, EVENTS_ID, SLOTS, WORK_ID } from '../../src/domain/types';
@@ -36,6 +50,7 @@ function domainCall<T>(fn: () => T): T {
     return fn();
   } catch (err) {
     if (err instanceof HttpsError) throw err;
+    if (err instanceof DayFlowError) throw new HttpsError(err.code, err.message);
     const msg = err instanceof Error ? err.message : 'Could not pack this week.';
     throw new HttpsError('failed-precondition', msg);
   }
@@ -137,20 +152,6 @@ function bucketFields(data: Record<string, unknown>, resolvedKind: string, resol
   };
 }
 
-type DayState = {
-  blocks?: PackedBlock[];
-  startedAt?: string;
-  endedAt?: string;
-  section?: Slot | 'event' | null;
-  sectionStartedAt?: string | null;
-  sectionRemainingMinutes?: number | null;
-  pausedAt?: string | null;
-  sectionExtra?: Partial<Record<Slot, number>>;
-  sectionUsed?: Partial<Record<Slot, number>>;
-  eventStartedAt?: string | null;
-  scoreDelta?: number;
-};
-
 /**
  * Firestore caps a write batch at 500, and logs accumulate a row per
  * complete / skip / pack, so a tenant can easily hold more than that.
@@ -186,11 +187,6 @@ async function writePackedRange(uid: string, start: string, days: number): Promi
   );
 }
 
-/**
- * Repack exactly these dates. Editing a date-keyed item — an appointment or an
- * event entry — changes one or two days, not the whole range, so it says so
- * rather than rebuilding six weeks.
- */
 /**
  * Delete events whose last day has passed, and everything scheduled inside
  * them. Decided as delete rather than archive: no history is kept for events,
@@ -230,64 +226,105 @@ async function pruneExpiredEvents(
   };
 }
 
+/** One actor lookup per request: the created stamp, and its last_updated half. */
+async function actorStamps(uid: string, iso: string) {
+  const created = await stampCreated(uid, iso);
+  const updated = Object.fromEntries(Object.entries(created).filter(([k]) => k.startsWith('last_updated')));
+  return { created, updated };
+}
+
+function nowOf(): Now {
+  const ms = Date.now();
+  return { iso: new Date(ms).toISOString(), ms };
+}
+
+/** Replace exactly the planned fields; nested maps (sectionExtra) are replaced, not merged. */
+function setDay(
+  tx: FirebaseFirestore.Transaction,
+  ref: FirebaseFirestore.DocumentReference,
+  patch: object,
+  stamp: Record<string, string>
+): void {
+  const data = firestoreDoc({ ...patch, ...stamp });
+  tx.set(ref, data, { mergeFields: Object.keys(data) });
+}
+
+/**
+ * Repack exactly these dates. Editing a date-keyed item — an appointment or an
+ * event entry — changes one or two days, not the whole range, so it says so
+ * rather than rebuilding six weeks.
+ */
 async function writePackedDates(uid: string, dates: string[]): Promise<void> {
   if (!dates.length) return;
   let loaded = await loadTenant(uid);
   loaded = await pruneExpiredEvents(uid, loaded);
+  const tenant = loaded as unknown as TenantData;
+  const now = nowOf();
+  const { created, updated } = await actorStamps(uid, now.iso);
   const daysCol = tenantRef(uid).collection('days');
-  const prevSnaps = await getFirestore().getAll(...dates.map((d) => daysCol.doc(d)));
-
-  const batch = getFirestore().batch();
-  let changed = 0;
-  dates.forEach((date, i) => {
-    const snap = prevSnaps[i];
-    const prev = snap.exists ? (snap.data() as DayState) : null;
-    const reusePrevious = Boolean(prev?.blocks && (prev.startedAt || prev.endedAt));
-    const result = domainCall(() =>
-      packDay(asPackInput(loaded, date, reusePrevious ? prev?.blocks : undefined))
-    );
-    const next = firestoreDoc({
-      ...result,
-      startedAt: prev?.startedAt || null,
-      endedAt: prev?.endedAt || null,
-      packedAt: nowIso(),
-      section: prev?.section ?? null,
-      sectionStartedAt: prev?.sectionStartedAt ?? null,
-      sectionRemainingMinutes: prev?.sectionRemainingMinutes ?? null,
-      pausedAt: prev?.pausedAt ?? null,
-      sectionExtra: {},
-      sectionUsed: {},
-      eventStartedAt: prev?.eventStartedAt ?? null,
+  // Read and write in one transaction, so a repack cannot write stale blocks
+  // over a Complete that landed in between.
+  await getFirestore().runTransaction(async (tx) => {
+    const snaps = await tx.getAll(...dates.map((d) => daysCol.doc(d)));
+    dates.forEach((date, i) => {
+      const prev = snaps[i].exists ? (snaps[i].data() as DayState) : null;
+      const plan = domainCall(() => planRepack(prev, tenant, date, now));
+      if (plan.day) setDay(tx, daysCol.doc(date), plan.day, prev ? updated : created);
     });
-    // packedAt changes every run, so compare everything else.
-    if (prev && unchangedDay(prev as Record<string, unknown>, next)) return;
-    batch.set(daysCol.doc(date), next);
-    changed += 1;
   });
-  if (changed) await batch.commit();
 }
-
-const VOLATILE_DAY_KEYS = new Set(['packedAt', 'created_at', 'created_by', 'last_updated_at', 'last_updated_by']);
 
 /**
- * Key order is not stable between what Firestore returns and what we build, so
- * a plain JSON.stringify would report every day as changed and defeat the diff.
+ * Run one day transition. The planner is pure; this reads the day, applies the
+ * plan and commits the day, its log rows, skip pushes and score together, so a
+ * double tap or a racing repack sees either all of it or none of it.
  */
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
-  if (value && typeof value === 'object') {
-    const row = value as Record<string, unknown>;
-    const keys = Object.keys(row).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableJson(row[k])}`).join(',')}}`;
-  }
-  return JSON.stringify(value === undefined ? null : value);
-}
+async function mutateDay(
+  uid: string,
+  date: string,
+  planner: (prev: DayState | null, tenant: TenantData, now: Now) => DayPlan
+): Promise<DayPlan> {
+  const tenant = (await loadTenant(uid)) as unknown as TenantData;
+  const now = nowOf();
+  const { created, updated } = await actorStamps(uid, now.iso);
+  const root = tenantRef(uid);
+  const dayRef = root.collection('days').doc(date);
+  const scoreRef = root.collection('score').doc('current');
+  return getFirestore().runTransaction(async (tx) => {
+    const daySnap = await tx.get(dayRef);
+    const prev = daySnap.exists ? (daySnap.data() as DayState) : null;
+    const plan = domainCall(() => planner(prev, tenant, now));
+    if (!plan.day) return plan;
 
-/** Same packed content, ignoring the stamps that move on every run. */
-function unchangedDay(prev: Record<string, unknown>, next: Record<string, unknown>): boolean {
-  const strip = (row: Record<string, unknown>) =>
-    Object.fromEntries(Object.entries(row).filter(([k]) => !VOLATILE_DAY_KEYS.has(k)));
-  return stableJson(strip(prev)) === stableJson(strip(next));
+    const scoreSnap = plan.scoreDelta ? await tx.get(scoreRef) : null;
+    const staleLogs = plan.deletePushesFrom ? await tx.get(root.collection('logs').where('date', '==', date)) : null;
+    const stalePushes = plan.deletePushesFrom
+      ? await tx.get(root.collection('skipPushes').where('fromDate', '==', plan.deletePushesFrom))
+      : null;
+
+    setDay(tx, dayRef, plan.day, prev ? updated : created);
+    for (const row of stampLogTimes(plan.logs, now)) {
+      tx.set(root.collection('logs').doc(newId()), firestoreDoc({ ...row, ...created }));
+    }
+    for (const push of plan.pushes) {
+      tx.set(root.collection('skipPushes').doc(newId()), firestoreDoc({ ...push, ...created }));
+    }
+    if (scoreSnap) {
+      const total = scoreSnap.exists ? Number((scoreSnap.data() as { total?: unknown }).total) : 0;
+      tx.set(
+        scoreRef,
+        { total: applyDelta(total, plan.scoreDelta), updatedAt: now.iso, ...(scoreSnap.exists ? updated : created) },
+        { merge: true }
+      );
+    }
+    // Today's own complete / skip rows go with a Respawn, so Stats agrees with the day.
+    staleLogs?.docs.forEach((doc) => {
+      const type = (doc.data() as { type?: string }).type;
+      if (type === 'complete' || type === 'skip') tx.delete(doc.ref);
+    });
+    stalePushes?.docs.forEach((doc) => tx.delete(doc.ref));
+    return plan;
+  });
 }
 
 async function writeAccessLog(row: { type: 'signup' | 'denied'; email: string; uid: string }): Promise<void> {
@@ -807,31 +844,6 @@ export const archiveItem = onCall(async (request) => {
   return { ok: true };
 });
 
-function asPackInput(
-  loaded: Awaited<ReturnType<typeof loadTenant>>,
-  date: string,
-  previous?: PackedBlock[],
-  extra?: Partial<Record<Slot, number>>,
-  used?: Partial<Record<Slot, number>>
-) {
-  return {
-    date,
-    settings: loaded.settings as DaySettings,
-    buckets: loaded.buckets as Bucket[],
-    items: loaded.items as ListItem[],
-    skipPushes: loaded.skipPushes as SkipPush[],
-    sectionExtra: extra,
-    sectionUsed: used,
-    previous: previous?.map((b) => ({
-      itemId: b.itemId,
-      appointmentId: b.appointmentId,
-      status: b.status,
-      startMinutes: b.startMinutes,
-      endMinutes: b.endMinutes,
-    })),
-  };
-}
-
 export const rebuildRange = onCall(async (request) => {
   const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
@@ -845,134 +857,15 @@ export const resetToday = onCall(async (request) => {
   const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
   const date = asString(request.data?.date || todayKey(), 'Date');
-  const loaded = await loadTenant(uid);
-  const dayRef = tenantRef(uid).collection('days').doc(date);
-  // Respawn starts the day over, so whatever it scored is taken back. The day
-  // stored its own delta precisely so this does not have to be recomputed from
-  // evidence we are about to erase.
-  const prevSnap = await dayRef.get();
-  const prevDelta = prevSnap.exists ? Number((prevSnap.data() as DayState).scoreDelta) || 0 : 0;
-  if (prevDelta) {
-    const scoreRef = tenantRef(uid).collection('score').doc('current');
-    await getFirestore().runTransaction(async (tx) => {
-      const snap = await tx.get(scoreRef);
-      const total = snap.exists ? Number((snap.data() as { total?: unknown }).total) : 0;
-      tx.set(scoreRef, { total: applyDelta(total, -prevDelta), updatedAt: nowIso() }, { merge: true });
-    });
-  }
-  // Today's own complete / skip rows go with it, so Stats agrees with the day.
-  const todayLogs = await tenantRef(uid).collection('logs').where('date', '==', date).get();
-  const logBatch = getFirestore().batch();
-  todayLogs.docs.forEach((doc) => {
-    const type = (doc.data() as { type?: string }).type;
-    if (type === 'complete' || type === 'skip') logBatch.delete(doc.ref);
-  });
-  if (!todayLogs.empty) await logBatch.commit();
-  const result = domainCall(() => packDay(asPackInput(loaded, date)));
-  const stamp = await stampLastUpdated(uid, nowIso());
-  await dayRef
-    .set(
-      firestoreDoc({
-        ...result,
-        scoreDelta: 0,
-        startedAt: null,
-        endedAt: null,
-        packedAt: nowIso(),
-        section: null,
-        sectionStartedAt: null,
-        sectionRemainingMinutes: null,
-        pausedAt: null,
-        sectionExtra: {},
-        sectionUsed: {},
-        eventStartedAt: null,
-        ...stamp,
-      })
-    );
-  await writeLog(uid, { type: 'reset_today', date });
+  await mutateDay(uid, date, (prev, tenant, now) => planRespawn(prev, tenant, date, now));
   return { ok: true };
 });
-
-async function patchBlock(
-  uid: string,
-  date: string,
-  blockId: string,
-  status: 'complete' | 'skipped'
-): Promise<{ item?: ListItem; block?: PackedBlock }> {
-  const dayRef = tenantRef(uid).collection('days').doc(date);
-  const snap = await dayRef.get();
-  if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
-  const data = snap.data() as { blocks: PackedBlock[]; dropped: PackedBlock[] };
-  const stamp = await stampLastUpdated(uid, nowIso());
-  let found: PackedBlock | undefined;
-  const mapStatus = (rows: PackedBlock[]) =>
-    rows.map((b) => {
-      if (b.id !== blockId) return b;
-      found = { ...b, status };
-      return found;
-    });
-  const blocks = mapStatus(data.blocks || []);
-  const dropped = mapStatus(data.dropped || []);
-  if (!found) throw new HttpsError('not-found', 'That block was not found.');
-  await dayRef.set({ blocks, dropped, ...stamp }, { merge: true });
-  const loaded = await loadTenant(uid);
-  const item = (loaded.items as ListItem[]).find((i) => i.id === found?.itemId);
-  return { item, block: found };
-}
-
-/**
- * A cancelled appointment hands its hours back. Repack the day so other work
- * can claim the freed time, and credit the running section timer with whatever
- * that section got back — the countdown has to agree with the new capacity.
- */
-async function refundSkippedAppointment(uid: string, date: string): Promise<void> {
-  const dayRef = tenantRef(uid).collection('days').doc(date);
-  const snap = await dayRef.get();
-  if (!snap.exists) return;
-  const data = snap.data() as DayState & { blocks: PackedBlock[]; dropped: PackedBlock[] };
-  const loaded = await loadTenant(uid);
-  const settings = loaded.settings as DaySettings;
-  const base = sectionCapacity(settings, data.sectionExtra || {}, data.sectionUsed);
-  const before = capsAfterLoad(base, reservedLoad((data.blocks || []).map((b) => ({ ...b, status: 'pending' }))));
-  const after = capsAfterLoad(base, reservedLoad(data.blocks || []));
-  const result = domainCall(() =>
-    packDay(asPackInput(loaded, date, [...(data.blocks || []), ...(data.dropped || [])], data.sectionExtra, data.sectionUsed))
-  );
-  const section = data.section && data.section !== 'event' ? data.section : null;
-  const freed = section ? Math.max(0, after[section] - before[section]) : 0;
-  const stamp = await stampLastUpdated(uid, nowIso());
-  await dayRef.set(
-    firestoreDoc({
-      ...result,
-      ...(freed > 0
-        ? { sectionRemainingMinutes: (data.sectionRemainingMinutes || 0) + freed }
-        : {}),
-      packedAt: nowIso(),
-      ...stamp,
-    }),
-    { merge: true }
-  );
-}
 
 export const completeBlock = onCall(async (request) => {
   const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
   const id = asString(request.data?.id, 'Block');
-  const { block } = await patchBlock(uid, date, id, 'complete');
-  const morning = block?.title === 'Morning Routine' || String(block?.id || '').endsWith(':morning');
-  if (morning) {
-    const loaded = await loadTenant(uid);
-    const events = (loaded.buckets as Bucket[]).find((b) => b.id === EVENTS_ID || b.kind === 'event');
-    await beginSection(uid, date, isEventDay(events, date) ? 'event' : 'morning');
-    await writeLog(uid, { type: 'start_day', date });
-  }
-  await writeLog(uid, {
-    type: 'complete',
-    date,
-    itemId: block?.itemId,
-    bucketId: block?.bucketId,
-    minutes: block?.durationMinutes,
-    title: block?.title,
-  });
+  await mutateDay(uid, date, (prev, tenant, now) => planComplete(prev, tenant, date, id, now));
   return { ok: true };
 });
 
@@ -980,170 +873,25 @@ export const skipBlock = onCall(async (request) => {
   const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
   const id = asString(request.data?.id, 'Block');
-  const { item, block } = await patchBlock(uid, date, id, 'skipped');
-  if (block?.kind === 'appointment') await refundSkippedAppointment(uid, date);
-  if (item?.type === 'scheduled') {
-    const loaded = await loadTenant(uid);
-    const bucket = (loaded.buckets as Bucket[]).find((b) => b.id === item.bucketId);
-    const toDate = skipPushDate(item, bucket, date);
-    if (toDate) {
-      const stamp = await stampCreated(uid, nowIso());
-      await tenantRef(uid).collection('skipPushes').doc(newId()).set({
-        itemId: item.id,
-        fromDate: date,
-        toDate,
-        ...stamp,
-      });
-    }
-  }
-  await writeLog(uid, {
-    type: 'skip',
-    date,
-    itemId: block?.itemId,
-    bucketId: block?.bucketId,
-    minutes: block?.durationMinutes,
-    title: block?.title,
-  });
+  await mutateDay(uid, date, (prev, tenant, now) => planSkip(prev, tenant, date, id, now));
   return { ok: true };
 });
-
-async function beginSection(uid: string, date: string, section: Slot | 'event'): Promise<void> {
-  const dayRef = tenantRef(uid).collection('days').doc(date);
-  const [settingsSnap, snap, stamp] = await Promise.all([
-    tenantRef(uid).collection('settings').doc('current').get(),
-    dayRef.get(),
-    stampLastUpdated(uid, nowIso()),
-  ]);
-  if (!settingsSnap.exists) throw new HttpsError('failed-precondition', 'This account is not set up yet.');
-  const settings = settingsSnap.data() as DaySettings;
-  const prev = (snap.exists ? snap.data() : {}) as DayState;
-  if (section === 'event') {
-    await dayRef.set(
-      {
-        startedAt: prev.startedAt || nowIso(),
-        endedAt: null,
-        section: 'event',
-        eventStartedAt: nowIso(),
-        sectionStartedAt: nowIso(),
-        sectionRemainingMinutes: 0,
-        pausedAt: null,
-        ...stamp,
-      },
-      { merge: true }
-    );
-    return;
-  }
-  const fresh = !prev.startedAt;
-  const extra = fresh ? {} : prev.sectionExtra || {};
-  const used = fresh ? {} : prev.sectionUsed || {};
-  const blocks = (prev.blocks || []).map((b) =>
-    b.title === 'Morning Routine' || String(b.id || '').endsWith(':morning') ? { ...b, status: 'complete' as const } : b
-  );
-  // The timer counts down the time actually available, so it has to subtract
-  // appointments the same way the packer does — including what spills forward.
-  const caps = capsAfterLoad(sectionCapacity(settings, extra, used), reservedLoad(blocks));
-  await dayRef.set(
-    {
-      startedAt: prev.startedAt || nowIso(),
-      endedAt: null,
-      section,
-      sectionStartedAt: nowIso(),
-      sectionRemainingMinutes: caps[section],
-      pausedAt: null,
-      sectionExtra: extra,
-      sectionUsed: used,
-      ...(blocks.length ? { blocks } : {}),
-      ...stamp,
-    },
-    { merge: true }
-  );
-}
 
 export const startDay = onCall(async (request) => {
   const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
-  const eventsSnap = await tenantRef(uid).collection('buckets').doc(EVENTS_ID).get();
-  const events = eventsSnap.exists ? ({ id: EVENTS_ID, ...eventsSnap.data() } as Bucket) : undefined;
-  await beginSection(uid, date, isEventDay(events, date) ? 'event' : 'morning');
-  await writeLog(uid, { type: 'start_day', date });
+  await mutateDay(uid, date, (prev, tenant, now) => planStartDay(prev, tenant, date, now));
   return { ok: true };
 });
 
 export const startNext = onCall(async (request) => {
   const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
-  const dayRef = tenantRef(uid).collection('days').doc(date);
-  const snap = await dayRef.get();
-  if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
-  const data = snap.data() as DayState & { blocks: PackedBlock[]; dropped: PackedBlock[] };
-  const section = data.section;
-  if (!section || section === 'event') throw new HttpsError('failed-precondition', 'No section to leave.');
-  const next = nextSlot(section);
-  const stamp = await stampLastUpdated(uid, nowIso());
-  const leftovers = leftoverSectionBlocks(data.blocks || [], data.dropped || [], section);
-  const blocks = markLeftoversSkipped(data.blocks || [], leftovers);
-  const dropped = markLeftoversSkipped(data.dropped || [], leftovers);
-  const loaded = await loadTenant(uid);
-  const pushes = collectEndDaySkipPushes(
-    date,
-    leftovers,
-    leftovers,
-    loaded.items as ListItem[],
-    loaded.buckets as Bucket[]
-  );
-  const extra = { ...(data.sectionExtra || {}) };
-  const used = data.sectionUsed || {};
-  const caps = capsAfterLoad(
-    sectionCapacity(loaded.settings as DaySettings, extra, used),
-    reservedLoad(blocks)
-  );
-  async function writeAutoSkips(): Promise<void> {
-    for (const b of skipLogBlocks(leftovers)) {
-      await writeLog(uid, {
-        type: 'skip',
-        date,
-        itemId: b.itemId,
-        bucketId: b.bucketId,
-        minutes: b.durationMinutes,
-        title: b.title,
-      });
-    }
+  const from = asString(request.data?.from, 'Section');
+  if (from !== 'event' && !(SLOTS as string[]).includes(from)) {
+    throw new HttpsError('invalid-argument', 'Section must be morning, midday, evening or event.');
   }
-  if (!next || caps[next] <= 0) {
-    await dayRef.set({ blocks, dropped, endedAt: nowIso(), pausedAt: null, section: null, ...stamp }, { merge: true });
-    await writeSkipPushes(uid, date, pushes);
-    await writeAutoSkips();
-    await writeLog(uid, { type: 'end_day', date });
-    return { ok: true };
-  }
-  const leftoverIds = new Set(leftovers.map((b) => b.itemId).filter(Boolean));
-  const result = domainCall(() => packDay(asPackInput(loaded, date, [...blocks, ...dropped], extra, used)));
-  const merged = result.blocks.map((b) => {
-    const prev = blocks.find((p) => p.itemId && p.itemId === b.itemId);
-    return prev && (prev.status === 'complete' || prev.status === 'skipped') ? { ...b, status: prev.status } : b;
-  });
-  await dayRef.set(
-    firestoreDoc({
-      ...result,
-      blocks: merged,
-      dropped: result.dropped.map((b) =>
-        b.itemId && leftoverIds.has(b.itemId) ? { ...b, status: 'skipped' as const } : b
-      ),
-      startedAt: data.startedAt,
-      section: next,
-      sectionExtra: extra,
-      sectionUsed: used,
-      sectionStartedAt: nowIso(),
-      sectionRemainingMinutes: caps[next],
-      pausedAt: null,
-      packedAt: nowIso(),
-      ...stamp,
-    }),
-    { merge: true }
-  );
-  await writeSkipPushes(uid, date, pushes);
-  await writeAutoSkips();
-  await writeLog(uid, { type: 'start_next', date, section: next });
+  await mutateDay(uid, date, (prev, tenant, now) => planStartNext(prev, tenant, date, from as Slot | 'event', now));
   return { ok: true };
 });
 
@@ -1170,96 +918,9 @@ export const endBreak = onCall(async (request) => {
   return { ok: true };
 });
 
-async function writeSkipPushes(uid: string, date: string, pushes: SkipPush[]): Promise<void> {
-  if (!pushes.length) return;
-  const stamp = await stampCreated(uid, nowIso());
-  const batch = getFirestore().batch();
-  for (const push of pushes) {
-    batch.set(tenantRef(uid).collection('skipPushes').doc(newId()), { ...push, fromDate: date, ...stamp });
-  }
-  await batch.commit();
-}
-
-/**
- * Score a finished day and fold it into the running total.
- *
- * The day's own delta is stored on the day, so Respawn can take back exactly
- * what that day contributed rather than trying to recompute it after the
- * evidence has been cleared.
- */
-async function scoreFinishedDay(
-  uid: string,
-  date: string,
-  blocks: PackedBlock[],
-  dropped: PackedBlock[],
-  started: boolean,
-  events: Bucket | undefined
-): Promise<number> {
-  const score = scoreDay(blocks, dropped, {
-    started,
-    isEventDay: isEventDay(events, date),
-    hasAppointments: dayHasAppointments(blocks),
-  });
-  if (!score.delta) return 0;
-  const scoreRef = tenantRef(uid).collection('score').doc('current');
-  await getFirestore().runTransaction(async (tx) => {
-    const snap = await tx.get(scoreRef);
-    const total = snap.exists ? Number((snap.data() as { total?: unknown }).total) : 0;
-    tx.set(scoreRef, { total: applyDelta(total, score.delta), updatedAt: nowIso() }, { merge: true });
-  });
-  return score.delta;
-}
-
 export const endDay = onCall(async (request) => {
   const uid = await requireUid(request);
   const date = asString(request.data?.date || todayKey(), 'Date');
-  const dayRef = tenantRef(uid).collection('days').doc(date);
-  const snap = await dayRef.get();
-  if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
-  const data = snap.data() as DayState & { blocks: PackedBlock[]; dropped: PackedBlock[] };
-  const loaded = await loadTenant(uid);
-  const pushes = collectEndDaySkipPushes(
-    date,
-    data.blocks || [],
-    data.dropped || [],
-    loaded.items as ListItem[],
-    loaded.buckets as Bucket[]
-  );
-  const stamp = await stampLastUpdated(uid, nowIso());
-  const mark = (rows: PackedBlock[]) =>
-    rows.map((b) => {
-      if (b.itemId && (b.status === 'pending' || b.status === 'dropped')) {
-        return { ...b, status: 'skipped' as const };
-      }
-      return b;
-    });
-  const evening = (data.blocks || []).map((b) =>
-    b.title === 'Evening Routine' || String(b.id || '').endsWith(':evening') ? { ...b, status: 'complete' as const } : b
-  );
-  const eventMinutes =
-    data.section === 'event' && data.eventStartedAt ? Math.round(elapsedSince(data.eventStartedAt, Date.now())) : 0;
-  await dayRef.set(
-    {
-      blocks: mark(evening),
-      dropped: mark(data.dropped || []),
-      endedAt: nowIso(),
-      pausedAt: null,
-      section: null,
-      sectionStartedAt: null,
-      sectionRemainingMinutes: null,
-      eventStartedAt: null,
-      ...stamp,
-    },
-    { merge: true }
-  );
-  await writeSkipPushes(uid, date, pushes);
-  const scoredBlocks = mark(evening);
-  const scoredDropped = mark(data.dropped || []);
-  const events = (loaded.buckets as Bucket[]).find((b) => b.id === EVENTS_ID || b.kind === 'event');
-  const delta = await scoreFinishedDay(uid, date, scoredBlocks, scoredDropped, Boolean(data.startedAt), events);
-  await dayRef.set({ scoreDelta: delta }, { merge: true });
-  if (eventMinutes) await writeLog(uid, { type: 'event_hours', date, minutes: eventMinutes });
-  await writeLog(uid, { type: 'end_day', date });
-  return { ok: true, delta };
+  const plan = await mutateDay(uid, date, (prev, tenant, now) => planFinishDay(prev, tenant, date, now));
+  return { ok: true, delta: plan.day?.scoreDelta ?? 0 };
 });
-

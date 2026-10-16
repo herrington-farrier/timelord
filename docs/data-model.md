@@ -67,16 +67,19 @@ hours back. 0-duration appointments are checklist entries and cost nothing.
 
 - `blocks[]` (each block may have `slot`), `dropped[]`, `droppedBuckets[]`, `startedAt`, `endedAt`, `packedAt`
 - `section` (`morning` | `midday` | `evening` | `event`), `sectionStartedAt`, `sectionRemainingMinutes`, `pausedAt`
-- `sectionExtra`, `sectionUsed` (appointment eat). Pack rebuilds 6 weeks from this week’s Sunday and clears both. Start Next Chapter does not write leftover extra.
+- `sectionExtra`, `sectionUsed` (appointment eat). A repack of a started or ended day keeps both and packs with them; an unstarted day packs without. Start Next Chapter does not write leftover extra.
 - `eventStartedAt` (unused on event days; no stopwatch)
-- Pack restamps `color` from current buckets and appointments. Started or ended days keep Complete / Skip.
+- Pack restamps `color` from current buckets and appointments. Started or ended days keep Complete / Skip, `scoreDelta`, the section fields and the audit stamps. A repack reads and writes the days it changes in one transaction.
+- Every day transition (Complete, Skip, Start Day, Start Next, End Day, Respawn) commits the day, its `logs` rows, its `skipPushes` and the `score/current` change in one transaction. A repeated request with the same target (End Day twice, Complete a completed block) changes nothing; a contradictory one (Complete a skipped block) is refused. Start Next carries the section the client is leaving and changes nothing if the day has moved on.
 
 ## score/current
 
 - `total` — the running score, never below zero. `+1` per completed item, `-1`
   per skipped, `+2` for completing one that had fallen off. Days never started
-  score nothing; event days and days with appointments forgive what fell off.
-- Written only when a day ends, unwound by Respawn, zeroed by Reroll Stats.
+  score nothing; event days and days with an appointment that was not skipped forgive what
+  fell off. A Work item split around Break scores once: complete when every half
+  is, skipped when either is.
+- Written only when a day ends (in the same transaction as the day), unwound by Respawn, zeroed by Reroll Stats.
 
 ## days/{yyyy-mm-dd} — `scoreDelta`
 
@@ -85,7 +88,7 @@ contribution rather than recompute it after clearing the day.
 
 ## logs/{id}
 
-Append-only: `type`, `at`, `date`, `itemId`, `bucketId`, `minutes`, optional `title` and `section`. Never overwritten — but **Reroll Stats** (`clearLogs`) erases the whole collection, and that is irreversible. `rebuild` displays as Quest Log Packed (gold). Complete is green (`Quest Completed: …`); skip is red (`Quest Failed: …`). Every Stats row's text takes its row colour. Start Next Chapter writes one `skip` row per leftover item, then `start_next`.
+Append-only: `type`, `at`, `date`, `itemId`, `bucketId`, `minutes`, optional `title` and `section`. Never overwritten, except by Respawn (see below). **Reroll Stats** (`clearLogs`) erases the whole collection, and that is irreversible. `rebuild` displays as Quest Log Packed (gold). Complete is green (`Quest Completed: …`); skip is red (`Quest Failed: …`). Every Stats row's text takes its row colour. Start Next Chapter and End Day write one `skip` row per leftover item (not per split half), then `start_next` or `end_day`. Respawn deletes that date's `complete` and `skip` rows and its `skipPushes` (`fromDate` equal to the date) in the same transaction.
 
 ## skipPushes/{id}
 

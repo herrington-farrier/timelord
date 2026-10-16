@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { FirebaseError } from 'firebase/app';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -49,6 +49,30 @@ describe('Lists page Save', () => {
     expect(rows.map((r) => r.id).sort()).toEqual(['focus', 'tidy']);
     // the untouched Add New row is not a row
     expect(rows).toHaveLength(2);
+  });
+});
+
+describe('a double-clicked Save', () => {
+  it('sends a new Add New row once', async () => {
+    const user = userEvent.setup();
+    let release: (v: unknown) => void = () => {};
+    api.saveItems.mockClear();
+    api.saveItems.mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
+    render(
+      <MemoryRouter>
+        <EditPage />
+      </MemoryRouter>
+    );
+    await user.click(screen.getByRole('button', { name: 'Lists' }));
+    await user.type(screen.getByRole('textbox', { name: /Title/ }), 'Water plants');
+    const save = screen.getByRole('button', { name: 'Save' });
+    await user.dblClick(save);
+
+    expect(save).toBeDisabled();
+    expect(api.saveItems).toHaveBeenCalledTimes(1);
+    const rows = api.saveItems.mock.calls[0][0].rows as Record<string, unknown>[];
+    expect(rows.filter((r) => !r.id)).toHaveLength(1);
+    await act(async () => release({ ok: true, saved: 3 }));
   });
 });
 

@@ -92,6 +92,15 @@ Tick as you go. Anything that fails, tell me the item number.
 27. **The day is readable at a glance** — what you are doing now is the first
     thing you see, and what will not fit is legible without being loud.
 
+## Double taps (emulator)
+
+28. **Concurrent taps commit once** — with `firebase emulators:start` running,
+    fire `startNext` twice with the same `from` and `endDay` twice at the same
+    moment. The transaction should leave one `start_next` / `end_day` row and one
+    change to `score/current`. Only the transaction behaviour needs the
+    emulator; what each repeat does (no-op, one push, scored once, no-room
+    ending) is covered by `dayFlow.test.ts`.
+
 ## Known by design — not bugs
 
 - Completing an appointment does not change remaining time. The hours come out

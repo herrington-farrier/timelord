@@ -1,6 +1,7 @@
 import { httpsCallable } from 'firebase/functions';
 
 import { describeError, pushToast } from '../shared/toastBus';
+import type { Slot } from '../domain/types';
 import { functions } from './firebase';
 
 /**
@@ -44,7 +45,7 @@ export const api = {
   completeBlock: call<{ date: string; id: string }, { ok: boolean }>('completeBlock'),
   skipBlock: call<{ date: string; id: string }, { ok: boolean }>('skipBlock'),
   startDay: call<{ date: string }, { ok: boolean }>('startDay'),
-  startNext: call<{ date: string }, { ok: boolean }>('startNext'),
+  startNext: call<{ date?: string; from: Slot | 'event' }, { ok: boolean }>('startNext'),
   startBreak: call<{ date: string }, { ok: boolean }>('startBreak'),
   endBreak: call<{ date: string }, { ok: boolean }>('endBreak'),
   endDay: call<{ date: string }, { ok: boolean }>('endDay'),

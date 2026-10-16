@@ -27,9 +27,9 @@ what will not fit, before the day starts.**
 
 ## 2. The layer that must survive
 
-`src/domain/` — ~1,860 lines across 18 modules, **no React, no Firebase, no I/O**.
+`src/domain/` — ~2,860 lines across 19 modules, **no React, no Firebase, no I/O**.
 Verified: nothing in it imports a UI or backend package. It is imported by both
-the client and the Cloud Functions (`functions/src/index.ts` imports 13 domain
+the client and the Cloud Functions (`functions/src/index.ts` imports 11 domain
 modules), which is why the packer cannot drift between them.
 
 **Port this directory as-is.** Rewrite everything around it.
@@ -38,6 +38,7 @@ modules), which is why the packer cannot drift between them.
 | --- | --- |
 | `packDay` | the packer: what lands in a day, and what falls off |
 | `packWeek` | packs a date range |
+| `dayFlow` | every day transition (complete, skip, start, start next, end, respawn, repack) as a pure planner; the handlers commit each plan in one transaction |
 | `sections` | section capacity, spans, and the reserved-time rules |
 | `budget` | bucket hours, weekly caps, load colours |
 | `cadence` | when a recurring item hits a date |
@@ -46,7 +47,7 @@ modules), which is why the packer cannot drift between them.
 | `events`, `seed`, `order`, `today`, `timer`, `duration`, `log`, `etas` | supporting rules |
 | `types` | every shape, plus the ids (`WORK_ID`, `EVENTS_ID`, …) |
 
-The 37 test files are the specification. Port them too; if a rewrite passes
+The 46 test files in `src/test/` are the specification. Port them too; if a rewrite passes
 them, the behaviour survived.
 
 ## 3. Invariants that look arbitrary and are not
@@ -98,7 +99,7 @@ on it.
 | `items/{id}` | **everything is an item**: tasks, appointments, event entries |
 | `days/{yyyy-mm-dd}` | packed output plus run state and `scoreDelta` |
 | `skipPushes/{id}` | a scheduled item's renewal |
-| `logs/{id}` | append-only history; Reroll Stats erases it |
+| `logs/{id}` | append-only history, except Respawn deletes that day's complete and skip rows; Reroll Stats erases it all |
 | `score/current` | the running total |
 
 **Appointments and events are not separate collections.** They are items in
@@ -114,6 +115,11 @@ one-time migrations — bump it to re-run backfill for every tenant once.
 This app is meant to be cheap. The expensive mistakes, all of which were made
 and fixed:
 
+- **Every day action reads the whole tenant.** `mutateDay` loads settings, all
+  buckets, all items and all skip pushes before its transaction, then reads the
+  day (and, for Respawn, the date's logs and skip pushes) inside it, so the tenant
+  is a snapshot from just before. The transaction commits the day, its log rows,
+  its skip pushes and `score/current` together; a repeated action changes nothing.
 - **Do not repack on a loop.** Every write that changes the schedule repacks 42
   days. `saveItems` exists specifically so a page save is one repack rather than
   twenty. Any new "save many" path must batch.

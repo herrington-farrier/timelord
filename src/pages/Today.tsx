@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
 
 import { Chrome } from '../components/Chrome';
 import { ScoreBar } from '../components/ScoreBar';
@@ -32,6 +32,9 @@ function stagger(index?: number): Record<string, string> {
   return index === undefined ? {} : { ['--i']: String(index) };
 }
 
+/** True while a request is out. Every action button reads it, so a second tap does nothing. */
+const BusyContext = createContext(false);
+
 export function TodayPage() {
   const { user, logOut } = useAuth();
   const date = todayKey();
@@ -40,6 +43,8 @@ export function TodayPage() {
   const day = useDay(user?.uid, date);
   const score = useScore(user?.uid);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const events = buckets.find((b) => b.id === EVENTS_ID || b.kind === 'event');
   const eventDay = isEventDay(events, date);
   const started = Boolean(day?.startedAt) && !day?.endedAt;
@@ -78,13 +83,21 @@ export function TodayPage() {
 
   // The day re-renders from live data, so a success needs no announcement.
   // A failure is shown under the header, where the day itself is.
+  // One request at a time: the ref refuses a tap that lands before the buttons
+  // have re-rendered disabled.
   async function act(label: string, fn: () => Promise<unknown>) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     setError(null);
     try {
       await fn();
     } catch (err) {
       console.error(err);
       setError(formatActionError(err, label.replace(/\.$/, '')));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   }
 
@@ -96,6 +109,7 @@ export function TodayPage() {
   const eventItems = eventDay ? openBlocks(todayEventItems(placed)) : [];
 
   return (
+    <BusyContext.Provider value={busy}>
     <Chrome
       compact
       title="Timelord"
@@ -171,12 +185,13 @@ export function TodayPage() {
           section={section}
           nextMinutes={nextSectionMinutes(placed, section)}
           onStartNext={() =>
-            act(section === 'morning' ? 'Midday started.' : 'Evening started.', () => api.startNext({ date }))
+            act(section === 'morning' ? 'Midday started.' : 'Evening started.', () => api.startNext({ date, from: section }))
           }
           onEvening={() => act('Day ended.', () => api.endDay({ date }))}
         />
       ) : null}
     </Chrome>
+    </BusyContext.Provider>
   );
 }
 
@@ -302,6 +317,7 @@ function NormalDayControls({
   ready: boolean;
   onStartDay: () => void;
 }) {
+  const busy = useContext(BusyContext);
   if (ended) {
     return (
       <div className="seal-wrap">
@@ -313,7 +329,7 @@ function NormalDayControls({
   if (!started) {
     return (
       <div className="seal-wrap">
-        <button type="button" className="day-seal-btn" disabled={!ready} onClick={onStartDay}>
+        <button type="button" className="day-seal-btn" disabled={!ready || busy} onClick={onStartDay}>
           <img className="day-seal" src="/icon-192.png" alt="" width={192} height={192} />
           <span className="day-seal-btn__label">Start Quest</span>
         </button>
@@ -334,15 +350,16 @@ function SectionEndActs({
   onStartNext: () => void;
   onEvening: () => void;
 }) {
+  const busy = useContext(BusyContext);
   const action = nextSectionAction(section);
   return (
     <div className="day-acts day-acts--end">
       {action.kind === 'end' ? (
-        <button type="button" className="btn--red" onClick={onEvening}>
+        <button type="button" className="btn--red" disabled={busy} onClick={onEvening}>
           {action.label}
         </button>
       ) : (
-        <button type="button" className="btn--quest" onClick={onStartNext}>
+        <button type="button" className="btn--quest" disabled={busy} onClick={onStartNext}>
           <span className="btn--quest__label">{action.label}</span>
           <span className="btn--quest__time">{formatCountdown(nextMinutes)}</span>
         </button>
@@ -364,6 +381,7 @@ function BreakControl({
   onStart: () => void;
   onEnd: () => void;
 }) {
+  const busy = useContext(BusyContext);
   return (
     // Break is the only Personal block Quest shows, so without --bcolor the
     // Personal colour never appeared anywhere on the page.
@@ -373,11 +391,11 @@ function BreakControl({
       </div>
       <div className="item-acts">
         {on ? (
-          <button type="button" className="btn--red" onClick={onEnd}>
+          <button type="button" className="btn--red" disabled={busy} onClick={onEnd}>
             End Rest
           </button>
         ) : (
-          <button type="button" className="btn--green" onClick={onStart}>
+          <button type="button" className="btn--green" disabled={busy} onClick={onStart}>
             Rest ZZZ
           </button>
         )}
@@ -396,6 +414,7 @@ function FallRow({
   act: (label: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const busy = useContext(BusyContext);
   const actsId = useId();
   const actionable = block.status === 'dropped' || block.status === 'pending';
   const label = `${block.title}${block.durationMinutes ? ` · ${formatDuration(block.durationMinutes)}` : ''}`;
@@ -419,10 +438,10 @@ function FallRow({
       )}
       {actionable ? (
         <div id={actsId} className="item-acts" hidden={!open}>
-          <button type="button" className="btn--gold" onClick={() => act('Marked complete.', () => api.completeBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--gold" disabled={busy} onClick={() => act('Marked complete.', () => api.completeBlock({ date, id: block.id }))}>
             Complete
           </button>
-          <button type="button" className="btn--red" onClick={() => act('Skipped.', () => api.skipBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--red" disabled={busy} onClick={() => act('Skipped.', () => api.skipBlock({ date, id: block.id }))}>
             Skip
           </button>
         </div>
@@ -458,6 +477,7 @@ function ItemCard({
   index?: number;
 }) {
   const [open, setOpen] = useState(false);
+  const busy = useContext(BusyContext);
   const actsId = useId();
   const cls = `${block.status === 'complete' ? ' complete' : block.status === 'skipped' ? ' skipped' : ''}${
     block.finalOccurrence ? ' is-final' : ''
@@ -497,10 +517,10 @@ function ItemCard({
       )}
       {pending ? (
         <div id={actsId} className="item-acts" hidden={!open}>
-          <button type="button" className="btn--gold" onClick={() => act('Marked complete.', () => api.completeBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--gold" disabled={busy} onClick={() => act('Marked complete.', () => api.completeBlock({ date, id: block.id }))}>
             Complete
           </button>
-          <button type="button" className="btn--red" onClick={() => act('Skipped.', () => api.skipBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--red" disabled={busy} onClick={() => act('Skipped.', () => api.skipBlock({ date, id: block.id }))}>
             Skip
           </button>
         </div>

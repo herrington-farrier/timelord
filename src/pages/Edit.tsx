@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { FormField } from '../components/FormField';
 import { SortableList } from '../components/SortableList';
@@ -57,6 +57,8 @@ export function EditPage() {
   const items = useItems(user?.uid);
   const [tab, setTab] = useState<(typeof TABS)[number]>('day');
   const [error, setError] = useState<ActionError | null>(null);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
 
   // No success message: the page re-renders from live data, which is the
   // confirmation. Failures show where they happened instead.
@@ -64,7 +66,14 @@ export function EditPage() {
   // Returns whether the write landed, because an Add New form must be emptied
   // on success and must NOT be emptied on failure — clearing it after a refused
   // save would throw away what was typed.
+  //
+  // One request at a time: a second click while one is out is refused, so a
+  // double-clicked Save cannot send an Add New row twice. The ref catches a
+  // click that lands before Save has re-rendered disabled.
   async function act(label: string, fn: () => Promise<unknown>, failed?: string): Promise<boolean> {
+    if (busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
     setError(null);
     try {
       await fn();
@@ -73,6 +82,9 @@ export function EditPage() {
       console.error(err);
       setError(toActionError(err, failed || label.replace(/\.$/, '')));
       return false;
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   }
 
@@ -92,6 +104,7 @@ export function EditPage() {
       {tab === 'day' && settings ? (
         <DayForm
           settings={settings}
+          busy={busy}
           onSave={(payload) =>
             act('Page saved.', async () => {
               await api.saveSettings(payload);
@@ -105,6 +118,7 @@ export function EditPage() {
       {tab === 'buckets' && settings ? (
         <BucketsForm
           settings={settings}
+          busy={busy}
           buckets={buckets}
           onSave={(payload) => act('Page saved.', () => api.saveBuckets(payload))}
           onReorder={(ids) =>
@@ -122,6 +136,7 @@ export function EditPage() {
       ) : null}
       {tab === 'lists' ? (
         <ListsForm
+          busy={busy}
           buckets={listableBuckets(buckets)}
           items={items}
           error={error}
@@ -195,11 +210,13 @@ function SectionStepper({
 
 function DayForm({
   settings,
+  busy,
   onSave,
   onResetToday,
   onReroll,
 }: {
   settings: DaySettings;
+  busy: boolean;
   onSave: (payload: Record<string, unknown>) => Promise<boolean>;
   onResetToday: () => Promise<boolean>;
   onReroll: () => Promise<boolean>;
@@ -311,13 +328,13 @@ function DayForm({
         </div>
       </div>
       <div className="page-save">
-        <button type="button" className="btn--green" onClick={() => onResetToday()}>
+        <button type="button" className="btn--green" disabled={busy} onClick={() => onResetToday()}>
           Respawn
         </button>
         <button type="button" className="btn--red" onClick={() => setConfirmReroll(true)}>
           Reroll Stats
         </button>
-        <button type="submit" className="btn--gold">
+        <button type="submit" className="btn--gold" disabled={busy}>
           Save
         </button>
       </div>
@@ -429,12 +446,14 @@ function bucketPayloadFromForm(form: HTMLFormElement, fallback: { id?: string; k
 
 function BucketsForm({
   settings,
+  busy,
   buckets,
   onSave,
   onReorder,
   onRemove,
 }: {
   settings: DaySettings;
+  busy: boolean;
   buckets: Bucket[];
   onSave: (payload: Record<string, unknown>) => Promise<boolean>;
   onReorder: (ids: string[]) => Promise<boolean>;
@@ -486,6 +505,7 @@ function BucketsForm({
         <button
           type="button"
           className="btn--gold"
+          disabled={busy}
           onClick={async (e) => {
             const root = e.currentTarget.closest('.edit-page');
             if (!(root instanceof HTMLElement)) return;
@@ -870,6 +890,7 @@ function BucketFields({
 }
 
 function ListsForm({
+  busy,
   buckets,
   items,
   error,
@@ -877,6 +898,7 @@ function ListsForm({
   onReorder,
   onRemove,
 }: {
+  busy: boolean;
   buckets: Bucket[];
   items: ListItem[];
   error: ActionError | null;
@@ -981,6 +1003,7 @@ function ListsForm({
         <button
           type="button"
           className="btn--gold"
+          disabled={busy}
           onClick={async (e) => {
             const root = e.currentTarget.closest('.edit-page');
             if (!(root instanceof HTMLElement)) return;
