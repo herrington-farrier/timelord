@@ -1,32 +1,17 @@
 import { httpsCallable } from 'firebase/functions';
 
-import { describeError, pushToast } from '../shared/toastBus';
 import type { Slot } from '../domain/types';
 import { functions } from './firebase';
 
 /**
- * DEBUG TOASTS: every callable reports itself here. This is the one place all
- * of them pass through, so it catches a failure even on a page that renders no
- * error of its own — which is how a refused save came to look like a save that
- * quietly did nothing. See the note in `shared/toastBus.ts`; delete the two
- * pushToast calls to remove it.
+ * Callables only call. The page that triggered one reports its own failure
+ * (`toastFailure`), because only the page knows the control's name.
  */
 function call<TReq, TRes>(name: string) {
   return async (payload?: TReq): Promise<TRes> => {
-    if (!functions) {
-      pushToast('fail', name, 'Firebase is not configured.');
-      throw new Error('Firebase is not configured.');
-    }
-    const fn = httpsCallable<TReq, TRes>(functions, name);
-    const started = Date.now();
-    try {
-      const res = await fn(payload);
-      pushToast('ok', name, undefined, Date.now() - started);
-      return res.data;
-    } catch (err) {
-      pushToast('fail', name, describeError(err), Date.now() - started);
-      throw err;
-    }
+    if (!functions) throw new Error('Firebase is not configured.');
+    const res = await httpsCallable<TReq, TRes>(functions, name)(payload);
+    return res.data;
   };
 }
 
@@ -49,5 +34,4 @@ export const api = {
   startBreak: call<{ date: string }, { ok: boolean }>('startBreak'),
   endBreak: call<{ date: string }, { ok: boolean }>('endBreak'),
   endDay: call<{ date: string }, { ok: boolean }>('endDay'),
-  wipeAccount: call<Record<string, never>, { ok: boolean }>('wipeAccount'),
 };

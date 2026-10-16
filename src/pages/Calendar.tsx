@@ -7,6 +7,7 @@ import { bookedMinutes, isBreakBlock, isEventPacked } from '../domain/today';
 import { addDaysKey, formatDayLabel, todayKey, weekStart } from '../shared/dates';
 import { useAuth } from '../shared/auth';
 import { useBuckets, useDays, useSettings } from '../services/live';
+import { isLoadFailed } from '../services/loadState';
 import { Chrome } from '../components/Chrome';
 import { EVENTS_ID, SLOTS, type Bucket, type DaySettings, type PackedBlock, type Slot } from '../domain/types';
 
@@ -24,6 +25,8 @@ export function boardStartFor(today: string, offsetDays: number): string {
   return addDaysKey(weekStart(today), offsetDays);
 }
 
+const NO_BUCKETS: Bucket[] = [];
+
 export function CalendarPage() {
   const { user } = useAuth();
   const today = todayKey();
@@ -33,7 +36,8 @@ export function CalendarPage() {
   const listKeys = listKeysFrom(boardKeys, today);
   const days = useDays(user?.uid, boardStart, boardKeys[boardKeys.length - 1]);
   const settings = useSettings(user?.uid);
-  const buckets = useBuckets(user?.uid);
+  const bucketsRaw = useBuckets(user?.uid);
+  const buckets = !bucketsRaw || isLoadFailed(bucketsRaw) ? NO_BUCKETS : bucketsRaw;
   const events = buckets.find((b) => b.id === EVENTS_ID || b.kind === 'event');
   const eventColor = events?.color ? `#${events.color}` : undefined;
   const dayMinutes = settings?.dayMinutes || 0;

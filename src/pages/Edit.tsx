@@ -42,10 +42,11 @@ import {
 } from '../domain/types';
 import { todayKey } from '../shared/dates';
 import { api } from '../services/api';
+import { isLoadFailed } from '../services/loadState';
 import { useBuckets, useItems, useSettings } from '../services/live';
 import { useAuth } from '../shared/auth';
-import { formatActionError } from '../shared/formatActionError';
 import { toActionError, type ActionError } from '../shared/actionError';
+import { pushToast, toastFailure } from '../shared/toastBus';
 import { Chrome } from '../components/Chrome';
 
 const TABS = ['day', 'buckets', 'lists'] as const;
@@ -53,7 +54,9 @@ const TABS = ['day', 'buckets', 'lists'] as const;
 export function EditPage() {
   const { user } = useAuth();
   const settings = useSettings(user?.uid);
-  const buckets = useBuckets(user?.uid);
+  const bucketsRaw = useBuckets(user?.uid);
+  const loadFailed = isLoadFailed(bucketsRaw);
+  const buckets = isLoadFailed(bucketsRaw) ? undefined : bucketsRaw;
   const items = useItems(user?.uid);
   const [tab, setTab] = useState<(typeof TABS)[number]>('day');
   const [error, setError] = useState<ActionError | null>(null);
@@ -61,7 +64,8 @@ export function EditPage() {
   const busyRef = useRef(false);
 
   // No success message: the page re-renders from live data, which is the
-  // confirmation. Failures show where they happened instead.
+  // confirmation. A failure toasts under the control's own name ("Save Lists");
+  // when the server names a row and field, that row is also marked in place.
   //
   // Returns whether the write landed, because an Add New form must be emptied
   // on success and must NOT be emptied on failure — clearing it after a refused
@@ -70,17 +74,20 @@ export function EditPage() {
   // One request at a time: a second click while one is out is refused, so a
   // double-clicked Save cannot send an Add New row twice. The ref catches a
   // click that lands before Save has re-rendered disabled.
-  async function act(label: string, fn: () => Promise<unknown>, failed?: string): Promise<boolean> {
+  async function act(label: string, fn: () => Promise<unknown>, okMessage?: string): Promise<boolean> {
     if (busyRef.current) return false;
     busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
       await fn();
+      if (okMessage) pushToast('ok', okMessage);
       return true;
     } catch (err) {
       console.error(err);
-      setError(toActionError(err, failed || label.replace(/\.$/, '')));
+      const failure = toActionError(err, label);
+      setError(failure);
+      toastFailure(err, label);
       return false;
     } finally {
       busyRef.current = false;
@@ -101,53 +108,68 @@ export function EditPage() {
           </button>
         ))}
       </nav>
+      {tab === 'day' && !settings ? <p className="hint">Loading…</p> : null}
+      {tab === 'buckets' && loadFailed ? <p className="err">Could not load.</p> : null}
+      {tab === 'buckets' && !loadFailed && !(settings && buckets) ? <p className="hint">Loading…</p> : null}
+      {tab === 'lists' && loadFailed ? <p className="err">Could not load.</p> : null}
+      {tab === 'lists' && !loadFailed && !buckets ? <p className="hint">Loading…</p> : null}
       {tab === 'day' && settings ? (
         <DayForm
+          key={dayFormKey(settings)}
           settings={settings}
           busy={busy}
           onSave={(payload) =>
-            act('Page saved.', async () => {
+            act('Save Day', async () => {
               await api.saveSettings(payload);
               await rebuild();
             })
           }
-          onResetToday={() => act('Quests reset. +1 Life', () => api.resetToday(), 'Respawn')}
-          onReroll={() => act('Stats rerolled.', () => api.clearLogs(), 'Reroll Stats')}
+          onResetToday={() => act('Respawn', () => api.resetToday(), 'Quests reset. +1 Life')}
+          onReroll={() => act('Reroll Stats', () => api.clearLogs())}
         />
       ) : null}
-      {tab === 'buckets' && settings ? (
+      {tab === 'buckets' && settings && buckets ? (
         <BucketsForm
           settings={settings}
           busy={busy}
           buckets={buckets}
-          onSave={(payload) => act('Page saved.', () => api.saveBuckets(payload))}
+          onSave={(payload) => act('Save Buckets', () => api.saveBuckets(payload))}
           onReorder={(ids) =>
-            act('Order saved.', async () => {
+            act('Reorder Buckets', async () => {
               await api.reorderBuckets({ weightedOrderIds: ids });
             })
           }
           onRemove={(id) =>
-            act('Bucket removed.', async () => {
+            act('Remove Bucket', async () => {
               await api.archiveBucket({ id });
               await rebuild();
             })
           }
         />
       ) : null}
-      {tab === 'lists' ? (
+      {tab === 'lists' && buckets ? (
         <ListsForm
           busy={busy}
           buckets={listableBuckets(buckets)}
           items={items}
           error={error}
-          onSaveAll={(rows) => act('Page saved.', () => api.saveItems({ rows }), 'Save')}
+          onSaveAll={(rows) =>
+            act('Save Lists', async () => {
+              // Validation blocks the write; the server refuses the same thing.
+              // Thrown inside act so the stale row mark is cleared with it.
+              if (rows.some((r) => (r.cadence as Cadence).kind === 'weekly' && (r.cadence as { days: unknown[] }).days.length === 0)) {
+                throw new Error('Pick at least one day to repeat on.');
+              }
+              await api.saveItems({ rows });
+            })
+          }
           onReorder={(ids) =>
-            act('Order saved.', async () => {
+            act('Reorder Items', async () => {
               await api.reorderItems({ orderedIds: ids });
             })
           }
           onRemove={(id) =>
-            act('Item removed.', async () => {
+            act('Remove Item', async () => {
               await api.archiveItem({ id });
             })
           }
@@ -158,6 +180,22 @@ export function EditPage() {
 }
 
 const STEP = 60;
+
+/** Every setting the Day form reads, so a save or a change from another device remounts it with the new values. */
+function dayFormKey(s: DaySettings): string {
+  return JSON.stringify([
+    s.dayMinutes,
+    sectionMinutes(s),
+    s.transitionMinutes,
+    s.dayStartMinutes,
+    s.morningMinutes,
+    s.breakMinutes,
+    s.eveningMinutes,
+    s.timerSound,
+    s.timerVibrate,
+    s.personalCountsAsDay,
+  ]);
+}
 
 /**
  * One stretch, stepped in whole hours. No minute field: a day is planned in
@@ -459,7 +497,6 @@ function BucketsForm({
   onReorder: (ids: string[]) => Promise<boolean>;
   onRemove: (id: string) => Promise<boolean>;
 }) {
-  const [rangeError, setRangeError] = useState<string | null>(null);
   // Add New is an uncontrolled form, so a saved bucket's details sit there
   // afterwards and the next Save submits them again as another new bucket.
   // Remounting on success empties it; on failure it keeps what was typed.
@@ -488,7 +525,7 @@ function BucketsForm({
       <AppointmentsCard bucket={appointments} />
       <PersonalCard settings={settings} bucket={personal} />
       <BucketCard bucket={work} />
-      <EventsCard bucket={events} />
+      <EventsCard key={eventsCardKey(events)} bucket={events} />
       <SortableList ids={ids} onReorder={(next) => onReorder(next)}>
         {(id) => {
           const bucket = weighted.find((b) => b.id === id);
@@ -501,7 +538,6 @@ function BucketsForm({
         <BucketFields key={addKey} kind="new" />
       </div>
       <div className="page-save">
-        {rangeError ? <p className="err page-save__err">{rangeError}</p> : null}
         <button
           type="button"
           className="btn--gold"
@@ -545,7 +581,7 @@ function BucketsForm({
                   ids.map((id, i) => ({ id, name: names[i] || '', startDate: starts[i] || '', endDate: ends[i] || '' }))
                 );
               } catch (err) {
-                setRangeError(formatActionError(err, 'Events'));
+                toastFailure(err, 'Save Buckets');
                 return;
               }
               rows.push({
@@ -743,6 +779,13 @@ function BucketCard({
       />
     </CollapsibleBucket>
   );
+}
+
+/** The card copies its ranges once, so it remounts when the saved ranges change. */
+function eventsCardKey(bucket: Bucket): string {
+  return eventRanges(bucket)
+    .map((r) => `${r.id}:${r.name || ''}:${r.startDate}:${r.endDate}`)
+    .join('|');
 }
 
 function EventsCard({ bucket }: { bucket: Bucket }) {
@@ -999,7 +1042,6 @@ function ListsForm({
         );
       })}
       <div className="page-save">
-        {error ? <p className="err page-save__err">{error.message}</p> : null}
         <button
           type="button"
           className="btn--gold"

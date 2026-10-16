@@ -10,8 +10,8 @@ export type ActionError = {
 };
 
 /**
- * Errors are rendered next to the control that failed rather than in a toast,
- * so a callable that knows which row and field went wrong says so in `details`.
+ * The message is toasted; a callable that knows which row and field went wrong
+ * also says so in `details`, so the page can mark that row in place.
  */
 export function toActionError(err: unknown, action: string): ActionError {
   const message = formatActionError(err, action);

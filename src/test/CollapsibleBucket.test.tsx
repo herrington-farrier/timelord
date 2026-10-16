@@ -74,4 +74,21 @@ describe('CollapsibleBucket', () => {
     await user.click(screen.getByRole('radio', { name: 'Day' }));
     expect(screen.getByRole('button', { name: 'House, 5h/day' })).toBeInTheDocument();
   });
+
+  it('drops the typed label when the saved hours change', async () => {
+    const user = userEvent.setup();
+    const live = (root: HTMLElement) => root.querySelector('input')?.value ?? '';
+    const tree = (hours: string) => (
+      <CollapsibleBucket title="House" hours={hours} color="94a3b8" defaultOpen liveHours={live}>
+        <input aria-label="Hours" defaultValue="8h" />
+      </CollapsibleBucket>
+    );
+    const { rerender } = render(tree('8h/wk'));
+    await user.clear(screen.getByLabelText('Hours'));
+    await user.type(screen.getByLabelText('Hours'), '12h');
+    expect(screen.getByRole('button', { name: 'House, 12h' })).toBeInTheDocument();
+
+    rerender(tree('10h/wk'));
+    expect(screen.getByRole('button', { name: 'House, 10h/wk' })).toBeInTheDocument();
+  });
 });

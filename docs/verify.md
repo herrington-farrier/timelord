@@ -1,7 +1,7 @@
 # Manual checks
 
 **This list is deliberately short.** Anything a test can assert belongs in
-`src/test/`, not here — 342 tests across 45 files cover the packing rules,
+`src/test/`, not here — about 500 tests across 50 files cover the packing rules,
 cadences, appointments, events, the score, validation, ordering, and the shapes
 each page renders. What is left is what a test genuinely cannot reach.
 

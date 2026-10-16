@@ -22,10 +22,11 @@ import {
 import { sectionRemainingNow } from '../domain/timer';
 import { EVENTS_ID, type PackedBlock, type Slot } from '../domain/types';
 import { api } from '../services/api';
+import { isLoadFailed } from '../services/loadState';
 import { useBuckets, useDay, useScore, useSettings } from '../services/live';
 import { useAuth } from '../shared/auth';
 import { todayKey } from '../shared/dates';
-import { formatActionError } from '../shared/formatActionError';
+import { toastFailure } from '../shared/toastBus';
 
 /** Feeds the list-assembly animation; each card starts a beat after the last. */
 function stagger(index?: number): Record<string, string> {
@@ -39,19 +40,23 @@ export function TodayPage() {
   const { user, logOut } = useAuth();
   const date = todayKey();
   const settings = useSettings(user?.uid);
-  const buckets = useBuckets(user?.uid);
-  const day = useDay(user?.uid, date);
+  const bucketsRaw = useBuckets(user?.uid);
+  const dayRaw = useDay(user?.uid, date);
+  const loadFailed = isLoadFailed(bucketsRaw) || isLoadFailed(dayRaw);
+  const buckets = isLoadFailed(bucketsRaw) ? undefined : bucketsRaw;
+  const day = isLoadFailed(dayRaw) ? undefined : dayRaw;
   const score = useScore(user?.uid);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const events = buckets.find((b) => b.id === EVENTS_ID || b.kind === 'event');
+  const events = buckets?.find((b) => b.id === EVENTS_ID || b.kind === 'event');
   const eventDay = isEventDay(events, date);
   const started = Boolean(day?.startedAt) && !day?.endedAt;
   const ended = Boolean(day?.endedAt);
   const section = day?.section && day.section !== 'event' ? day.section : null;
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const wasPositive = useRef(true);
+  // null until the first comparison, so opening the page already in overrun
+  // does not chime for a section that ended before the page loaded.
+  const wasPositive = useRef<boolean | null>(null);
 
   useEffect(() => {
     if (!started) return;
@@ -75,26 +80,25 @@ export function TodayPage() {
 
   useEffect(() => {
     if (!started || eventDay || !section) return;
-    if (wasPositive.current && remaining <= 0) {
+    if (wasPositive.current === true && remaining <= 0) {
       signalSectionEnd(settings?.timerSound !== false, settings?.timerVibrate === true);
     }
     wasPositive.current = remaining > 0;
   }, [remaining, started, eventDay, section, settings?.timerSound, settings?.timerVibrate]);
 
   // The day re-renders from live data, so a success needs no announcement.
-  // A failure is shown under the header, where the day itself is.
+  // A failure toasts under the control's own name ("Start Quest").
   // One request at a time: the ref refuses a tap that lands before the buttons
   // have re-rendered disabled.
   async function act(label: string, fn: () => Promise<unknown>) {
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
-    setError(null);
     try {
       await fn();
     } catch (err) {
       console.error(err);
-      setError(formatActionError(err, label.replace(/\.$/, '')));
+      toastFailure(err, label);
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -136,13 +140,14 @@ export function TodayPage() {
           ended={ended}
           score={score}
           scoreDelta={day?.scoreDelta || 0}
-          ready={Boolean(day)}
-          onStartDay={() => act('Quest started.', () => api.startDay({ date }))}
+          ready={Boolean(day) && buckets !== undefined}
+          onStartDay={() => act('Start Quest', () => api.startDay({ date }))}
         />
       )}
 
-      {error ? <p className="err">{error}</p> : null}
-      {!day ? <p className="err">No packed day.</p> : null}
+      {loadFailed ? <p className="err">Could not load.</p> : null}
+      {!loadFailed && day === undefined ? <p className="hint">Loading…</p> : null}
+      {day === null ? <p className="err">No packed day.</p> : null}
 
       {eventDay && day ? (
         <div className="day">
@@ -166,8 +171,8 @@ export function TodayPage() {
                 on={paused}
                 color={b.color}
                 index={i}
-                onStart={() => act('Resting.', () => api.startBreak({ date }))}
-                onEnd={() => act('Rest over.', () => api.endBreak({ date }))}
+                onStart={() => act('Rest ZZZ', () => api.startBreak({ date }))}
+                onEnd={() => act('End Rest', () => api.endBreak({ date }))}
               />
             ) : (
               <ItemCard key={b.id} block={b} date={date} act={act} index={i} />
@@ -184,10 +189,8 @@ export function TodayPage() {
         <SectionEndActs
           section={section}
           nextMinutes={nextSectionMinutes(placed, section)}
-          onStartNext={() =>
-            act(section === 'morning' ? 'Midday started.' : 'Evening started.', () => api.startNext({ date, from: section }))
-          }
-          onEvening={() => act('Day ended.', () => api.endDay({ date }))}
+          onStartNext={() => act('Start Next Chapter', () => api.startNext({ date, from: section }))}
+          onEvening={() => act('Hearth', () => api.endDay({ date }))}
         />
       ) : null}
     </Chrome>
@@ -438,10 +441,10 @@ function FallRow({
       )}
       {actionable ? (
         <div id={actsId} className="item-acts" hidden={!open}>
-          <button type="button" className="btn--gold" disabled={busy} onClick={() => act('Marked complete.', () => api.completeBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--gold" disabled={busy} onClick={() => act('Complete Item', () => api.completeBlock({ date, id: block.id }))}>
             Complete
           </button>
-          <button type="button" className="btn--red" disabled={busy} onClick={() => act('Skipped.', () => api.skipBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--red" disabled={busy} onClick={() => act('Skip Item', () => api.skipBlock({ date, id: block.id }))}>
             Skip
           </button>
         </div>
@@ -517,10 +520,10 @@ function ItemCard({
       )}
       {pending ? (
         <div id={actsId} className="item-acts" hidden={!open}>
-          <button type="button" className="btn--gold" disabled={busy} onClick={() => act('Marked complete.', () => api.completeBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--gold" disabled={busy} onClick={() => act('Complete Item', () => api.completeBlock({ date, id: block.id }))}>
             Complete
           </button>
-          <button type="button" className="btn--red" disabled={busy} onClick={() => act('Skipped.', () => api.skipBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--red" disabled={busy} onClick={() => act('Skip Item', () => api.skipBlock({ date, id: block.id }))}>
             Skip
           </button>
         </div>

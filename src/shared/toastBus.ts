@@ -1,35 +1,31 @@
 /**
- * DEBUG TOASTS — a temporary diagnostic layer.
+ * Toasts: how a failed action reaches the person who tapped it.
  *
- * The app deliberately has no toasts: a save confirms itself by re-rendering,
- * and a failure shows beside the control that failed. That design has a hole —
- * a page that forgets to render its error swallows the failure entirely, which
- * is how a denied save looked identical to a save that did nothing.
+ * Every user-initiated mutation reports a failure here, through
+ * `toastFailure`, with a verb-noun label that matches the control ("Start
+ * Quest", "Save Lists"). The text is the friendly one from
+ * `formatActionError`, never the raw callable error. A success stays silent:
+ * the page re-renders from live data, which is the confirmation. The few
+ * exceptions push a short `ok` toast themselves (Respawn).
  *
- * This reports every callable by name, with the raw error rather than the
- * friendly one, so a failure can be told apart from a no-op. Remove this file,
- * `Toasts.tsx`, the reporting in `services/api.ts`, and the DEBUG block in
- * `global.css` to put it back the way it was.
+ * A listener the server refuses reports here too, from `services/live.ts`.
  */
+
+import { formatActionError } from './formatActionError';
 
 export type ToastKind = 'ok' | 'fail';
 
 export type Toast = {
   id: string;
   kind: ToastKind;
-  /** The callable's name — what was attempted. */
-  label: string;
-  /** The raw failure, or a short note on success. */
-  detail?: string;
-  ms?: number;
+  message: string;
   at: number;
 };
 
-/** Enough to see a save and its follow-up rebuild, not enough to bury the page. */
+/** Enough to see a save and its follow-up, not enough to bury the page. */
 const MAX = 8;
 
-/** A success is confirmation and can go on its own. A failure is the thing
- *  being hunted, so it stays until it is read. */
+/** A success is confirmation and can go on its own. A failure stays until it is read. */
 const OK_TTL_MS = 5000;
 
 let toasts: Toast[] = [];
@@ -50,15 +46,24 @@ export function getToasts(): Toast[] {
   return toasts;
 }
 
-export function pushToast(kind: ToastKind, label: string, detail?: string, ms?: number): string {
+export function pushToast(kind: ToastKind, message: string): string {
+  // The same failure already on screen is not stacked again (a refused listener
+  // can fire on every retry).
+  const same = kind === 'fail' ? toasts.find((t) => t.kind === kind && t.message === message) : undefined;
+  if (same) return same.id;
   seq += 1;
   const id = `t${seq}`;
-  toasts = [{ id, kind, label, detail, ms, at: Date.now() }, ...toasts].slice(0, MAX);
+  toasts = [{ id, kind, message, at: Date.now() }, ...toasts].slice(0, MAX);
   emit();
   if (kind === 'ok') {
     setTimeout(() => dismissToast(id), OK_TTL_MS);
   }
   return id;
+}
+
+/** Shows a failed action as `<label>: <reason>`. `label` is the control's verb-noun name. */
+export function toastFailure(err: unknown, label: string): string {
+  return pushToast('fail', formatActionError(err, label));
 }
 
 export function dismissToast(id: string): void {
@@ -72,36 +77,4 @@ export function clearToasts(): void {
   if (!toasts.length) return;
   toasts = [];
   emit();
-}
-
-/**
- * The raw failure, not the friendly one. `formatActionError` maps
- * permission-denied to "invite-only." and drops the server's own sentence,
- * which is the sentence that says whether a save was refused or rejected.
- */
-export function describeError(err: unknown): string {
-  const parts: string[] = [];
-  const e = err as { code?: unknown; message?: unknown; details?: unknown };
-  if (typeof e?.code === 'string' && e.code) parts.push(e.code);
-  const message = typeof e?.message === 'string' && e.message ? e.message : String(err);
-  parts.push(message);
-  if (e?.details != null) {
-    try {
-      parts.push(JSON.stringify(e.details));
-    } catch {
-      // a details object that will not serialise is not worth failing over
-    }
-  }
-  return parts.join(' · ');
-}
-
-/** One line per toast, for pasting into a bug report from a phone. */
-export function toastsAsText(rows: Toast[] = toasts): string {
-  return rows
-    .map((t) => {
-      const when = new Date(t.at).toISOString().slice(11, 19);
-      const ms = t.ms == null ? '' : ` (${t.ms}ms)`;
-      return `${when} ${t.kind === 'ok' ? 'OK' : 'FAIL'} ${t.label}${ms}${t.detail ? ` — ${t.detail}` : ''}`;
-    })
-    .join('\n');
 }

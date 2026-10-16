@@ -1589,12 +1589,6 @@ button:disabled {
   color: var(--danger);
   min-height: 1em;
 }
-.page-save__err {
-  flex: 1 1 100%;
-  margin: 0 0 2px;
-  text-align: right;
-  font-size: 0.85rem;
-}
 .is-invalid-row {
   outline: 2px solid var(--danger);
   outline-offset: 8px;
@@ -1741,10 +1735,8 @@ button:disabled {
   .score__shine { animation: none; opacity: 0; }
 }
 
-/* ── DEBUG TOASTS ──────────────────────────────────────────────────────────
-   Temporary diagnostic layer. Delete this block along with
-   shared/toastBus.ts, components/Toasts.tsx, the pushToast calls in
-   services/api.ts, and the <Toasts /> in App.tsx. */
+/* ── TOASTS ─────────────────────────────────────────────────────────────────
+   Failure and confirmation lines pinned to the top. See shared/toastBus.ts. */
 .toasts {
   position: fixed;
   top: 0;
@@ -1763,7 +1755,7 @@ button:disabled {
   justify-content: flex-end;
 }
 .toasts__act {
-  font-size: 0.7rem;
+  font-size: var(--label-size);
   padding: 0.2em 0.7em;
   min-height: 0;
 }
@@ -1778,7 +1770,8 @@ button:disabled {
   background-color: var(--panel);
   color: var(--text);
   font: inherit;
-  font-size: 0.74rem;
+  font-size: var(--label-size);
+  overflow-wrap: anywhere;
   box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.85);
   animation: toast-in 0.18s ease-out both;
 }
@@ -1789,21 +1782,6 @@ button:disabled {
 .toast--fail {
   border-color: var(--danger);
   background-color: var(--danger-bg);
-}
-.toast__label {
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-.toast--ok .toast__label { color: var(--ok); }
-.toast--fail .toast__label { color: var(--danger); }
-.toast__ms {
-  font-weight: 400;
-  color: var(--muted);
-}
-.toast__detail {
-  color: var(--text);
-  /* the raw callable error, which is long and must not be clipped */
-  overflow-wrap: anywhere;
 }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(-6px); }

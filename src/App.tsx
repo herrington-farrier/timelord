@@ -32,8 +32,7 @@ export default function App() {
   return (
     <>
       <BackdropSeal />
-      {/* DEBUG TOASTS: outside the auth gate, so a failure during sign-in
-          reports itself too. See the note in shared/toastBus.ts. */}
+      {/* Outside the auth gate, so a failure during sign-in toasts too. */}
       <Toasts />
       {!ready ? (
         <p className="hint">Loading…</p>

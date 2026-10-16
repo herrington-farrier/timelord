@@ -18,6 +18,14 @@ export function CollapsibleBucket({
   const [open, setOpen] = useState(defaultOpen);
   const [label, setLabel] = useState<string | null>(null);
   const bodyId = useId();
+  // The typed label is a preview of unsaved input. When the saved hours change
+  // (or a save fails and they do not), the preview is no longer what is true,
+  // so it is dropped during render rather than left to stick.
+  const [seenHours, setSeenHours] = useState(hours);
+  if (seenHours !== hours) {
+    setSeenHours(hours);
+    setLabel(null);
+  }
   const displayLabel = label ?? hours;
 
   function refresh(root: HTMLElement) {

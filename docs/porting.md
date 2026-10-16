@@ -47,7 +47,7 @@ modules), which is why the packer cannot drift between them.
 | `events`, `seed`, `order`, `today`, `timer`, `duration`, `log`, `etas` | supporting rules |
 | `types` | every shape, plus the ids (`WORK_ID`, `EVENTS_ID`, …) |
 
-The 46 test files in `src/test/` are the specification. Port them too; if a rewrite passes
+The 50 test files in `src/test/` are the specification. Port them too; if a rewrite passes
 them, the behaviour survived.
 
 ## 3. Invariants that look arbitrary and are not
@@ -128,6 +128,11 @@ and fixed:
   `unchangedDay` compares a **key-sorted** serialisation — a plain
   `JSON.stringify` reports every day as changed, silently disabling the whole
   optimisation.
+- **Read only the days on screen.** The Quest Log's `useDays` queries `days` by
+  document id between the first and last day of its 14-day board, so it reads
+  that window, not the whole collection. Moving the board unsubscribes the old
+  window and shows nothing from it while the new one loads. `settings`,
+  `buckets` and `items` are still whole-collection listeners on every page.
 - **Scope the repack when you can.** Date-keyed edits touch one or two days.
   `datesForItemEdit` returns `null` for anything on a cadence, because a cadence
   can land anywhere. Returning `[]` instead of `null` means *no repack at all* —
@@ -141,7 +146,7 @@ and fixed:
 
 The whole front end. `src/pages/`, `src/components/`, `src/styles/global.css`
 are one opinionated take — dark navy and gold, a quest theme, tap-to-expand
-cards, no toasts. None of it is load-bearing. Rewrite freely.
+cards. None of it is load-bearing. Rewrite freely.
 
 Two front-end lessons worth carrying anyway, both of which cost hours here:
 

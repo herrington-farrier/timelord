@@ -1,12 +1,16 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { FirebaseError } from 'firebase/app';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS } from '../domain/types';
+import { Toasts } from '../components/Toasts';
 import { TodayPage } from '../pages/Today';
+import { LOAD_FAILED } from '../services/loadState';
+import { clearToasts } from '../shared/toastBus';
 
-const dayState: { current: Record<string, unknown> } = {
+const dayState: { current: Record<string, unknown> | null | undefined } = {
   current: {
     blocks: [],
     dropped: [],
@@ -15,10 +19,23 @@ const dayState: { current: Record<string, unknown> } = {
   },
 };
 
+const bucketState: { current: unknown } = { current: [] };
+
+const { chime } = vi.hoisted(() => ({ chime: vi.fn() }));
+
+vi.mock('../domain/today', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../domain/today')>()),
+  signalSectionEnd: chime,
+}));
+
 const { api } = vi.hoisted(() => ({
   api: {
     startDay: vi.fn().mockResolvedValue({ ok: true }),
     startNext: vi.fn().mockResolvedValue({ ok: true }),
+    completeBlock: vi.fn().mockResolvedValue({ ok: true }),
+    skipBlock: vi.fn().mockResolvedValue({ ok: true }),
+    endDay: vi.fn().mockResolvedValue({ ok: true }),
+    startBreak: vi.fn().mockResolvedValue({ ok: true }),
   },
 }));
 
@@ -28,7 +45,7 @@ vi.mock('../shared/auth', () => ({
 
 vi.mock('../services/live', () => ({
   useSettings: () => DEFAULT_SETTINGS,
-  useBuckets: () => [],
+  useBuckets: () => bucketState.current,
   useDay: () => dayState.current,
   useScore: () => 0,
 }));
@@ -38,10 +55,16 @@ vi.mock('../services/api', () => ({ api }));
 function renderToday() {
   return render(
       <MemoryRouter>
+        <Toasts />
         <TodayPage />
       </MemoryRouter>
   );
 }
+
+afterEach(() => {
+  clearToasts();
+  bucketState.current = [];
+});
 
 describe('TodayPage', () => {
   it('shows Start Quest as the seal, not Start Routine', () => {
@@ -286,5 +309,130 @@ describe('TodayPage', () => {
 
     await act(async () => release({ ok: true }));
     expect(next).toBeEnabled();
+  });
+});
+
+describe('Today regressions', () => {
+  it('does not flash "No packed day." while the day is still loading', () => {
+    dayState.current = undefined;
+    renderToday();
+    expect(screen.queryByText('No packed day.')).not.toBeInTheDocument();
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
+  });
+
+  it('says "No packed day." once the day is known to be missing', () => {
+    dayState.current = null;
+    renderToday();
+    expect(screen.getByText('No packed day.')).toBeInTheDocument();
+  });
+
+  it('names a failed action by its control, not by its success text', async () => {
+    const user = userEvent.setup();
+    dayState.current = { blocks: [], dropped: [], packedMinutes: 0, packedAt: '2026-08-30T12:00:00.000Z' };
+    api.startDay.mockRejectedValueOnce(new FirebaseError('functions/unavailable', 'down'));
+    renderToday();
+    await user.click(screen.getByRole('button', { name: 'Start Quest' }));
+    expect(await screen.findByText('Start Quest: offline?')).toBeInTheDocument();
+    expect(screen.queryByText(/Quest started/)).not.toBeInTheDocument();
+  });
+
+  describe('the section-end chime', () => {
+    function overrunDay(remainingMinutes: number, elapsedMs: number) {
+      const startedAt = new Date(Date.now() - elapsedMs).toISOString();
+      dayState.current = {
+        startedAt,
+        section: 'morning',
+        sectionStartedAt: startedAt,
+        sectionRemainingMinutes: remainingMinutes,
+        packedAt: startedAt,
+        packedMinutes: 30,
+        blocks: [],
+        dropped: [],
+      };
+    }
+
+    afterEach(() => vi.useRealTimers());
+
+    it('stays quiet when the page opens already in overrun', () => {
+      vi.useFakeTimers();
+      chime.mockClear();
+      overrunDay(60, 70 * 60 * 1000);
+      renderToday();
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(chime).not.toHaveBeenCalled();
+    });
+
+    it('sounds once when the countdown crosses zero while the page is open', () => {
+      vi.useFakeTimers();
+      chime.mockClear();
+      overrunDay(60, 60 * 60 * 1000 - 3000);
+      renderToday();
+      expect(chime).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(6000);
+      });
+      expect(chime).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not offer Start Quest before the buckets have loaded', () => {
+    dayState.current = { blocks: [], dropped: [], packedMinutes: 0, packedAt: '2026-08-30T12:00:00.000Z' };
+    bucketState.current = undefined;
+    renderToday();
+    expect(screen.getByRole('button', { name: 'Start Quest' })).toBeDisabled();
+  });
+
+  it('says "Could not load." when a listener was refused, not "Loading…"', () => {
+    dayState.current = LOAD_FAILED;
+    renderToday();
+    expect(screen.getByText('Could not load.')).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+  });
+
+  describe('failures name the control', () => {
+    const pendingDay = () => {
+      const startedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      dayState.current = {
+        startedAt,
+        section: 'morning',
+        sectionStartedAt: startedAt,
+        sectionRemainingMinutes: 120,
+        packedAt: startedAt,
+        packedMinutes: 30,
+        blocks: [
+          {
+            id: 'floors', itemId: 'floors', kind: 'weighted', title: 'Floors', slot: 'morning',
+            status: 'pending', date: '2026-08-30', bucketId: 'house', startMinutes: 0, endMinutes: 30,
+            durationMinutes: 30, color: 'fff', flexible: true,
+          },
+        ],
+        dropped: [],
+      };
+    };
+
+    it.each([
+      ['Complete', 'completeBlock', 'Complete Item: offline?'],
+      ['Skip', 'skipBlock', 'Skip Item: offline?'],
+    ] as const)('%s toasts %s failures', async (button, call, message) => {
+      const user = userEvent.setup();
+      pendingDay();
+      api[call].mockRejectedValueOnce(new FirebaseError('functions/unavailable', 'down'));
+      renderToday();
+      await user.click(screen.getByRole('button', { name: /Floors/ }));
+      await user.click(screen.getByRole('button', { name: button }));
+      expect(await screen.findByText(message)).toBeInTheDocument();
+    });
+
+    it('uses the visible text of Hearth', async () => {
+      const user = userEvent.setup();
+      pendingDay();
+      (dayState.current as { section: string }).section = 'evening';
+      api.endDay.mockRejectedValueOnce(new FirebaseError('functions/unavailable', 'down'));
+      renderToday();
+      await user.click(screen.getByRole('button', { name: 'Hearth' }));
+      expect(await screen.findByText('Hearth: offline?')).toBeInTheDocument();
+    });
   });
 });

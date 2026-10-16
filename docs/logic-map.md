@@ -24,6 +24,20 @@ The routes never changed; only what the menu calls them.
 | Reset Today | Respawn (green) — toast `Quests reset. +1 Life` |
 | — | Reroll Stats — erases the log (`clearLogs`), behind an `Erase all Stats?` dialog |
 
+A failure toast is named for the control's own visible text when that text is unique on its page (`Start Quest`, `Start Next Chapter`, `Hearth`, `Rest ZZZ`, `End Rest`, `Respawn`, `Reroll Stats`). Generic buttons get a verb-noun failure-toast name, because `Save: …` alone would not say what failed:
+
+| Control | Failure toast name |
+| --- | --- |
+| Complete (Quest item) | Complete Item |
+| Skip (Quest item) | Skip Item |
+| Save (Day tab) | Save Day |
+| Save (Buckets tab; also an Events range that does not parse) | Save Buckets |
+| Save (Lists tab) | Save Lists |
+| Remove (bucket) | Remove Bucket |
+| Remove (list item) | Remove Item |
+| Drag to reorder (buckets) | Reorder Buckets |
+| Drag to reorder (list items) | Reorder Items |
+
 The rest of this document uses the functional names, because "today" also means
 the date being packed and renaming that would make the packing rules ambiguous.
 
@@ -57,7 +71,7 @@ Each Strategize tab has one **Save** (Lists keeps per-row Remove). Add New empti
 
 Buttons transform in place:
 
-- **Start Day** begins the morning countdown. Morning Routine happens on your own; there is no Start Routine step. Start Day on a day already started changes nothing.
+- **Start Day** begins the morning countdown. Morning Routine happens on your own; there is no Start Routine step. Start Day on a day already started changes nothing. It is disabled until the day and the buckets have loaded.
 - After Start Day, Today lists **this stretch only** (placed + falling-off) plus Personal pause controls. Completed and skipped items leave the list — Stats is the record. Break stays, being a control rather than an item.
 - Break: Start Break / End Break pauses/resumes the current timer.
 - Falling off is collapsed to a counted line and opens on tap.
@@ -70,7 +84,7 @@ Buttons transform in place:
 - Evening: **End Day** after the list.
 - Appointments are items in the locked `appointments` bucket, packed before every other bucket in their section. Each declares the **sections it spans** (multi-select, at least one); its hours come out of the first of those and spill forward, and it stays on the list through every section it spans. Nothing is inferred from `apptTime`. An appointment is Scheduled (one date) or Recurring (a cadence, for a standing appointment). They have no stopwatch: the duration you assign is what the day loses, its own section first and then spilling forward. Complete / Skip like any item; skipping cancels it and credits its freed minutes to the running section only. A cancelled appointment is not pushed to another day.
 
-The Quest header shows **Day / Booked / Packed**; Booked is time committed to appointments, coloured on the same load scale, and is how an overbooked day reads. Section timers show hours and minutes. They use the Day sound/vibrate toggles. Going over a bucket does not steal later time.
+The Quest header shows **Day / Booked / Packed**; Booked is time committed to appointments, coloured on the same load scale, and is how an overbooked day reads. Section timers show hours and minutes. They use the Day sound/vibrate toggles. Going over a bucket does not steal later time. The section-end chime sounds once while the page is open; reloading into an overrun section does not replay it.
 
 ## Events
 
@@ -104,7 +118,19 @@ End Day: each leftover, in whichever section it sits, gets a skip log row. Lefto
 
 ## Controls
 
-Menu, transforming Start/End, Start Next Chapter, End Day, Complete / Skip, Save, Reset Today, and Remove share high-contrast control styles. Log rows: gold packed, green complete, red skip. On Today and Edit, action buttons are disabled while a request is in flight. Routes are code-split behind a boundary that reloads once if a chunk went stale under a deploy. There are no toasts — a save confirms itself by the page re-rendering, and a failure is shown beside the control that failed, with the offending row and field marked. There is **no pack button**: every write that changes the schedule repacks 42 days on its own — inside the callable (`saveBuckets`, `resetBucket`, `upsertItem`, `reorderItems`, `archiveItem`, `reorderBuckets`) or via the client rebuild that follows it (`saveSettings`, `archiveBucket`, `upsertAppointment`, `archiveAppointment`). Guide is a short tour of what each bucket and page is for, plus the hard limits. The chrome is navy and antique gold from the app icon. The current page is marked in the menu.
+- Menu, transforming Start/End, Start Next Chapter, End Day, Complete / Skip, Save, Reset Today, and Remove share high-contrast control styles.
+- Log rows: gold packed, green complete, red skip.
+- On Today and Edit, action buttons are disabled while a request is in flight.
+- Routes are code-split behind a boundary that reloads once if a chunk went stale under a deploy.
+- A failed user action shows a toast named for its control (`Start Quest: offline?`, `Save Lists — …`), built by `formatActionError`. Failure toasts stay until tapped or cleared, and an identical failure already on screen is not stacked again.
+- A listener the server refuses toasts as `Load Day: …`, `Load Buckets: …` and so on, and the page shows `Could not load.` in place of its data.
+- Today and the Edit tabs that wait on live data show `Loading…` until it arrives.
+- A success is silent: the page re-rendering is the confirmation. Respawn is the exception (`Quests reset. +1 Life`).
+- When the server names a row and field, that row is also marked in place on Lists.
+- There is **no pack button**: every write that changes the schedule repacks 42 days on its own — inside the callable (`saveBuckets`, `resetBucket`, `upsertItem`, `reorderItems`, `archiveItem`, `reorderBuckets`) or via the client rebuild that follows it (`saveSettings`, `archiveBucket`, `upsertAppointment`, `archiveAppointment`).
+- Guide is a short tour of what each bucket and page is for, plus the hard limits.
+- The chrome is navy and antique gold from the app icon.
+- The current page is marked in the menu.
 
 Selected is one treatment everywhere — gold wash, gold edge, normal text — shared by the current page, Edit tabs, day chips and pills. Solid gold is reserved for actions (Save). Every multiple-choice control is a label-sized tap target of at least 44px; the native input stays for focus, name and form value. A greyed copy of the app icon sits fixed behind every screen.
 
