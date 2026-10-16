@@ -187,3 +187,42 @@ describe('changing the day length', () => {
     });
   });
 });
+
+describe('changing the day length to a length that is not whole hours in thirds', () => {
+  it('keeps morning and midday at whole hours and the three adding to the day', () => {
+    const scaled = rescaleSectionSplit({ morning: 240, midday: 300, evening: 300 }, 840, 600);
+    expect(scaled.morning % 60).toBe(0);
+    expect(scaled.midday % 60).toBe(0);
+    expect(scaled.morning + scaled.midday + scaled.evening).toBe(600);
+  });
+});
+
+describe('a split Work item that expires', () => {
+  it('carries finalOccurrence on the last half', () => {
+    const r = packDay({
+      date: '2026-10-14',
+      settings: DEFAULT_SETTINGS,
+      buckets: [workBucket({ weeklyMinutes: 40 * 60 })],
+      items: [item({ id: 'deep', bucketId: 'work', title: 'Deep', durationMinutes: 240, expiresAt: '2026-10-14' })],
+    });
+    const halves = r.blocks.filter((b) => b.itemId === 'deep');
+    expect(halves).toHaveLength(2);
+    expect(halves[halves.length - 1].finalOccurrence).toBe(true);
+  });
+});
+
+describe('rescaling a split to an awkward day length', () => {
+  const sums = (s: { morning: number; midday: number; evening: number }) => s.morning + s.midday + s.evening;
+
+  it('keeps the sum and non-negative sections when rounding would overshoot the day', () => {
+    const scaled = rescaleSectionSplit({ morning: 270, midday: 270, evening: 0 }, 540, 90);
+    expect(sums(scaled)).toBe(90);
+    expect(Math.min(scaled.morning, scaled.midday, scaled.evening)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps the sum and non-negative sections for a day under an hour', () => {
+    const scaled = rescaleSectionSplit({ morning: 240, midday: 300, evening: 300 }, 840, 45);
+    expect(sums(scaled)).toBe(45);
+    expect(Math.min(scaled.morning, scaled.midday, scaled.evening)).toBeGreaterThanOrEqual(0);
+  });
+});

@@ -150,3 +150,29 @@ describe('bucket days bound the cadence', () => {
     expect(hits).toEqual(['2026-09-07', '2026-09-14']);
   });
 });
+
+describe('a monthly cadence on the 31st', () => {
+  const monthly31 = { kind: 'monthly', dayOfMonth: 31 } as const;
+
+  it('lands on the last day of a shorter month', () => {
+    expect(cadenceHitsDate(monthly31, '2026-02-28')).toBe(true);
+    expect(cadenceHitsDate(monthly31, '2026-04-30')).toBe(true);
+  });
+
+  it('still lands on the 31st of a long month', () => {
+    expect(cadenceHitsDate(monthly31, '2026-03-31')).toBe(true);
+  });
+});
+
+describe('a monthly cadence on the 29th and 30th in February', () => {
+  it('lands on 02-28 in 2026 for both', () => {
+    expect(cadenceHitsDate({ kind: 'monthly', dayOfMonth: 29 }, '2026-02-28')).toBe(true);
+    expect(cadenceHitsDate({ kind: 'monthly', dayOfMonth: 30 }, '2026-02-28')).toBe(true);
+  });
+
+  it('lands on 02-29 in the 2028 leap year for the 29th, and not on 02-28', () => {
+    const monthly29 = { kind: 'monthly', dayOfMonth: 29 } as const;
+    expect(cadenceHitsDate(monthly29, '2028-02-29')).toBe(true);
+    expect(cadenceHitsDate(monthly29, '2028-02-28')).toBe(false);
+  });
+});

@@ -98,14 +98,12 @@ export function rescaleSectionSplit(
 ): Record<Slot, number> {
   const day = Math.max(0, Math.round(toDay));
   if (fromDay <= 0) return evenSectionSplit(day);
-  const morning = Math.round((split.morning / fromDay) * day);
-  const midday = Math.round((split.midday / fromDay) * day);
-  // Evening takes the rounding, so the three still add back exactly.
-  return {
-    morning: Math.min(morning, day),
-    midday: Math.min(midday, Math.max(0, day - morning)),
-    evening: Math.max(0, day - morning - midday),
-  };
+  // Whole hours for morning and midday; evening takes the remainder, so the
+  // three still add back exactly.
+  const wholeHours = (minutes: number) => Math.round(minutes / 60) * 60;
+  const morning = Math.min(wholeHours((split.morning / fromDay) * day), day);
+  const midday = Math.min(wholeHours((split.midday / fromDay) * day), Math.max(0, day - morning));
+  return { morning, midday, evening: Math.max(0, day - morning - midday) };
 }
 
 export function sectionMinutes(

@@ -49,9 +49,24 @@ export { daySections, sectionMinutes } from './sections';
 
 const BREAK_SPLIT_MINUTES = 2 * 60;
 
-function prevStatus(previous: PreviousBlock[] | undefined, itemId?: string, appointmentId?: string): PreviousBlock | undefined {
+/**
+ * What the day last knew about a block. The block id is exact, so it goes
+ * first: a Work item split around Break is two blocks sharing an itemId, and
+ * one half's status must not pass to the other. The item id is the fallback for
+ * callers that carry no ids, and for blocks whose id changed between packs.
+ */
+function prevStatus(
+  previous: PreviousBlock[] | undefined,
+  itemId?: string,
+  appointmentId?: string,
+  id?: string
+): PreviousBlock | undefined {
   if (!previous) return undefined;
+  const exact = id ? previous.find((p) => p.id === id) : undefined;
+  if (exact) return exact;
   return previous.find((p) => {
+    // An entry that names its block belongs to that block alone.
+    if (p.id && id) return false;
     if (itemId && p.itemId === itemId) return true;
     if (appointmentId && p.appointmentId === appointmentId) return true;
     return false;
@@ -65,6 +80,8 @@ function itemHitsDate(
   bucket?: Bucket
 ): boolean {
   if (item.archived) return false;
+  // A bucket with no open days is closed, and a closed bucket hits nothing.
+  if (bucket && !bucket.days?.length && bucket.id !== EVENTS_ID) return false;
   if (skipPushes.some((p) => p.itemId === item.id && p.toDate === dateKey)) return true;
   // Events always sit on one date inside their range.
   if (item.bucketId === EVENTS_ID) return item.dueAt === dateKey;
@@ -138,7 +155,7 @@ export function packDay(input: PackDayInput): PackDayResult {
       durationMinutes: partial.durationMinutes,
     };
     if (slot) block.slot = slot;
-    const saved = prevStatus(previous, block.itemId, block.appointmentId);
+    const saved = prevStatus(previous, block.itemId, block.appointmentId, block.id);
     if (saved && (saved.status === 'complete' || saved.status === 'skipped')) {
       block.status = saved.status;
     }
@@ -365,33 +382,26 @@ export function packDay(input: PackDayInput): PackDayResult {
       const crosses = !broke && walked < mid && walked + item.durationMinutes > mid;
       if (crosses && item.durationMinutes > BREAK_SPLIT_MINUTES && item.durationMinutes > 0) {
         const first = Math.max(1, Math.round(mid - walked));
-        pushBlock({
-          id: blockId(date, `item-${item.id}-a`),
+        const half = {
           bucketId: WORK_ID,
           itemId: item.id,
           title: item.title,
-          kind: 'work',
-          startMinutes: order++,
-          durationMinutes: first,
-          status: 'pending',
+          kind: 'work' as const,
+          status: 'pending' as const,
           color: work.color,
           flexible: true,
           slot,
-        });
+        };
+        pushBlock({ ...half, id: blockId(date, `item-${item.id}-a`), startMinutes: order++, durationMinutes: first });
         placeBreak(slot);
         broke = true;
         pushBlock({
+          ...half,
           id: blockId(date, `item-${item.id}-b`),
-          bucketId: WORK_ID,
-          itemId: item.id,
-          title: item.title,
-          kind: 'work',
           startMinutes: order++,
           durationMinutes: item.durationMinutes - first,
-          status: 'pending',
-          color: work.color,
-          flexible: true,
-          slot,
+          // The item comes round for the last time on its second half.
+          ...(isFinalOccurrence(item.cadence, date, item.expiresAt, work.days) ? { finalOccurrence: true } : {}),
         });
         walked += item.durationMinutes;
         continue;
@@ -491,13 +501,14 @@ export function packDay(input: PackDayInput): PackDayResult {
   const droppedMinutes = dropped.reduce((s, b) => s + b.durationMinutes, 0);
 
   blocks.sort((a, b) => {
-    const sa = slotIndex(a.slot);
-    const sb = slotIndex(b.slot);
     const aAccent = a.kind === 'appointment' || a.kind === 'event';
     const bAccent = b.kind === 'appointment' || b.kind === 'event';
+    // An event is pinned to the date, not a section, so it leads the day.
+    const sa = aAccent && !a.slot ? -1 : slotIndex(a.slot);
+    const sb = bAccent && !b.slot ? -1 : slotIndex(b.slot);
+    if (sa !== sb) return sa - sb;
     if (aAccent && !bAccent) return -1;
     if (bAccent && !aAccent) return 1;
-    if (sa !== sb) return sa - sb;
     return a.startMinutes - b.startMinutes;
   });
 
@@ -561,10 +572,12 @@ export function collectEndDaySkipPushes(
   ];
   const out: SkipPush[] = [];
   for (const block of unmarked) {
+    // A Work item split around Break is two blocks but one item.
+    if (out.some((p) => p.itemId === block.itemId)) continue;
     const item = items.find((i) => i.id === block.itemId);
     if (!item || item.type !== 'scheduled') continue;
     const bucket = buckets.find((b) => b.id === item.bucketId);
-    const toDate = skipPushDate(item, bucket, date);
+    const toDate = skipPushDate(item, bucket, date, buckets.find((b) => b.kind === 'event' || b.id === EVENTS_ID));
     if (toDate) out.push({ itemId: item.id, toDate });
   }
   return out;

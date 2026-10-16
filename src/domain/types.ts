@@ -140,6 +140,8 @@ export type SkipPush = {
 };
 
 export type PreviousBlock = {
+  /** Matched first, so one half of a split item cannot lend its status to the other. */
+  id?: string;
   itemId?: string;
   appointmentId?: string;
   status: BlockStatus;

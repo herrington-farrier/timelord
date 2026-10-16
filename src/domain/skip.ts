@@ -1,4 +1,5 @@
 import { addDaysKey, weekdayFromKey } from './cadence';
+import { isEventDay } from './sections';
 import { todaySectionDropped, todaySectionItems } from './today';
 import { APPOINTMENTS_ID, EVENTS_ID, SLOTS, type Bucket, type ListItem, type PackedBlock, type Slot } from './types';
 
@@ -43,21 +44,22 @@ export function skipLogBlocks(leftovers: PackedBlock[]): PackedBlock[] {
   return out;
 }
 
-export function nextAssignedDate(bucket: Bucket, afterDate: string): string {
+export function nextAssignedDate(bucket: Bucket, afterDate: string, events?: Bucket): string {
   let key = addDaysKey(afterDate, 1);
   for (let i = 0; i < 370; i += 1) {
-    if (bucket.days.includes(weekdayFromKey(key))) return key;
+    // Nothing else runs on an event day, so a push onto one would vanish.
+    if (bucket.days.includes(weekdayFromKey(key)) && !isEventDay(events, key)) return key;
     key = addDaysKey(key, 1);
   }
   return addDaysKey(afterDate, 1);
 }
 
-export function skipPushDate(item: ListItem, bucket: Bucket | undefined, fromDate: string): string | null {
+export function skipPushDate(item: ListItem, bucket: Bucket | undefined, fromDate: string, events?: Bucket): string | null {
   if (item.type !== 'scheduled') return null;
   if (!bucket) return null;
   // Events and appointments are pinned to a date. Skipping one cancels it; it
   // does not reappear on the next day the bucket runs.
   if (bucket.kind === 'event' || bucket.id === EVENTS_ID) return null;
   if (bucket.kind === 'appointment' || bucket.id === APPOINTMENTS_ID) return null;
-  return nextAssignedDate(bucket, fromDate);
+  return nextAssignedDate(bucket, fromDate, events);
 }

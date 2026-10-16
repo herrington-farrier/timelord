@@ -83,8 +83,7 @@ saved 0-duration reminder into a 30-minute task, silently. It has happened.
 
 **Days never started score nothing.** A day off is not a failure.
 
-**Event days and days with appointments forgive what fell off.** The schedule
-squeezed it out; adherence could not have saved it.
+**Event days and days with an appointment that was not skipped forgive what fell off.** A skipped appointment is cancelled, so a day whose only appointment was skipped is not forgiven. The schedule squeezed it out; adherence could not have saved it.
 
 ## 4. Data model contract
 

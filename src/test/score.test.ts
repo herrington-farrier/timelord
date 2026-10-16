@@ -135,3 +135,56 @@ describe('the level', () => {
     expect(scoreBand(100).level).toBe(2);
   });
 });
+
+describe('a Work item split around Break', () => {
+  const half = (suffix: 'a' | 'b', status: PackedBlock['status']) =>
+    block({ id: `2026-09-02:item-deep-${suffix}`, itemId: 'deep', bucketId: 'work', kind: 'work', status });
+
+  it('scores both halves complete as one completion, not two', () => {
+    const score = scoreDay([half('a', 'complete'), half('b', 'complete')], [], normal);
+    expect(score).toMatchObject({ completed: 1, delta: 1 });
+  });
+
+  it('does not count the item complete while one half is still pending', () => {
+    const score = scoreDay([half('a', 'complete'), half('b', 'pending')], [], normal);
+    expect(score).toMatchObject({ completed: 0, skipped: 0, delta: 0 });
+  });
+
+  it('counts one skip when either half is skipped', () => {
+    const score = scoreDay([half('a', 'complete'), half('b', 'skipped')], [], normal);
+    expect(score).toMatchObject({ completed: 0, skipped: 1, delta: -1 });
+  });
+});
+
+describe('dayHasAppointments with a cancelled appointment', () => {
+  it('is false when the only appointment block is skipped', () => {
+    expect(dayHasAppointments([block({ id: 'a', kind: 'appointment', status: 'skipped' })])).toBe(false);
+  });
+});
+
+describe('split items and cancelled appointments, further cases', () => {
+  const half = (suffix: 'a' | 'b', status: PackedBlock['status']) =>
+    block({ id: `2026-09-02:drop-deep-${suffix}`, itemId: 'deep', bucketId: 'work', kind: 'work', status });
+
+  it('counts a split item once when both halves are in dropped', () => {
+    const score = scoreDay([], [half('a', 'complete'), half('b', 'complete')], normal);
+    expect(score).toMatchObject({ completed: 1, delta: 2 });
+  });
+
+  it('does not penalise a skipped split half on an event day', () => {
+    const score = scoreDay([], [half('a', 'skipped'), half('b', 'dropped')], { ...normal, isEventDay: true });
+    expect(score).toMatchObject({ skipped: 0, delta: 0 });
+  });
+
+  it('does not penalise a skipped split half on a day with a live appointment', () => {
+    const score = scoreDay([], [half('a', 'skipped'), half('b', 'dropped')], { ...normal, hasAppointments: true });
+    expect(score).toMatchObject({ skipped: 0, delta: 0 });
+  });
+
+  it('does not forgive fallen work when the only appointment was skipped', () => {
+    const blocks = [block({ id: 'appt', kind: 'appointment', status: 'skipped' })];
+    const dropped = [block({ id: 'fell', status: 'skipped' })];
+    const score = scoreDay(blocks, dropped, { ...normal, hasAppointments: dayHasAppointments(blocks) });
+    expect(score.skipped).toBe(2);
+  });
+});

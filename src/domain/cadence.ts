@@ -44,8 +44,10 @@ function naturalHit(cadence: Cadence, dateKey: string): boolean {
   if (cadence.kind === 'weekends') return wd === 'Sat' || wd === 'Sun';
   if (cadence.kind === 'weekly') return cadence.days.includes(wd);
   if (cadence.kind === 'monthly') {
-    const { d } = parseDateKey(dateKey);
-    return d === cadence.dayOfMonth;
+    const { y, mo, d } = parseDateKey(dateKey);
+    // The 31st lands on the last day of a shorter month.
+    const lastDay = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+    return d === Math.min(cadence.dayOfMonth, lastDay);
   }
   if (cadence.startDate && dateKey < cadence.startDate) return false;
   // A start date is the anchor, not just a floor: "every 28 days from the 4th"

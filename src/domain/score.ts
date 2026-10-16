@@ -44,12 +44,33 @@ export function scoreDay(
   const scoreable = (b: PackedBlock) => Boolean(b.itemId) && b.kind !== 'transition';
   const forgiven = ctx.isEventDay || ctx.hasAppointments;
 
-  const completedInPlan = blocks.filter((b) => scoreable(b) && b.status === 'complete').length;
+  /**
+   * One item, one point. A Work item split around Break is two blocks, each
+   * tickable on its own, but it scores complete only once every half is, and
+   * skipped as soon as any half is.
+   */
+  const outcomes = (rows: PackedBlock[]) => {
+    const byItem = new Map<string, PackedBlock[]>();
+    for (const b of rows.filter(scoreable)) {
+      const key = b.itemId as string;
+      byItem.set(key, [...(byItem.get(key) || []), b]);
+    }
+    let complete = 0;
+    let skip = 0;
+    for (const halves of byItem.values()) {
+      if (halves.some((b) => b.status === 'skipped')) skip += 1;
+      else if (halves.every((b) => b.status === 'complete')) complete += 1;
+    }
+    return { complete, skip };
+  };
+  const inPlan = outcomes(blocks);
   // Falling-off items live in `dropped`, whatever they end up as.
-  const completedFallen = dropped.filter((b) => scoreable(b) && b.status === 'complete').length;
-  const skippedInPlan = blocks.filter((b) => scoreable(b) && b.status === 'skipped').length;
+  const fallen = outcomes(dropped);
+  const completedInPlan = inPlan.complete;
+  const completedFallen = fallen.complete;
+  const skippedInPlan = inPlan.skip;
   // On a constrained day, what fell off is free.
-  const skippedFallen = forgiven ? 0 : dropped.filter((b) => scoreable(b) && b.status === 'skipped').length;
+  const skippedFallen = forgiven ? 0 : fallen.skip;
 
   const completed = completedInPlan + completedFallen;
   const skipped = skippedInPlan + skippedFallen;
@@ -58,9 +79,9 @@ export function scoreDay(
   return { completed, skipped, delta };
 }
 
-/** A day holds appointments if anything on it was one. */
+/** A day holds appointments if anything on it was one; a cancelled one does not count. */
 export function dayHasAppointments(blocks: PackedBlock[]): boolean {
-  return blocks.some((b) => b.kind === 'appointment');
+  return blocks.some((b) => b.kind === 'appointment' && b.status !== 'skipped');
 }
 
 /** The score never runs below zero, so the bar always has somewhere to sit. */

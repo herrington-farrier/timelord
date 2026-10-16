@@ -132,8 +132,9 @@ describe('the section steppers', () => {
     const dayHours = document.querySelector('input[name="dayH"]') as HTMLInputElement;
     await user.clear(dayHours);
     await user.type(dayHours, '7');
-    // Half the day, so half of each stretch, and morning keeps its extra hour.
-    expect(stepperValue('morning')).toBe('2h 30m');
+    // Half the day, so half of each stretch (2h30m, 2h), rounded to whole hours:
+    // morning keeps its extra hour over midday.
+    expect(stepperValue('morning')).toBe('3h');
     expect(stepperValue('midday')).toBe('2h');
   });
 });

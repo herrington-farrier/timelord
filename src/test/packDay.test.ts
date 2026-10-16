@@ -5,10 +5,10 @@ import { weekdayFromKey } from '../domain/cadence';
 import { collectEndDaySkipPushes, daySections, packDay, sectionMinutes } from '../domain/packDay';
 import { todaySectionItems } from '../domain/today';
 import { PACK_RANGE_DAYS, packRange } from '../domain/packWeek';
-import { reservedLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity } from '../domain/sections';
+import { reservedLoad, capsAfterLoad, eatFromSections, isEventDay, liveSectionState, nextSlot, sectionCapacity, transitionLoad } from '../domain/sections';
 import { leftoverSectionBlocks, nextAssignedDate, skipPushDate } from '../domain/skip';
 import { APPOINTMENTS_BUCKET } from '../domain/seed';
-import { APPOINTMENTS_ID, EVENTS_ID, type PackedBlock } from '../domain/types';
+import { APPOINTMENTS_ID, EVENTS_ID, SLOTS, type PackedBlock, type Slot } from '../domain/types';
 import { weekStart } from '../shared/dates';
 import { bucket, item, settings, workBucket } from './fixtures';
 
@@ -1194,5 +1194,210 @@ describe('bucket days bound an item in the packer', () => {
     // The third is Sep 5 + 120 = Sun Jan 3, counted from the anchor rather
     // than from the pushed date, so the push does not drift the rhythm.
     expect(mowDates('2026-09-05', 130)).toEqual(['2026-09-05', '2026-11-07', '2027-01-03']);
+  });
+});
+
+describe('a Work item split around Break', () => {
+  const wednesday = '2026-10-14';
+  const deep = item({ id: 'w', bucketId: 'work', title: 'Deep', durationMinutes: 240 });
+  const pack = (over = {}) =>
+    packDay({
+      date: wednesday,
+      settings: settings(),
+      buckets: [workBucket({ weeklyMinutes: 40 * 60 })],
+      items: [deep],
+      ...over,
+    });
+
+  it('keeps the second half pending when a repack knows only the first half is complete', () => {
+    const first = pack();
+    const previous = first.blocks
+      .filter((b) => b.id.endsWith('-a'))
+      .map((b) => ({ ...b, status: 'complete' as const }));
+    const again = pack({ previous });
+    const halves = again.blocks.filter((b) => b.itemId === 'w');
+    expect(halves.map((b) => [b.id.slice(-2), b.status])).toEqual([
+      ['-a', 'complete'],
+      ['-b', 'pending'],
+    ]);
+  });
+
+  it('yields one skip push when both halves are left pending', () => {
+    const scheduled = { ...deep, type: 'scheduled' as const };
+    const r = pack({ items: [scheduled] });
+    expect(r.blocks.filter((b) => b.itemId === 'w')).toHaveLength(2);
+    const pushes = collectEndDaySkipPushes(wednesday, r.blocks, r.dropped, [scheduled], [workBucket({ weeklyMinutes: 40 * 60 })]);
+    expect(pushes).toHaveLength(1);
+  });
+});
+
+describe('appointments in two sections with Work and Home between them', () => {
+  const day = '2026-10-14';
+  function packSpread() {
+    return packDay({
+      date: day,
+      settings: settings({ transitionMinutes: 10 }),
+      buckets: [
+        workBucket({ slots: ['morning', 'midday'], weeklyMinutes: 40 * 60 }),
+        APPOINTMENTS_BUCKET,
+        bucket({ id: 'h', name: 'Home', weight: 2, slot: 'evening' }),
+      ],
+      items: [
+        item({ id: 'a1', bucketId: 'appointments', title: 'Doc', type: 'scheduled', dueAt: day, slots: ['morning'], slot: 'morning', durationMinutes: 30 }),
+        item({ id: 'a2', bucketId: 'appointments', title: 'Dent', type: 'scheduled', dueAt: day, slots: ['evening'], slot: 'evening', durationMinutes: 30 }),
+        item({ id: 'w1', bucketId: 'work', title: 'W', slot: 'morning', durationMinutes: 60 }),
+        item({ id: 'h1', bucketId: 'h', title: 'H', durationMinutes: 30 }),
+      ],
+    });
+  }
+
+  it('carries a switch marker in each section that was charged for one', () => {
+    expect(reservedLoad(packSpread().blocks)).toEqual({ morning: 40, midday: 0, evening: 40 });
+  });
+
+  it('lists blocks in section order', () => {
+    const order = packSpread()
+      .blocks.filter((b: PackedBlock) => b.kind !== 'personal' && b.slot)
+      .map((b: PackedBlock) => ['morning', 'midday', 'evening'].indexOf(b.slot as string));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+});
+
+describe('a skip push onto an event day', () => {
+  it('moves on to the next assigned day that is not an event day', () => {
+    const home = bucket({ id: 'h', name: 'Home', weight: 2 });
+    const events = bucket({
+      id: 'events',
+      name: 'Events',
+      weight: 0,
+      kind: 'event',
+      ranges: [{ id: 'r', startDate: '2026-10-15', endDate: '2026-10-15' }],
+    });
+    const chore = item({ id: 'c', bucketId: 'h', title: 'Chore', type: 'scheduled', cadence: { kind: 'weekly', days: ['Wed'] } });
+    expect(skipPushDate(chore, home, '2026-10-14', events)).toBe('2026-10-16');
+  });
+});
+
+describe('a bucket with no open days', () => {
+  it('hits none of its items, so they are neither placed nor dropped', () => {
+    const closed = bucket({ id: 'h', name: 'Home', weight: 2, days: [] });
+    const r = packDay({
+      date: monday,
+      settings: settings(),
+      buckets: [workBucket(), closed],
+      items: [item({ id: 'h1', bucketId: 'h', title: 'H', durationMinutes: 30 })],
+    });
+    expect([...r.blocks, ...r.dropped].some((b) => b.itemId === 'h1')).toBe(false);
+  });
+});
+
+describe('reservedLoad against what the packer charged', () => {
+  // A small seeded generator, so a failure names a day that can be rerun.
+  function rng(seed: number) {
+    let x = seed;
+    return (n: number) => {
+      x = (x * 1664525 + 1013904223) % 4294967296;
+      return Math.floor((x / 4294967296) * n);
+    };
+  }
+
+  for (let seed = 1; seed <= 12; seed += 1) {
+    it(`agrees for generated day ${seed}`, () => {
+      const pick = rng(seed);
+      const day = '2026-10-14';
+      const transitionMinutes = [0, 5, 10, 15][pick(4)];
+      const home = bucket({ id: 'h', name: 'Home', weight: 2, slots: [...SLOTS], weeklyMinutes: 20 * 60 });
+      const garden = bucket({ id: 'g', name: 'Garden', weight: 3, slots: [...SLOTS], weeklyMinutes: 20 * 60 });
+      const apptSlots = (): Slot[] => SLOTS.slice(pick(3), 3).slice(0, 1 + pick(3));
+      const items = [
+        ...Array.from({ length: 1 + pick(3) }, (_, i) => {
+          const slots = apptSlots();
+          return item({ id: `a${i}`, bucketId: 'appointments', title: `A${i}`, type: 'scheduled', dueAt: day, slots, slot: slots[0], durationMinutes: 15 * (1 + pick(4)) });
+        }),
+        ...Array.from({ length: pick(3) }, (_, i) =>
+          item({ id: `w${i}`, bucketId: 'work', title: `W${i}`, slot: SLOTS[pick(3)], durationMinutes: 30 * (1 + pick(3)) })
+        ),
+        ...Array.from({ length: pick(4) }, (_, i) =>
+          item({ id: `h${i}`, bucketId: i % 2 ? 'g' : 'h', title: `H${i}`, slot: SLOTS[pick(3)], durationMinutes: 15 * (1 + pick(3)) })
+        ),
+      ];
+      const result = packDay({
+        date: day,
+        settings: settings({ dayMinutes: 15 * 60, transitionMinutes }),
+        buckets: [workBucket({ slots: [...SLOTS], weeklyMinutes: 20 * 60 }), APPOINTMENTS_BUCKET, home, garden],
+        items,
+      });
+      // Nothing may fall off, or a bucket's switch is bought and never marked.
+      expect(result.dropped).toEqual([]);
+
+      const apptLoad: Record<Slot, number> = { morning: 0, midday: 0, evening: 0 };
+      const bucketsIn: Record<Slot, Set<string>> = { morning: new Set(), midday: new Set(), evening: new Set() };
+      for (const it of items) {
+        const slot = (it.bucketId === 'appointments' ? it.slots?.[0] : it.slot) as Slot;
+        if (it.bucketId === 'appointments') apptLoad[slot] += it.durationMinutes;
+        bucketsIn[slot].add(it.bucketId);
+      }
+      const switching = transitionLoad(
+        { morning: bucketsIn.morning.size, midday: bucketsIn.midday.size, evening: bucketsIn.evening.size },
+        transitionMinutes
+      );
+      const charged = Object.fromEntries(SLOTS.map((s) => [s, apptLoad[s] + switching[s]]));
+      const timer = reservedLoad(result.blocks.filter((b: PackedBlock) => b.kind !== 'personal'));
+      expect(timer).toEqual(charged);
+    });
+  }
+});
+
+describe('event blocks in the running order', () => {
+  it('keeps event blocks ahead of the day\'s other blocks on an event day', () => {
+    const day = '2026-10-14';
+    const events = bucket({
+      id: 'events',
+      name: 'Events',
+      weight: 0,
+      kind: 'event',
+      ranges: [{ id: 'r', startDate: '2026-10-20', endDate: '2026-10-20' }],
+    });
+    const r = packDay({
+      date: day,
+      settings: settings(),
+      buckets: [workBucket(), events, bucket({ id: 'h', name: 'Home', weight: 2 })],
+      items: [
+        item({ id: 'e1', bucketId: 'events', title: 'Show', type: 'scheduled', dueAt: day }),
+        item({ id: 'h1', bucketId: 'h', title: 'H', durationMinutes: 30 }),
+      ],
+    });
+    const kinds = r.blocks.map((b: PackedBlock) => b.kind);
+    expect(kinds).toContain('event');
+    expect(kinds[0]).toBe('event');
+  });
+});
+
+describe('repack and skip pushes, further cases', () => {
+  const wednesday = '2026-10-14';
+  const deep = item({ id: 'w', bucketId: 'work', title: 'Deep', durationMinutes: 240 });
+
+  it('still matches by itemId when previous entries carry no id', () => {
+    const args = { date: wednesday, settings: settings(), buckets: [workBucket({ weeklyMinutes: 40 * 60 })], items: [deep] };
+    const done = packDay(args).blocks.filter((b: PackedBlock) => b.itemId === 'w');
+    const previous = [{ itemId: 'w', status: 'complete' as const }];
+    const again = packDay({ ...args, previous }).blocks.filter((b: PackedBlock) => b.itemId === 'w');
+    expect(done).toHaveLength(2);
+    expect(again.map((b: PackedBlock) => b.status)).toEqual(['complete', 'complete']);
+  });
+
+  it('pushes a split scheduled item once, past an event day', () => {
+    const scheduled = { ...deep, type: 'scheduled' as const };
+    const home = workBucket({ weeklyMinutes: 40 * 60, days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] });
+    const events = bucket({
+      id: 'events',
+      name: 'Events',
+      weight: 0,
+      kind: 'event',
+      ranges: [{ id: 'r', startDate: '2026-10-15', endDate: '2026-10-15' }],
+    });
+    const r = packDay({ date: wednesday, settings: settings(), buckets: [home, events], items: [scheduled] });
+    const pushes = collectEndDaySkipPushes(wednesday, r.blocks, r.dropped, [scheduled], [home, events]);
+    expect(pushes).toEqual([{ itemId: 'w', toDate: '2026-10-16' }]);
   });
 });
