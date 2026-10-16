@@ -3,8 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 import { api } from '../services/api';
 import { auth, googleProvider } from '../services/firebase';
-import { hasAllowlistClaim, shouldSignOutOnGateError, waitForAllowlistClaim } from './authGate';
-import { formatActionError } from './formatActionError';
+import { AllowlistClaimError, gateErrorMessage, hasAllowlistClaim, requireAllowlistClaim, shouldSignOutOnGateError } from './authGate';
 
 type AuthContextValue = {
   user: User | null;
@@ -41,19 +40,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!hasAllowlistClaim(token.claims)) {
           const email = next.email || next.providerData.find((p) => p.email)?.email || '';
           await api.bootstrap({ email });
-          await waitForAllowlistClaim(() => next.getIdTokenResult(true));
+          await requireAllowlistClaim(() => next.getIdTokenResult(true));
         }
         setGateError(null);
         setUser(next);
       } catch (err) {
         console.error(err);
         const who = next.email || next.providerData.find((p) => p.email)?.email;
-        setGateError(
-          shouldSignOutOnGateError(err) && who
-            ? `Sign in: ${who} is not invited.`
-            : formatActionError(err, 'Sign in')
-        );
-        if (shouldSignOutOnGateError(err)) {
+        setGateError(gateErrorMessage(err, who));
+        if (shouldSignOutOnGateError(err) || err instanceof AllowlistClaimError) {
           await signOut(firebaseAuth);
           setUser(null);
         } else {

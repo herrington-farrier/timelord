@@ -1,6 +1,6 @@
 # Data model
 
-Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; only callables write. Google sign-in is invite-only (`src/domain/allowlist.ts`). Allowed users get an `allowlisted` auth claim. Firestore reads require that claim or an allowlisted email. Keep the email list in `firestore.rules` in sync when you add someone. First signup writes settings, seed buckets/items, then packs 6 weeks.
+Solo tenant: `tenants/{uid}` where uid is the Google Auth uid. Clients read; only callables write. Google sign-in is invite-only: the live list is `config/allowlist` (see below), seeded from `src/domain/allowlist.ts`. Firestore reads need an invited email — the owner floor in `firestore.rules`, or the document; the `allowlisted` auth claim is no longer accepted, so removing someone revokes reads. First signup writes settings, seed buckets/items, then packs 6 weeks.
 
 ## config/allowlist
 
@@ -12,8 +12,16 @@ one edit here in the console, with no code change and no deploy.
 mirrored in `firestore.rules` deliberately, so a missing or mangled document
 cannot lock the owner out. Everyone else is added to the document only.
 
+Matching is the same in the rules and the callables: the token's email is lowercased,
+then compared for exact equality with each entry. Entries are not trimmed or
+lowercased by either side, so an entry with capitals or stray spaces matches
+nobody. When someone signs in whose only entry is malformed like that,
+`bootstrap` and `gateSignUp` refuse with a message naming the entry's problem
+rather than "invite-only", and `bootstrap` logs the denial once.
+
 The rules check the seed **first**, so the owners cost no extra reads; only an
-invited non-owner pays the document lookup.
+invited non-owner pays the document lookup. The `allowlisted` claim (still set by
+`bootstrap` as the client's sign-in signal) grants nothing in the rules.
 
 Every mutating callable reads this same list through `requireUid`. It once
 checked only `ALLOWED_EMAILS`, so an account invited from the console could sign
@@ -37,7 +45,7 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 
 ## buckets/{id}
 
-- `kind`: `personal | work | weighted | event`
+- `kind`: `personal | work | weighted | event | appointment`. `saveBuckets` refuses any other value, including an empty string; only a missing `kind` defaults to `weighted`. The fixed ids pin their kinds (`work`, `events`, `appointments`, `personal`) and no other id may use those kinds. Every bucket except Events needs at least one open day; `days[]` must be weekday names.
 - `name`, `weight`, `hoursMode` (`week` | `day`, default `week`), `hoursMinutes` (the hours field)
 - `weeklyMinutes`: derived week total (`hoursMinutes` in week-mode; `hoursMinutes ×` checked days in day-mode)
 - `days[]`, `slot`, optional `slots[]` (Work: the sections it occupies; `slot` is the first of those. Weighted buckets keep a single `slot`.), `color`, `archived`
@@ -47,7 +55,7 @@ Function-only. `type` is `signup` (first allowed tenant) or `denied`, plus `emai
 ## items/{id}
 
 - `bucketId`, `title`, `type` (`recurring` | `scheduled`), `weight`, `durationMinutes` (0 is a reminder; never dropped). Timed duration cannot exceed the bucket’s daily hours.
-- `cadence` object, optional `dueAt`, `archived`. `everyNDays` may include `startDate`; no hits before it.
+- `cadence` object, optional `dueAt`, `archived`. The server validates `type` (`recurring` | `scheduled`), rebuilds `cadence` from its known fields (`weekly` needs at least one weekday; `everyNDays.n` 1–365; `monthly.dayOfMonth` 1–31) and requires `dueAt` / `expiresAt` to be real `YYYY-MM-DD` dates. Every callable that takes a date or id validates it (`asDateKey`, `asId`); `rebuildRange` clamps `days` to 1–42 (a missing value means 42; `0` or a negative clamps up to 1, deliberately). Reorders refuse ids that do not exist. `everyNDays` may include `startDate`; no hits before it.
 - `expiresAt` — recurring only, inclusive. No hits after it; the last occurrence is stamped `finalOccurrence` on its block so every screen can mark it.
 - Work items may have `slot` when the Work bucket has more than one section. Each item packs in that one section.
 - Events items are always `scheduled`, carry `eventId`, and their `dueAt` must fall inside that event's range. Cadence is unused. Items with no matching event show under Unassigned in Lists.

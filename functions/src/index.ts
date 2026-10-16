@@ -11,7 +11,6 @@ import { canDeleteBucket } from '../../src/domain/seed';
 import { assignWeeklyBudgets, derivedWeeklyMinutes, itemExceedsBucketMessage, itemFitsBucket } from '../../src/domain/budget';
 import { formatDuration } from '../../src/domain/duration';
 import {
-  asPackInput,
   DayFlowError,
   planComplete,
   planFinishDay,
@@ -28,15 +27,26 @@ import {
 } from '../../src/domain/dayFlow';
 import { applyDelta } from '../../src/domain/score';
 import { PACK_RANGE_DAYS } from '../../src/domain/packWeek';
-import { bucketSlots, eatFromSections, itemWorkSlot, parseBucketSlots, sectionSplitFits, usedFromEat, workShowsItemSlot } from '../../src/domain/sections';
+import { bucketSlots, itemWorkSlot, parseBucketSlots, sectionSplitFits, workShowsItemSlot } from '../../src/domain/sections';
 import { sectionRemainingNow } from '../../src/domain/timer';
 import { nextItemWeight } from '../../src/domain/order';
-import type { Bucket, DaySettings, HoursMode, ListItem, PackedBlock, SkipPush, Slot, Weekday } from '../../src/domain/types';
-import { APPOINTMENTS_ID, EVENTS_ID, SLOTS, WORK_ID } from '../../src/domain/types';
+import {
+  clampRangeDays,
+  ITEM_TYPES,
+  parseBucketDays,
+  parseCadence,
+  isDateKey,
+  parseDateKey,
+  parseEnum,
+  ValidationError,
+  resolveBucketKind,
+} from '../../src/domain/validate';
+import type { Bucket, BucketKind, DaySettings, HoursMode, ListItem, Slot } from '../../src/domain/types';
+import { APPOINTMENTS_ID, EVENTS_ID, SLOTS } from '../../src/domain/types';
 import { addDaysKey, weekStart } from '../../src/shared/dates';
 import { stampCreated, stampLastUpdated } from './actorAudit';
-import { asNumber, asString, authEmail, newId, requireSignedIn, requireUid } from './http';
-import { ensureAllowlistDoc, isInvited } from './allowlist';
+import { asDateKey, asId, asNumber, asString, authEmail, newId, requireSignedIn, requireUid, validated } from './http';
+import { ensureAllowlistDoc, inviteProblem, isInvited } from './allowlist';
 import { ensureTenant, loadTenant, tenantRef } from './tenant';
 
 initializeApp();
@@ -122,7 +132,7 @@ function hoursModeOf(value: unknown): HoursMode {
 function bucketFields(data: Record<string, unknown>, resolvedKind: string, resolvedName: string, resolvedWeight: number) {
   const hoursMode = hoursModeOf(data.hoursMode);
   const hoursMinutes = asNumber(data.hoursMinutes ?? data.weeklyMinutes, 'Hours');
-  const days = Array.isArray(data.days) ? data.days.filter((d): d is string => typeof d === 'string') : [];
+  const days = validated(() => parseBucketDays(data.days, resolvedKind as BucketKind, resolvedName));
   const slots = domainCall(() => parseBucketSlots(data, resolvedName));
   return {
     kind: resolvedKind,
@@ -130,7 +140,7 @@ function bucketFields(data: Record<string, unknown>, resolvedKind: string, resol
     weight: resolvedWeight,
     hoursMode,
     hoursMinutes,
-    weeklyMinutes: derivedWeeklyMinutes(hoursMode, hoursMinutes, days as Weekday[]),
+    weeklyMinutes: derivedWeeklyMinutes(hoursMode, hoursMinutes, days),
     days,
     slot: slots[0],
     slots,
@@ -334,9 +344,14 @@ async function writeAccessLog(row: { type: 'signup' | 'denied'; email: string; u
   });
 }
 
-/** The one refusal a stranger ever sees. Deliberately says nothing useful. */
-function refuseUninvited(): never {
-  throw new HttpsError('permission-denied', 'This app is invite-only.');
+/**
+ * The one refusal a stranger ever sees. Deliberately says nothing useful —
+ * except to someone whose own invite entry is malformed, which is a mistake in
+ * the console that the owner needs to be told about.
+ */
+async function refuseUninvited(email: string): Promise<never> {
+  const problem = await inviteProblem(email);
+  throw new HttpsError('permission-denied', problem ?? 'This app is invite-only.');
 }
 
 /**
@@ -367,7 +382,7 @@ async function logDenialOnce(email: string, uid: string): Promise<void> {
 export const gateSignUp = beforeUserCreated(async (event) => {
   const email = event.data?.email;
   if (await isInvited(email)) return;
-  throw new HttpsError('permission-denied', 'This app is invite-only.');
+  throw new HttpsError('permission-denied', (await inviteProblem(email)) ?? 'This app is invite-only.');
 });
 
 /**
@@ -399,7 +414,7 @@ export const bootstrap = onCall({ invoker: 'public' }, async (request) => {
   const tokenEmail = authEmail(request, '');
   if (tokenEmail && !(await isInvited(tokenEmail))) {
     await logDenialOnce(tokenEmail, uid);
-    refuseUninvited();
+    await refuseUninvited(tokenEmail);
   }
 
   const record = await getAuth().getUser(uid);
@@ -417,7 +432,7 @@ export const bootstrap = onCall({ invoker: 'public' }, async (request) => {
   const existed = (await tenant.get()).exists;
   if (!existed && !(await isInvited(email))) {
     await logDenialOnce(email, uid);
-    refuseUninvited();
+    await refuseUninvited(email);
   }
   await ensureTenant(uid, nowIso());
   await ensureAllowlistDoc();
@@ -425,17 +440,6 @@ export const bootstrap = onCall({ invoker: 'public' }, async (request) => {
   if (!existed) await writeAccessLog({ type: 'signup', email, uid });
   const daysSnap = await tenant.collection('days').limit(1).get();
   if (daysSnap.empty) await writePackedRange(uid, todayKey(), PACK_RANGE_DAYS);
-  return { ok: true };
-});
-
-export const wipeAccount = onCall(async (request) => {
-  const uid = await requireUid(request);
-  const tenant = tenantRef(uid);
-  const collections = ['settings', 'buckets', 'items', 'appointments', 'days', 'skipPushes', 'logs'];
-  for (const col of collections) {
-    await deleteAllDocs(tenant.collection(col));
-  }
-  await writeLog(uid, { type: 'wipe_account', date: todayKey() });
   return { ok: true };
 });
 
@@ -494,45 +498,6 @@ export const saveSettings = onCall(async (request) => {
   return { ok: true };
 });
 
-export const upsertBucket = onCall(async (request) => {
-  const uid = await requireUid(request);
-  await ensureTenant(uid, nowIso());
-  const data = request.data as Record<string, unknown>;
-  const id = typeof data.id === 'string' && data.id.trim() ? data.id.trim() : newId();
-  const kind = asString(data.kind || 'weighted', 'Kind');
-  let resolvedKind = kind;
-  let resolvedName = asString(data.name, 'Name');
-  let resolvedWeight = asNumber(data.weight, 'Priority');
-  if (id === 'work') {
-    resolvedKind = 'work';
-  }
-  if (id === EVENTS_ID) {
-    resolvedKind = 'event';
-    resolvedWeight = 0;
-  }
-  if (id === 'personal') {
-    resolvedKind = 'personal';
-    resolvedName = 'Personal';
-    resolvedWeight = 0;
-  }
-  if (resolvedKind === 'work' && id !== 'work') {
-    throw new HttpsError('invalid-argument', 'Work must keep the work id.');
-  }
-  const payload = bucketFields(data, resolvedKind, resolvedName, resolvedWeight);
-  const loaded = await loadTenant(uid);
-  const nextBuckets = [
-    ...(loaded.buckets as Bucket[]).filter((b) => b.id !== id),
-    { id, ...payload } as Bucket,
-  ];
-  assertWeeklyFits(loaded.settings as DaySettings, nextBuckets);
-  assertItemsFit(loaded.items as ListItem[], nextBuckets);
-  const ref = tenantRef(uid).collection('buckets').doc(id);
-  const existing = await ref.get();
-  const stamp = existing.exists ? await stampLastUpdated(uid, nowIso()) : await stampCreated(uid, nowIso());
-  await ref.set({ ...payload, ...stamp }, { merge: true });
-  return { ok: true, id };
-});
-
 export const saveBuckets = onCall(async (request) => {
   const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
@@ -550,8 +515,8 @@ export const saveBuckets = onCall(async (request) => {
   const nextBuckets: Bucket[] = [];
   for (const raw of rows) {
     const row = raw as Record<string, unknown>;
-    const id = typeof row.id === 'string' && row.id.trim() ? row.id.trim() : newId();
-    let resolvedKind = asString(row.kind || 'weighted', 'Kind');
+    const id = typeof row.id === 'string' && row.id.trim() ? asId(row.id, 'Bucket') : newId();
+    let resolvedKind: string = validated(() => resolveBucketKind(id, row.kind));
     let resolvedName = asString(row.name, 'Name');
     let resolvedWeight = asNumber(row.weight, 'Priority');
     if (id === 'work') {
@@ -598,7 +563,7 @@ export const saveBuckets = onCall(async (request) => {
 
 export const archiveBucket = onCall(async (request) => {
   const uid = await requireUid(request);
-  const id = asString(request.data?.id, 'Bucket');
+  const id = asId(request.data?.id, 'Bucket');
   const snap = await tenantRef(uid).collection('buckets').doc(id).get();
   if (!snap.exists) throw new HttpsError('not-found', 'Bucket not found.');
   const bucket = { id, ...(snap.data() as object) } as Bucket;
@@ -610,18 +575,33 @@ export const archiveBucket = onCall(async (request) => {
   return { ok: true };
 });
 
+/**
+ * Reads the ids it is about to reweight and refuses any that do not exist: a
+ * merge-set on a missing id would create a stub document with only a weight.
+ */
+async function requireExisting(col: FirebaseFirestore.CollectionReference, ids: string[], noun: string): Promise<void> {
+  if (!ids.length) return;
+  const snaps = await getFirestore().getAll(...ids.map((id) => col.doc(id)));
+  const missing = snaps.filter((snap) => !snap.exists).map((snap) => snap.id);
+  if (missing.length) throw new HttpsError('not-found', `That ${noun} no longer exists. Reload and try again.`);
+}
+
+function orderIds(value: unknown, noun: string): string[] {
+  if (!Array.isArray(value)) throw new HttpsError('invalid-argument', 'Drag order is required.');
+  const ids = value.map((id) => asId(id, noun));
+  if (new Set(ids).size !== ids.length) throw new HttpsError('invalid-argument', 'Drag order lists the same id twice.');
+  return ids;
+}
+
 export const reorderBuckets = onCall(async (request) => {
   const uid = await requireUid(request);
-  const ids = request.data?.weightedOrderIds;
-  if (!Array.isArray(ids)) {
-    throw new HttpsError('invalid-argument', 'Drag order is required.');
-  }
-  const stamp = await stampLastUpdated(uid, nowIso());
+  const ids = orderIds(request.data?.weightedOrderIds, 'Bucket');
   const col = tenantRef(uid).collection('buckets');
+  await requireExisting(col, ids, 'bucket');
+  const stamp = await stampLastUpdated(uid, nowIso());
   const batch = getFirestore().batch();
   batch.set(col.doc('work'), { weight: 1, ...stamp }, { merge: true });
-  ids.forEach((id: unknown, i: number) => {
-    if (typeof id !== 'string') return;
+  ids.forEach((id, i) => {
     batch.set(col.doc(id), { weight: i + 2, ...stamp }, { merge: true });
   });
   await batch.commit();
@@ -683,6 +663,16 @@ function buildItemPayload(
   const label = (msg: string, field?: string) =>
     new HttpsError('invalid-argument', `${title}: ${msg}`, { itemId: rowId, field });
 
+  /** Runs a pure validator and reports its refusal against this row and field. */
+  const field = <T>(name: string, fn: () => T): T => {
+    try {
+      return fn();
+    } catch (err) {
+      if (err instanceof ValidationError) throw label(err.message.charAt(0).toLowerCase() + err.message.slice(1), name);
+      throw err;
+    }
+  };
+
   if (!eventItem) {
     if (!bucket) throw new HttpsError('not-found', `${title}: that bucket was not found.`, { itemId: rowId, field: 'bucketId' });
     if (!itemFitsBucket(durationMinutes, bucket)) throw label(itemExceedsBucketMessage(bucket), 'iH');
@@ -690,10 +680,10 @@ function buildItemPayload(
   // Events and appointments are both date-keyed: they pack on their due date
   // and never run on a cadence.
   // Events are pinned to a date. Appointments choose, like any other item.
-  const type = eventItem ? 'scheduled' : asString(data.type, 'Type');
-  const dueAt = type === 'scheduled' ? asString(data.dueAt, 'Date') : '';
+  const type = eventItem ? 'scheduled' : field('type', () => parseEnum(data.type, ITEM_TYPES, 'Type'));
+  const dueAt = type === 'scheduled' ? field('dueAt', () => parseDateKey(data.dueAt, 'Date')) : '';
   const expiresAt = typeof data.expiresAt === 'string' ? data.expiresAt.trim() : '';
-  if (expiresAt && !/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
+  if (expiresAt && !isDateKey(expiresAt)) {
     throw label('the expiry date is not a date.', 'expiresAt');
   }
   let eventId = '';
@@ -712,7 +702,7 @@ function buildItemPayload(
     type,
     weight: isNew ? nextItemWeight(items, bucketId) : Number.isFinite(storedWeight) ? storedWeight : 1,
     durationMinutes,
-    cadence: eventItem ? { kind: 'daily' } : data.cadence || { kind: 'daily' },
+    cadence: eventItem ? { kind: 'daily' } : field('cadence', () => parseCadence(data.cadence)),
     dueAt,
     archived: false,
     // Display only. Never read by the packer.
@@ -769,7 +759,7 @@ export const saveItems = onCall(async (request) => {
   // Validate every row before writing any, so a bad row cannot leave the page
   // half saved.
   const prepared = rows.map((row) => {
-    const id = typeof row.id === 'string' && row.id.trim() ? row.id.trim() : newId();
+    const id = typeof row.id === 'string' && row.id.trim() ? asId(row.id, 'Item') : newId();
     const before = items.find((i) => i.id === id);
     return {
       id,
@@ -812,15 +802,12 @@ export const saveItems = onCall(async (request) => {
 
 export const reorderItems = onCall(async (request) => {
   const uid = await requireUid(request);
-  const ids = request.data?.orderedIds;
-  if (!Array.isArray(ids)) {
-    throw new HttpsError('invalid-argument', 'Drag order is required.');
-  }
-  const stamp = await stampLastUpdated(uid, nowIso());
+  const ids = orderIds(request.data?.orderedIds, 'Item');
   const col = tenantRef(uid).collection('items');
+  await requireExisting(col, ids, 'item');
+  const stamp = await stampLastUpdated(uid, nowIso());
   const batch = getFirestore().batch();
-  ids.forEach((id: unknown, i: number) => {
-    if (typeof id !== 'string') return;
+  ids.forEach((id, i) => {
     batch.set(col.doc(id), { weight: i + 1, ...stamp }, { merge: true });
   });
   await batch.commit();
@@ -830,7 +817,7 @@ export const reorderItems = onCall(async (request) => {
 
 export const archiveItem = onCall(async (request) => {
   const uid = await requireUid(request);
-  const id = asString(request.data?.id, 'Item');
+  const id = asId(request.data?.id, 'Item');
   const stamp = await stampLastUpdated(uid, nowIso());
   const itemRef = tenantRef(uid).collection('items').doc(id);
   const before = await itemRef.get();
@@ -847,8 +834,8 @@ export const archiveItem = onCall(async (request) => {
 export const rebuildRange = onCall(async (request) => {
   const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
-  const start = asString(request.data?.start || todayKey(), 'Start date');
-  const days = Number(request.data?.days) || PACK_RANGE_DAYS;
+  const start = asDateKey(request.data?.start || todayKey(), 'Start date');
+  const days = validated(() => clampRangeDays(request.data?.days, PACK_RANGE_DAYS));
   await writePackedRange(uid, start, days);
   return { ok: true };
 });
@@ -856,37 +843,37 @@ export const rebuildRange = onCall(async (request) => {
 export const resetToday = onCall(async (request) => {
   const uid = await requireUid(request);
   await ensureTenant(uid, nowIso());
-  const date = asString(request.data?.date || todayKey(), 'Date');
+  const date = asDateKey(request.data?.date || todayKey(), 'Date');
   await mutateDay(uid, date, (prev, tenant, now) => planRespawn(prev, tenant, date, now));
   return { ok: true };
 });
 
 export const completeBlock = onCall(async (request) => {
   const uid = await requireUid(request);
-  const date = asString(request.data?.date || todayKey(), 'Date');
-  const id = asString(request.data?.id, 'Block');
+  const date = asDateKey(request.data?.date || todayKey(), 'Date');
+  const id = asId(request.data?.id, 'Block');
   await mutateDay(uid, date, (prev, tenant, now) => planComplete(prev, tenant, date, id, now));
   return { ok: true };
 });
 
 export const skipBlock = onCall(async (request) => {
   const uid = await requireUid(request);
-  const date = asString(request.data?.date || todayKey(), 'Date');
-  const id = asString(request.data?.id, 'Block');
+  const date = asDateKey(request.data?.date || todayKey(), 'Date');
+  const id = asId(request.data?.id, 'Block');
   await mutateDay(uid, date, (prev, tenant, now) => planSkip(prev, tenant, date, id, now));
   return { ok: true };
 });
 
 export const startDay = onCall(async (request) => {
   const uid = await requireUid(request);
-  const date = asString(request.data?.date || todayKey(), 'Date');
+  const date = asDateKey(request.data?.date || todayKey(), 'Date');
   await mutateDay(uid, date, (prev, tenant, now) => planStartDay(prev, tenant, date, now));
   return { ok: true };
 });
 
 export const startNext = onCall(async (request) => {
   const uid = await requireUid(request);
-  const date = asString(request.data?.date || todayKey(), 'Date');
+  const date = asDateKey(request.data?.date || todayKey(), 'Date');
   const from = asString(request.data?.from, 'Section');
   if (from !== 'event' && !(SLOTS as string[]).includes(from)) {
     throw new HttpsError('invalid-argument', 'Section must be morning, midday, evening or event.');
@@ -897,7 +884,7 @@ export const startNext = onCall(async (request) => {
 
 export const startBreak = onCall(async (request) => {
   const uid = await requireUid(request);
-  const date = asString(request.data?.date || todayKey(), 'Date');
+  const date = asDateKey(request.data?.date || todayKey(), 'Date');
   const dayRef = tenantRef(uid).collection('days').doc(date);
   const snap = await dayRef.get();
   if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
@@ -911,7 +898,7 @@ export const startBreak = onCall(async (request) => {
 
 export const endBreak = onCall(async (request) => {
   const uid = await requireUid(request);
-  const date = asString(request.data?.date || todayKey(), 'Date');
+  const date = asDateKey(request.data?.date || todayKey(), 'Date');
   const stamp = await stampLastUpdated(uid, nowIso());
   await tenantRef(uid).collection('days').doc(date).set({ pausedAt: null, sectionStartedAt: nowIso(), ...stamp }, { merge: true });
   await writeLog(uid, { type: 'end_break', date });
@@ -920,7 +907,7 @@ export const endBreak = onCall(async (request) => {
 
 export const endDay = onCall(async (request) => {
   const uid = await requireUid(request);
-  const date = asString(request.data?.date || todayKey(), 'Date');
+  const date = asDateKey(request.data?.date || todayKey(), 'Date');
   const plan = await mutateDay(uid, date, (prev, tenant, now) => planFinishDay(prev, tenant, date, now));
   return { ok: true, delta: plan.day?.scoreDelta ?? 0 };
 });

@@ -17,5 +17,10 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
+  },
+  {
+    extends: [js.configs.recommended, ...tseslint.configs.recommended],
+    files: ['functions/src/**/*.ts'],
+    languageOptions: { ecmaVersion: 2020 },
   }
 );

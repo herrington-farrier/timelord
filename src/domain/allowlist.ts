@@ -23,24 +23,44 @@ export function isAllowedEmail(email: string | undefined | null): boolean {
 }
 
 /**
- * The whole invite question: the live list, with the owner floor underneath it.
- *
- * Pure, so both the callable gate and its tests can ask it without Firestore.
- * `invited` is whatever the caller has loaded from `config/allowlist`; the floor
- * is added here rather than trusted from that document, so an empty or mangled
- * list still cannot lock the owner out.
+ * The one matching rule, shared with `firestore.rules`: the token's email is
+ * lowercased, then compared for exact equality with each entry. Entries are NOT
+ * trimmed or lowercased, because the rules cannot do that to a list they read.
+ * An entry such as " Foo@Gmail.com" therefore matches nobody, here or there, and
+ * `strayInviteEntry` is how that gets reported instead of failing quietly.
  */
 export function isInvitedEmail(
   email: string | undefined | null,
   invited: Iterable<string> = []
 ): boolean {
-  const normalized = normalizeEmail(email);
-  if (!normalized) return false;
-  if (isAllowedEmail(normalized)) return true;
+  const token = String(email ?? '').toLowerCase();
+  if (!token.trim()) return false;
+  if (ALLOWED_EMAILS.includes(token)) return true;
   for (const row of invited) {
-    if (normalizeEmail(row) === normalized) return true;
+    if (row === token) return true;
   }
   return false;
+}
+
+/**
+ * An entry that names this person but would not match them: it differs only by
+ * stray spaces or capitals. Null when there is none, or when the person is
+ * already invited by an exact entry.
+ */
+export function strayInviteEntry(
+  email: string | undefined | null,
+  invited: Iterable<unknown>
+): string | null {
+  const token = String(email ?? '').toLowerCase();
+  const wanted = normalizeEmail(email);
+  if (!wanted) return null;
+  let stray: string | null = null;
+  for (const row of invited) {
+    if (typeof row !== 'string') continue;
+    if (row === token) return null;
+    if (normalizeEmail(row) === wanted) stray = row;
+  }
+  return stray;
 }
 
 export function canAdmitAccount(email: string | undefined | null, tenantExists: boolean): boolean {

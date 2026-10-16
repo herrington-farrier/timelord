@@ -19,8 +19,12 @@ The invite list is a single Firestore document. **No code change, no deploy.**
 
 1. Firebase console → **Firestore Database**
 2. Open the **`config`** collection → the **`allowlist`** document
-3. Edit the **`emails`** array → **Add item** → type the address **in lowercase**
+3. Edit the **`emails`** array → **Add item** → type the address **in lowercase, with no spaces**
 4. Save
+
+An entry with capitals or stray spaces matches nobody: the rules and the functions
+compare entries exactly (only the signed-in email is lowercased). If you get it wrong,
+the person's sign-in is refused with a message naming the entry to fix.
 
 They can sign in within about **five minutes** — the functions cache the list
 that long. Their first sign-in creates their own tenant, seeds example buckets
@@ -58,9 +62,9 @@ Nothing, at three layers:
   touching Auth or Firestore, so a refused sign-in costs no reads and no writes.
   Each instance logs a given denial once rather than per attempt, so hammering
   the endpoint cannot run up writes.
-- **`requireUid`** gates all 19 mutating callables against that same list, so
+- **`requireUid`** gates all 17 mutating callables against that same list, so
   every write asks the same question sign-up did.
-- **Firestore rules** admit only the claim, the floor, or the document.
+- **Firestore rules** admit only the owner floor or an address on the document. The `allowlisted` claim is not accepted.
 
 Where to look afterwards: the `accessLogs` collection holds every new signup, and
 any denial that reached `bootstrap` — someone whose account already existed when
@@ -72,13 +76,13 @@ Firestore.
 five minutes — the invite list's cache TTL — because `requireUid` asks the
 document and deliberately does not accept the `allowlisted` claim in its place.
 
-**Reads** are the exception. `firestore.rules` still admits anyone carrying that
-claim, and `bootstrap` calls `setCustomUserClaims` on every sign-in, so someone
-removed from the list may keep reading their own tenant. If you need read
-revocation too, drop the `request.auth.token.allowlisted == true` clause from
-`firestore.rules`; the floor and the document still authorize everyone who
-should get in. Nobody else's data is exposed either way — the rules scope every
-read to `tenants/{their own uid}`.
+**Reads** follow the same rule. `firestore.rules` no longer accepts the
+`allowlisted` claim, so a removed address loses reads as well, though the
+rules read the document on every evaluation for invited non-owners (owners
+match the floor first and pay nothing). Nobody else's data is exposed either
+way — the rules scope every read to `tenants/{their own uid}`.
+
+Deploy `functions` and `firestore:rules` together when changing this.
 
 ## Screens
 

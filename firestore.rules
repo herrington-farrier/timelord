@@ -18,6 +18,9 @@ service cloud.firestore {
       ];
     }
 
+    // Same matching as functions/src/allowlist.ts: the token email is
+    // lowercased, entries are compared exactly. An entry with capitals or
+    // spaces matches nobody; bootstrap reports it by name.
     function invitedList() {
       return exists(/databases/$(database)/documents/config/allowlist)
         ? get(/databases/$(database)/documents/config/allowlist).data.get('emails', [])
@@ -25,10 +28,13 @@ service cloud.firestore {
     }
 
     function invited() {
+      // The allowlisted claim is not consulted: a token keeps it for up to an
+      // hour, so honouring it would mean removing someone from the document did
+      // not revoke their reads. The owner floor is checked first, so owners
+      // never pay for the config/allowlist read.
       return request.auth != null && (
-        request.auth.token.allowlisted == true
-        || request.auth.token.email in seedEmails()
-        || request.auth.token.email in invitedList()
+        request.auth.token.email.lower() in seedEmails()
+        || request.auth.token.email.lower() in invitedList()
       );
     }
 

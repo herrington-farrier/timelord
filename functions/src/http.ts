@@ -1,5 +1,6 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 
+import { parseDateKey, parseEnum, parseId, ValidationError } from '../../src/domain/validate';
 import { isInvited } from './allowlist';
 
 export function requireSignedIn(request: CallableRequest): string {
@@ -52,6 +53,21 @@ export function asNumber(value: unknown, label: string): number {
   }
   return n;
 }
+
+/** Runs a pure validator and reports its refusal as an invalid-argument error. */
+export function validated<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (err) {
+    if (err instanceof ValidationError) throw new HttpsError('invalid-argument', err.message);
+    throw err;
+  }
+}
+
+export const asDateKey = (value: unknown, label: string): string => validated(() => parseDateKey(value, label));
+export const asId = (value: unknown, label: string): string => validated(() => parseId(value, label));
+export const asEnum = <T extends string>(value: unknown, allowed: readonly T[], label: string): T =>
+  validated(() => parseEnum(value, allowed, label));
 
 export function newId(): string {
   return `id_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
