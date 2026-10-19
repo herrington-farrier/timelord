@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { bookedMinutes, formatCountdown, isEventPacked, nextSectionAction, nextSectionMinutes, openBlocks, slotLabel, todayEventItems, todaySectionDropped, todaySectionItems } from '../domain/today';
+import { bookedMinutes, formatCountdown, isEventPacked, markBlocks, nextSectionAction, nextSectionMinutes, openBlocks, slotLabel, todayEventItems, todaySectionDropped, todaySectionItems } from '../domain/today';
 import type { PackedBlock } from '../domain/types';
 
 function block(partial: Partial<PackedBlock> & Pick<PackedBlock, 'id' | 'kind'>): PackedBlock {
@@ -171,5 +171,29 @@ describe('transitions on the Quest list', () => {
   it('is not counted as work waiting in the next stretch', () => {
     const nextGap = block({ id: 'g2', kind: 'transition', slot: 'midday', durationMinutes: 10 });
     expect(nextSectionMinutes([midday, nextGap], 'morning')).toBe(30);
+  });
+});
+
+describe('markBlocks', () => {
+  it('marks a pending block with the tapped status', () => {
+    const [out] = markBlocks([block({ id: 'a', kind: 'weighted', status: 'pending' })], { a: 'complete' });
+    expect(out.status).toBe('complete');
+  });
+
+  it('marks a dropped block with the tapped status', () => {
+    const [out] = markBlocks([block({ id: 'a', kind: 'weighted', status: 'dropped' })], { a: 'skipped' });
+    expect(out.status).toBe('skipped');
+  });
+
+  it.each(['complete', 'skipped'] as const)('leaves a %s block\'s status alone', (status) => {
+    const other = status === 'complete' ? 'skipped' : 'complete';
+    const [out] = markBlocks([block({ id: 'a', kind: 'weighted', status })], { a: other });
+    expect(out.status).toBe(status);
+  });
+
+  it('leaves blocks without a mark untouched', () => {
+    const blocks = [block({ id: 'a', kind: 'weighted' }), block({ id: 'b', kind: 'weighted' })];
+    const out = markBlocks(blocks, { a: 'complete' });
+    expect(out[1]).toBe(blocks[1]);
   });
 });

@@ -73,6 +73,7 @@ Buttons transform in place:
 
 - **Start Day** begins the morning countdown. Morning Routine happens on your own; there is no Start Routine step. Start Day on a day already started changes nothing. It is disabled until the day and the buckets have loaded.
 - After Start Day, Today lists **this stretch only** (placed + falling-off) plus Personal pause controls. Completed and skipped items leave the list — Stats is the record. Break stays, being a control rather than an item.
+- Complete and Skip take effect on the screen at once. If the server refuses, the item returns to the list and a toast names it `Complete Item` or `Skip Item`. A second tap on the same item does nothing until its request settles.
 - Break: Start Break / End Break pauses/resumes the current timer.
 - Falling off is collapsed to a counted line and opens on tap.
 - After the list (and falling-off): **Start Next Chapter** + the next stretch's total.
@@ -120,7 +121,8 @@ End Day: each leftover, in whichever section it sits, gets a skip log row. Lefto
 
 - Menu, transforming Start/End, Start Next Chapter, End Day, Complete / Skip, Save, Reset Today, and Remove share high-contrast control styles.
 - Log rows: gold packed, green complete, red skip.
-- On Today and Edit, action buttons are disabled while a request is in flight.
+- On Edit, action buttons are disabled while a request is in flight.
+- On Today, Start Quest, Start Next Chapter, Hearth and Rest / End Rest are disabled while any other global action is in flight or a Complete or Skip is unconfirmed. Complete and Skip are disabled only while a global action is in flight, so one item's request never locks another item.
 - Routes are code-split behind a boundary that reloads once if a chunk went stale under a deploy.
 - A failed user action shows a toast named for its control (`Start Quest: offline?`, `Save Lists — …`), built by `formatActionError`. Failure toasts stay until tapped or cleared, and an identical failure already on screen is not stacked again.
 - A listener the server refuses toasts as `Load Day: …`, `Load Buckets: …` and so on, and the page shows `Could not load.` in place of its data.

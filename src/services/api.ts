@@ -15,6 +15,12 @@ function call<TReq, TRes>(name: string) {
   };
 }
 
+type DayActionName = 'warm' | 'complete' | 'skip' | 'startDay' | 'startNext' | 'startBreak' | 'endBreak' | 'endDay';
+type DayActionPayload = { action: DayActionName; date?: string; id?: string; from?: Slot | 'event' };
+
+/** Every Today-page action goes through one callable so they share one warm instance. */
+const dayAction = call<DayActionPayload, { ok: boolean; delta?: number }>('dayAction');
+
 export const api = {
   bootstrap: call<{ email?: string }, { ok: boolean }>('bootstrap'),
   saveSettings: call<Record<string, unknown>, { ok: boolean }>('saveSettings'),
@@ -27,11 +33,12 @@ export const api = {
   rebuildRange: call<{ start?: string; days?: number }, { ok: boolean }>('rebuildRange'),
   resetToday: call<Record<string, never>, { ok: boolean }>('resetToday'),
   clearLogs: call<Record<string, never>, { ok: boolean; removed: number }>('clearLogs'),
-  completeBlock: call<{ date: string; id: string }, { ok: boolean }>('completeBlock'),
-  skipBlock: call<{ date: string; id: string }, { ok: boolean }>('skipBlock'),
-  startDay: call<{ date: string }, { ok: boolean }>('startDay'),
-  startNext: call<{ date?: string; from: Slot | 'event' }, { ok: boolean }>('startNext'),
-  startBreak: call<{ date: string }, { ok: boolean }>('startBreak'),
-  endBreak: call<{ date: string }, { ok: boolean }>('endBreak'),
-  endDay: call<{ date: string }, { ok: boolean }>('endDay'),
+  completeBlock: (p: { date: string; id: string }) => dayAction({ action: 'complete', ...p }),
+  skipBlock: (p: { date: string; id: string }) => dayAction({ action: 'skip', ...p }),
+  startDay: (p: { date: string }) => dayAction({ action: 'startDay', ...p }),
+  startNext: (p: { date?: string; from: Slot | 'event' }) => dayAction({ action: 'startNext', ...p }),
+  startBreak: (p: { date: string }) => dayAction({ action: 'startBreak', ...p }),
+  endBreak: (p: { date: string }) => dayAction({ action: 'endBreak', ...p }),
+  endDay: (p: { date: string }) => dayAction({ action: 'endDay', ...p }),
+  warmDay: () => dayAction({ action: 'warm' }),
 };

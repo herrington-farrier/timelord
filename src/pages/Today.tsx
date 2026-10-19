@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { Chrome } from '../components/Chrome';
 import { ScoreBar } from '../components/ScoreBar';
@@ -12,6 +12,7 @@ import {
   openBlocks,
   bookedMinutes,
   isRoutineBlock,
+  markBlocks,
   orderSectionItems,
   signalSectionEnd,
   slotLabel,
@@ -25,7 +26,7 @@ import { PERSONAL_BUCKET } from '../domain/seed';
 import type { PackedBlock, Slot } from '../domain/types';
 import { api } from '../services/api';
 import { isLoadFailed } from '../services/loadState';
-import { useBuckets, useDay, useScore, useSettings } from '../services/live';
+import { useBuckets, useDay, useScore, useSettings, type DayDoc } from '../services/live';
 import { useAuth } from '../shared/useAuth';
 import { todayKey } from '../shared/dates';
 import { toastFailure } from '../shared/toastBus';
@@ -35,8 +36,20 @@ function stagger(index?: number): Record<string, string> {
   return index === undefined ? {} : { ['--i']: String(index) };
 }
 
-/** True while a request is out. Every action button reads it, so a second tap does nothing. */
+/**
+ * True while a global action (Start Quest, Start Next, Hearth, Rest) is out, or
+ * while any Complete or Skip is still unconfirmed. The Start, Rest and Hearth
+ * buttons read it, so a second tap does nothing and a Start Next cannot land
+ * before a Complete it would auto-skip.
+ */
 const BusyContext = createContext(false);
+
+/** True only while a global action is out. Item buttons read it, so one item's Complete never locks another. */
+const ItemBusyContext = createContext(false);
+
+/** `settled` once the server answered; `after` is the snapshot it answered against. */
+type Mark = { status: 'complete' | 'skipped'; settled: boolean; after?: DayDoc | null };
+type Mutate = (id: string, status: Mark['status']) => void;
 
 export function TodayPage() {
   const { user, logOut } = useAuth();
@@ -50,6 +63,13 @@ export function TodayPage() {
   const score = useScore(user?.uid);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const [marks, setMarks] = useState<Record<string, Mark>>({});
+  // Ids with a Complete or Skip out. A ref, so two taps in one frame cannot both pass.
+  const inFlight = useRef(new Set<string>());
+  const dayRef = useRef(day);
+  useEffect(() => {
+    dayRef.current = day;
+  }, [day]);
   const events = buckets ? findEventsBucket(buckets) : undefined;
   const eventDay = isEventDay(events, date);
   const started = Boolean(day?.startedAt) && !day?.endedAt;
@@ -59,6 +79,15 @@ export function TodayPage() {
   // null until the first comparison, so opening the page already in overrun
   // does not chime for a section that ended before the page loaded.
   const wasPositive = useRef<boolean | null>(null);
+
+  // The first tap of the day, usually Start Quest, otherwise pays a 2-4 s cold
+  // start on the server. Warming it here moves that wait to page load. A failed
+  // warm-up is not a user action, so it is logged and not toasted.
+  const uid = user?.uid;
+  useEffect(() => {
+    if (!uid) return;
+    api.warmDay().catch((err) => console.error(err));
+  }, [uid]);
 
   useEffect(() => {
     if (!started) return;
@@ -88,12 +117,23 @@ export function TodayPage() {
     wasPositive.current = remaining > 0;
   }, [remaining, started, eventDay, section, settings?.timerSound, settings?.timerVibrate]);
 
+  // A mark is active from the tap until a snapshot newer than the one the
+  // request finished against arrives; the live day then carries the status itself.
+  const anyInFlight = Object.values(marks).some((m) => !m.settled);
+  const activeMarks = useMemo(() => {
+    const active: Record<string, Mark['status']> = {};
+    for (const [id, m] of Object.entries(marks)) {
+      if (!m.settled || m.after === day) active[id] = m.status;
+    }
+    return active;
+  }, [marks, day]);
+
   // The day re-renders from live data, so a success needs no announcement.
   // A failure toasts under the control's own name ("Start Quest").
-  // One request at a time: the ref refuses a tap that lands before the buttons
-  // have re-rendered disabled.
+  // One global action at a time: the ref refuses a tap that lands before the
+  // buttons have re-rendered disabled. It also waits out any Complete or Skip.
   async function act(label: string, fn: () => Promise<unknown>) {
-    if (busyRef.current) return;
+    if (busyRef.current || inFlight.current.size) return;
     busyRef.current = true;
     setBusy(true);
     try {
@@ -107,15 +147,39 @@ export function TodayPage() {
     }
   }
 
-  const placed = day?.blocks || [];
-  const dropped = day?.dropped || [];
+  // Complete and Skip show at once and run alongside each other. They do not
+  // take the global busy flag, so other items stay usable while one is out.
+  async function mutate(id: string, status: Mark['status']) {
+    if (busyRef.current || inFlight.current.has(id)) return;
+    inFlight.current.add(id);
+    const label = status === 'complete' ? 'Complete Item' : 'Skip Item';
+    setMarks((m) => ({ ...m, [id]: { status, settled: false } }));
+    try {
+      await (status === 'complete' ? api.completeBlock({ date, id }) : api.skipBlock({ date, id }));
+      setMarks((m) => (m[id] ? { ...m, [id]: { ...m[id], settled: true, after: dayRef.current } } : m));
+    } catch (err) {
+      setMarks((m) => {
+        const rest = { ...m };
+        delete rest[id];
+        return rest;
+      });
+      console.error(err);
+      toastFailure(err, label);
+    } finally {
+      inFlight.current.delete(id);
+    }
+  }
+
+  const placed = markBlocks(day?.blocks || [], activeMarks);
+  const dropped = markBlocks(day?.dropped || [], activeMarks);
   const sectionItems =
     started && section ? orderSectionItems(openBlocks(todaySectionItems(placed, section))) : [];
   const sectionDropped = started && section ? openBlocks(todaySectionDropped(dropped, section)) : [];
   const eventItems = eventDay ? openBlocks(todayEventItems(placed)) : [];
 
   return (
-    <BusyContext.Provider value={busy}>
+    <BusyContext.Provider value={busy || anyInFlight}>
+    <ItemBusyContext.Provider value={busy}>
     <Chrome
       compact
       title="Timelord"
@@ -154,7 +218,7 @@ export function TodayPage() {
       {eventDay && day ? (
         <div className="day">
           {eventItems.map((b, i) => (
-            <ItemCard key={b.id} block={b} date={date} act={act} index={i} />
+            <ItemCard key={b.id} block={b} mutate={mutate} index={i} />
           ))}
           {!eventItems.length ? <p className="hint">No Events items today.</p> : null}
         </div>
@@ -177,14 +241,14 @@ export function TodayPage() {
                 onEnd={() => act('End Rest', () => api.endBreak({ date }))}
               />
             ) : (
-              <ItemCard key={b.id} block={b} date={date} act={act} index={i} />
+              <ItemCard key={b.id} block={b} mutate={mutate} index={i} />
             )
           )}
         </div>
       ) : null}
 
       {!eventDay && started && sectionDropped.length ? (
-        <FallingOff blocks={sectionDropped} date={date} act={act} />
+        <FallingOff blocks={sectionDropped} mutate={mutate} />
       ) : null}
 
       {!eventDay && started && section ? (
@@ -196,6 +260,7 @@ export function TodayPage() {
         />
       ) : null}
     </Chrome>
+    </ItemBusyContext.Provider>
     </BusyContext.Provider>
   );
 }
@@ -228,12 +293,10 @@ function RoutineRow({ block, index }: { block: PackedBlock; index?: number }) {
  */
 function FallingOff({
   blocks,
-  date,
-  act,
+  mutate,
 }: {
   blocks: PackedBlock[];
-  date: string;
-  act: (label: string, fn: () => Promise<unknown>) => Promise<void>;
+  mutate: Mutate;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -248,7 +311,7 @@ function FallingOff({
         <span className="fall-toggle__count">{blocks.length}</span>
       </button>
       {open
-        ? blocks.map((b) => <FallRow key={b.id} block={b} date={date} act={act} />)
+        ? blocks.map((b) => <FallRow key={b.id} block={b} mutate={mutate} />)
         : null}
     </section>
   );
@@ -411,15 +474,13 @@ function BreakControl({
 
 function FallRow({
   block,
-  date,
-  act,
+  mutate,
 }: {
   block: PackedBlock;
-  date: string;
-  act: (label: string, fn: () => Promise<unknown>) => Promise<void>;
+  mutate: Mutate;
 }) {
   const [open, setOpen] = useState(false);
-  const busy = useContext(BusyContext);
+  const busy = useContext(ItemBusyContext);
   const actsId = useId();
   const actionable = block.status === 'dropped' || block.status === 'pending';
   const label = `${block.title}${block.durationMinutes ? ` · ${formatDuration(block.durationMinutes)}` : ''}`;
@@ -443,10 +504,10 @@ function FallRow({
       )}
       {actionable ? (
         <div id={actsId} className="item-acts" hidden={!open}>
-          <button type="button" className="btn--gold" disabled={busy} onClick={() => act('Complete Item', () => api.completeBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--gold" disabled={busy} onClick={() => mutate(block.id, 'complete')}>
             Complete
           </button>
-          <button type="button" className="btn--red" disabled={busy} onClick={() => act('Skip Item', () => api.skipBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--red" disabled={busy} onClick={() => mutate(block.id, 'skipped')}>
             Skip
           </button>
         </div>
@@ -472,17 +533,15 @@ function TransitionRow({ minutes, index }: { minutes: number; index?: number }) 
 
 function ItemCard({
   block,
-  date,
-  act,
+  mutate,
   index,
 }: {
   block: PackedBlock;
-  date: string;
-  act: (label: string, fn: () => Promise<unknown>) => Promise<void>;
+  mutate: Mutate;
   index?: number;
 }) {
   const [open, setOpen] = useState(false);
-  const busy = useContext(BusyContext);
+  const busy = useContext(ItemBusyContext);
   const actsId = useId();
   const cls = `${block.status === 'complete' ? ' complete' : block.status === 'skipped' ? ' skipped' : ''}${
     block.finalOccurrence ? ' is-final' : ''
@@ -522,10 +581,10 @@ function ItemCard({
       )}
       {pending ? (
         <div id={actsId} className="item-acts" hidden={!open}>
-          <button type="button" className="btn--gold" disabled={busy} onClick={() => act('Complete Item', () => api.completeBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--gold" disabled={busy} onClick={() => mutate(block.id, 'complete')}>
             Complete
           </button>
-          <button type="button" className="btn--red" disabled={busy} onClick={() => act('Skip Item', () => api.skipBlock({ date, id: block.id }))}>
+          <button type="button" className="btn--red" disabled={busy} onClick={() => mutate(block.id, 'skipped')}>
             Skip
           </button>
         </div>

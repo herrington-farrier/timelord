@@ -47,7 +47,7 @@ import type { Bucket, BucketKind, DaySettings, HoursMode, ListItem, Slot } from 
 import { APPOINTMENTS_ID, EVENTS_ID, SLOTS } from '../../src/domain/types';
 import { addDaysKey, todayKey, weekStart } from '../../src/shared/dates';
 import { stampCreated, stampLastUpdated } from './actorAudit';
-import { asDateKey, asId, asNumber, asString, authEmail, newId, requireSignedIn, requireUid, validated } from './http';
+import { asDateKey, asEnum, asId, asNumber, asString, authEmail, newId, requireSignedIn, requireUid, validated } from './http';
 import { ensureAllowlistDoc, inviteProblem, isInvited } from './allowlist';
 import { ensureTenant, loadTenant, tenantRef } from './tenant';
 
@@ -851,62 +851,53 @@ export const resetToday = onCall(async (request) => {
   return { ok: true };
 });
 
-export const completeBlock = onCall(async (request) => {
-  const uid = await requireUid(request);
-  const date = asDateKey(request.data?.date || todayKey(), 'Date');
-  const id = asId(request.data?.id, 'Block');
-  await mutateDay(uid, date, (prev, tenant, now) => planComplete(prev, tenant, date, id, now));
-  return { ok: true };
-});
+const DAY_ACTIONS = ['warm', 'complete', 'skip', 'startDay', 'startNext', 'startBreak', 'endBreak', 'endDay'] as const;
 
-export const skipBlock = onCall(async (request) => {
+/** All Today-page day actions in one callable, so they share one warm instance. */
+export const dayAction = onCall(async (request) => {
   const uid = await requireUid(request);
+  const action = asEnum(request.data?.action, DAY_ACTIONS, 'Action');
+  // Warm-up ping sent when Today opens. The invite check above already opened
+  // Firestore and filled the allowlist cache, so the first real tap pays neither.
+  if (action === 'warm') return { ok: true };
   const date = asDateKey(request.data?.date || todayKey(), 'Date');
-  const id = asId(request.data?.id, 'Block');
-  await mutateDay(uid, date, (prev, tenant, now) => planSkip(prev, tenant, date, id, now));
-  return { ok: true };
-});
 
-export const startDay = onCall(async (request) => {
-  const uid = await requireUid(request);
-  const date = asDateKey(request.data?.date || todayKey(), 'Date');
-  await mutateDay(uid, date, (prev, tenant, now) => planStartDay(prev, tenant, date, now));
-  return { ok: true };
-});
-
-export const startNext = onCall(async (request) => {
-  const uid = await requireUid(request);
-  const date = asDateKey(request.data?.date || todayKey(), 'Date');
-  const from = asString(request.data?.from, 'Section');
-  if (from !== 'event' && !(SLOTS as string[]).includes(from)) {
-    throw new HttpsError('invalid-argument', 'Section must be morning, midday, evening or event.');
+  switch (action) {
+    case 'complete': {
+      const id = asId(request.data?.id, 'Block');
+      await mutateDay(uid, date, (prev, tenant, now) => planComplete(prev, tenant, date, id, now));
+      return { ok: true };
+    }
+    case 'skip': {
+      const id = asId(request.data?.id, 'Block');
+      await mutateDay(uid, date, (prev, tenant, now) => planSkip(prev, tenant, date, id, now));
+      return { ok: true };
+    }
+    case 'startDay':
+      await mutateDay(uid, date, (prev, tenant, now) => planStartDay(prev, tenant, date, now));
+      return { ok: true };
+    case 'startNext': {
+      const from = asString(request.data?.from, 'Section');
+      if (from !== 'event' && !(SLOTS as string[]).includes(from)) {
+        throw new HttpsError('invalid-argument', 'Section must be morning, midday, evening or event.');
+      }
+      await mutateDay(uid, date, (prev, tenant, now) => planStartNext(prev, tenant, date, from as Slot | 'event', now));
+      return { ok: true };
+    }
+    case 'startBreak': {
+      const snap = await tenantRef(uid).collection('days').doc(date).get();
+      if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
+      const data = snap.data() as DayState;
+      const remaining = sectionRemainingNow(data.sectionRemainingMinutes || 0, data.sectionStartedAt, data.pausedAt, Date.now());
+      await patchDayWithLog(uid, date, { pausedAt: nowIso(), sectionRemainingMinutes: remaining }, 'start_break');
+      return { ok: true };
+    }
+    case 'endBreak':
+      await patchDayWithLog(uid, date, { pausedAt: null, sectionStartedAt: nowIso() }, 'end_break');
+      return { ok: true };
+    case 'endDay': {
+      const plan = await mutateDay(uid, date, (prev, tenant, now) => planFinishDay(prev, tenant, date, now));
+      return { ok: true, delta: plan.day?.scoreDelta ?? 0 };
+    }
   }
-  await mutateDay(uid, date, (prev, tenant, now) => planStartNext(prev, tenant, date, from as Slot | 'event', now));
-  return { ok: true };
-});
-
-export const startBreak = onCall(async (request) => {
-  const uid = await requireUid(request);
-  const date = asDateKey(request.data?.date || todayKey(), 'Date');
-  const dayRef = tenantRef(uid).collection('days').doc(date);
-  const snap = await dayRef.get();
-  if (!snap.exists) throw new HttpsError('not-found', 'That day is not packed yet.');
-  const data = snap.data() as DayState;
-  const remaining = sectionRemainingNow(data.sectionRemainingMinutes || 0, data.sectionStartedAt, data.pausedAt, Date.now());
-  await patchDayWithLog(uid, date, { pausedAt: nowIso(), sectionRemainingMinutes: remaining }, 'start_break');
-  return { ok: true };
-});
-
-export const endBreak = onCall(async (request) => {
-  const uid = await requireUid(request);
-  const date = asDateKey(request.data?.date || todayKey(), 'Date');
-  await patchDayWithLog(uid, date, { pausedAt: null, sectionStartedAt: nowIso() }, 'end_break');
-  return { ok: true };
-});
-
-export const endDay = onCall(async (request) => {
-  const uid = await requireUid(request);
-  const date = asDateKey(request.data?.date || todayKey(), 'Date');
-  const plan = await mutateDay(uid, date, (prev, tenant, now) => planFinishDay(prev, tenant, date, now));
-  return { ok: true, delta: plan.day?.scoreDelta ?? 0 };
 });

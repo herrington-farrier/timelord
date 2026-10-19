@@ -62,7 +62,7 @@ Nothing, at three layers:
   touching Auth or Firestore, so a refused sign-in costs no reads and no writes.
   Each instance logs a given denial once rather than per attempt, so hammering
   the endpoint cannot run up writes.
-- **`requireUid`** gates all 17 mutating callables against that same list, so
+- **`requireUid`** gates all 11 mutating callables against that same list, so
   every write asks the same question sign-up did.
 - **Firestore rules** admit only the owner floor or an address on the document. The `allowlisted` claim is not accepted.
 

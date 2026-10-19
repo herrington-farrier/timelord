@@ -36,6 +36,7 @@ const { api } = vi.hoisted(() => ({
     skipBlock: vi.fn().mockResolvedValue({ ok: true }),
     endDay: vi.fn().mockResolvedValue({ ok: true }),
     startBreak: vi.fn().mockResolvedValue({ ok: true }),
+    warmDay: vi.fn().mockResolvedValue({ ok: true }),
   },
 }));
 
@@ -434,5 +435,122 @@ describe('Today regressions', () => {
       await user.click(screen.getByRole('button', { name: 'Hearth' }));
       expect(await screen.findByText('Hearth: offline?')).toBeInTheDocument();
     });
+  });
+});
+
+describe('Today optimistic Complete and Skip', () => {
+  function twoItemDay() {
+    const startedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const item = (id: string, title: string) => ({
+      id, itemId: id, kind: 'weighted', title, slot: 'morning', status: 'pending', date: '2026-08-30',
+      bucketId: 'house', startMinutes: 0, endMinutes: 30, durationMinutes: 30, color: 'fff', flexible: true,
+    });
+    dayState.current = {
+      startedAt,
+      section: 'morning',
+      sectionStartedAt: startedAt,
+      sectionRemainingMinutes: 120,
+      packedAt: startedAt,
+      packedMinutes: 60,
+      blocks: [item('floors', 'Floors'), item('dishes', 'Dishes')],
+      dropped: [],
+    };
+  }
+
+  function deferred() {
+    let resolve: (v: unknown) => void = () => {};
+    let reject: (e: unknown) => void = () => {};
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  async function open(user: ReturnType<typeof userEvent.setup>, title: RegExp) {
+    await user.click(screen.getByRole('button', { name: title }));
+  }
+
+  afterEach(() => {
+    api.completeBlock.mockReset().mockResolvedValue({ ok: true });
+    api.skipBlock.mockReset().mockResolvedValue({ ok: true });
+  });
+
+  it('removes the item from the open list before completeBlock resolves', async () => {
+    const user = userEvent.setup();
+    twoItemDay();
+    const call = deferred();
+    api.completeBlock.mockReturnValueOnce(call.promise);
+    renderToday();
+    await open(user, /Floors/);
+    await user.click(screen.getByRole('button', { name: 'Complete' }));
+    expect(screen.queryByRole('button', { name: /Floors/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Dishes/ })).toBeInTheDocument();
+    await act(async () => call.resolve({ ok: true }));
+  });
+
+  it('brings the item back and toasts "Complete Item" when completeBlock rejects', async () => {
+    const user = userEvent.setup();
+    twoItemDay();
+    const call = deferred();
+    api.completeBlock.mockReturnValueOnce(call.promise);
+    renderToday();
+    await open(user, /Floors/);
+    await user.click(screen.getByRole('button', { name: 'Complete' }));
+    expect(screen.queryByRole('button', { name: /Floors/ })).not.toBeInTheDocument();
+    await act(async () => call.reject(new FirebaseError('functions/unavailable', 'down')));
+    expect(screen.getByRole('button', { name: /Floors/ })).toBeInTheDocument();
+    expect(await screen.findByText('Complete Item: offline?')).toBeInTheDocument();
+  });
+
+  it('brings the item back and toasts "Skip Item" when skipBlock rejects', async () => {
+    const user = userEvent.setup();
+    twoItemDay();
+    const call = deferred();
+    api.skipBlock.mockReturnValueOnce(call.promise);
+    renderToday();
+    await open(user, /Floors/);
+    await user.click(screen.getByRole('button', { name: 'Skip' }));
+    expect(screen.queryByRole('button', { name: /Floors/ })).not.toBeInTheDocument();
+    await act(async () => call.reject(new FirebaseError('functions/unavailable', 'down')));
+    expect(screen.getByRole('button', { name: /Floors/ })).toBeInTheDocument();
+    expect(await screen.findByText('Skip Item: offline?')).toBeInTheDocument();
+  });
+
+  it('leaves another item\'s Complete enabled and callable while one is pending', async () => {
+    const user = userEvent.setup();
+    twoItemDay();
+    const call = deferred();
+    api.completeBlock.mockReturnValueOnce(call.promise);
+    renderToday();
+    await open(user, /Floors/);
+    await user.click(screen.getByRole('button', { name: 'Complete' }));
+    await open(user, /Dishes/);
+    const second = screen.getByRole('button', { name: 'Complete' });
+    expect(second).toBeEnabled();
+    await user.click(second);
+    expect(api.completeBlock).toHaveBeenCalledTimes(2);
+    expect(api.completeBlock).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'dishes' }));
+    await act(async () => call.resolve({ ok: true }));
+  });
+
+  it('disables the section-end button while a Complete is pending, and re-enables it after', async () => {
+    const user = userEvent.setup();
+    twoItemDay();
+    const call = deferred();
+    api.completeBlock.mockReturnValueOnce(call.promise);
+    renderToday();
+    await open(user, /Floors/);
+    await user.click(screen.getByRole('button', { name: 'Complete' }));
+    expect(screen.getByRole('button', { name: /Start Next Chapter/ })).toBeDisabled();
+    await act(async () => call.resolve({ ok: true }));
+    expect(screen.getByRole('button', { name: /Start Next Chapter/ })).toBeEnabled();
+  });
+
+  it('warms the day callable once on mount for a signed-in user', () => {
+    twoItemDay();
+    api.warmDay.mockClear();
+    renderToday();
+    expect(api.warmDay).toHaveBeenCalledTimes(1);
   });
 });

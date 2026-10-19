@@ -120,6 +120,9 @@ and fixed:
   day (and, for Respawn, the date's logs and skip pushes) inside it, so the tenant
   is a snapshot from just before. The transaction commits the day, its log rows,
   its skip pushes and `score/current` together; a repeated action changes nothing.
+- **Today's day actions share one callable.** `dayAction` takes an `action` field,
+  so they all run on one warm instance. Today sends `action: 'warm'` once on open;
+  it returns right after `requireUid`, and a failed warm is logged, not toasted.
 - **Do not repack on a loop.** Every write that changes the schedule repacks 42
   days. `saveItems` exists specifically so a page save is one repack rather than
   twenty. Any new "save many" path must batch.

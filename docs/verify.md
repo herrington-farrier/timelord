@@ -95,9 +95,9 @@ Tick as you go. Anything that fails, tell me the item number.
 ## Double taps (emulator)
 
 28. **Concurrent taps commit once** — with `firebase emulators:start` running,
-    fire `startNext` twice with the same `from` and `endDay` twice at the same
-    moment. The transaction should leave one `start_next` / `end_day` row and one
-    change to `score/current`. Only the transaction behaviour needs the
+    send `dayAction` twice with `action: 'startNext'` and the same `from`, and
+    twice with `action: 'endDay'`, each pair at the same moment. The transaction
+    should leave one `start_next` / `end_day` row and one change to `score/current`. Only the transaction behaviour needs the
     emulator; what each repeat does (no-op, one push, scored once, no-room
     ending) is covered by `dayFlow.test.ts`.
 

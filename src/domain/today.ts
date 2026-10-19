@@ -67,6 +67,20 @@ export function openBlocks(blocks: PackedBlock[]): PackedBlock[] {
   );
 }
 
+/**
+ * Shows a tapped Complete or Skip before the server confirms it. Only a block
+ * that can still be acted on changes; anything already settled is left alone.
+ */
+export function markBlocks(
+  blocks: PackedBlock[],
+  marks: Record<string, 'complete' | 'skipped'>
+): PackedBlock[] {
+  return blocks.map((b) => {
+    const status = marks[b.id];
+    return status && (b.status === 'pending' || b.status === 'dropped') ? { ...b, status } : b;
+  });
+}
+
 export function todaySectionDropped(dropped: PackedBlock[], section: Slot): PackedBlock[] {
   return dropped.filter((b) => !b.slot || b.slot === section);
 }

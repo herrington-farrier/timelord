@@ -16,7 +16,7 @@ that competes with them.
    `functions/src/actorAudit.ts` (`stampCreated`, `stampLastUpdated`), `functions/src/tenant.ts`
    (`tenantRef`, `loadTenant`).
 3. The neighbouring callable in `functions/src/index.ts` closest to yours (`saveItems` / `archiveItem`
-   for list items, `upsertBucket` / `archiveBucket` for buckets, `completeBlock` / `skipBlock` for the
+   for list items, `upsertBucket` / `archiveBucket` for buckets, `dayAction` for the
    day). Grep for it; the file is 1,200+ lines, so read only the range you need.
 4. The collection's section in `docs/data-model.md`.
 
